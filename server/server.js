@@ -1047,6 +1047,28 @@ app.post('/', authenticateToken, async (req, res) => {
     if (action === 'submit_leave') {
       const { studentId, email: studentEmail, reason, image } = req.body;
       
+      if (image) {
+        // Validate size (5MB limit)
+        const sizeInBytes = (image.length * 3) / 4;
+        const maxBytes = 5 * 1024 * 1024;
+        if (sizeInBytes > maxBytes) {
+          return res.json({ status: 'error', message: 'Attachment file size exceeds the 5MB limit.' });
+        }
+
+        // Validate format
+        const mimeType = image.split(';')[0].split(':')[1] || '';
+        const forbiddenTypes = [
+          'application/x-msdownload',
+          'application/octet-stream',
+          'text/javascript',
+          'application/javascript',
+          'text/html'
+        ];
+        if (forbiddenTypes.includes(mimeType)) {
+          return res.json({ status: 'error', message: 'Forbidden attachment format. Only images and PDFs are allowed.' });
+        }
+      }
+      
       const { data: std } = await supabase.from('students').select('Name').eq('ID', studentId).single();
       const studentName = std ? std.Name : 'Student';
 

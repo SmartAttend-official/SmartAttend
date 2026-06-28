@@ -3018,6 +3018,7 @@ async function renderTimetables() {
                     <div class="form-group">
                         <label>Timetable PDF File</label>
                         <input type="file" id="ttFile" class="form-control" accept="application/pdf" required style="padding:10px;">
+                        <small style="color: #64748b; display: block; margin-top: 4px;">Max file size: 5MB (PDF format only)</small>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn-cancel" onclick="closeModal('uploadTimetableModal')">Cancel</button>
