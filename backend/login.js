@@ -44,12 +44,10 @@ document.getElementById('loginForm').addEventListener('submit', async function (
 		const user = result.user;
 
 		if (result.status === 'success' && result.token) {
-			const sessionToken = Date.now().toString() + Math.random().toString(36).substring(2);
-
 			sessionStorage.setItem('smartattend_token', result.token);
 			sessionStorage.setItem('isAuthenticated', 'true');
 			sessionStorage.setItem('userEmail', email);
-			sessionStorage.setItem('sessionToken', sessionToken);
+			sessionStorage.setItem('sessionToken', result.sessionToken);
 			const firstName = user['Professor first_name'] || '';
 			const lastName = user['Professor last_name'] || '';
 			const fullName = (firstName + ' ' + lastName).trim() || user.Name || 'Professor';

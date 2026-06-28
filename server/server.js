@@ -917,6 +917,17 @@ app.post('/', authenticateToken, async (req, res) => {
 
       const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' }); // Valid for 7 days
 
+      // If it is a professor login, generate and persist a new SessionToken to prevent concurrent sessions
+      let sessionToken = null;
+      if (role === 'professor') {
+        sessionToken = Date.now().toString() + Math.random().toString(36).substring(2);
+        const { error: updateErr } = await supabase
+          .from(matchedTable)
+          .update({ SessionToken: sessionToken })
+          .eq('Email', cleanEmail);
+        if (updateErr) throw updateErr;
+      }
+
       // Return token and user details (excluding password)
       const userClone = { ...user };
       delete userClone.Password;
@@ -925,6 +936,7 @@ app.post('/', authenticateToken, async (req, res) => {
       return res.json({
         status: 'success',
         token,
+        sessionToken,
         user: userClone
       });
     }
