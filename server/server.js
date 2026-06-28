@@ -1260,6 +1260,29 @@ app.post('/', authenticateToken, async (req, res) => {
     // ── G. STUDENT ASSIGNMENT HUBS ──
     if (action === 'upload_assignment') {
       const { professorEmail, department, semester, subject, title, description, fileBase64, fileName, dueDate } = req.body;
+      
+      if (fileBase64) {
+        // Validate size (5MB limit)
+        const sizeInBytes = (fileBase64.length * 3) / 4;
+        const maxBytes = 5 * 1024 * 1024;
+        if (sizeInBytes > maxBytes) {
+          return res.json({ status: 'error', message: 'File size exceeds the 5MB limit.' });
+        }
+
+        // Validate format (block executables, scripts, and HTML)
+        const mimeType = fileBase64.split(';')[0].split(':')[1] || '';
+        const forbiddenTypes = [
+          'application/x-msdownload',
+          'application/octet-stream',
+          'text/javascript',
+          'application/javascript',
+          'text/html'
+        ];
+        if (forbiddenTypes.includes(mimeType)) {
+          return res.json({ status: 'error', message: 'Forbidden file format. Only documents and images are allowed.' });
+        }
+      }
+
       const id = 'ASM' + Math.floor(100000 + Math.random() * 899999);
       const dateStr = new Date().toISOString().split('T')[0];
       const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
@@ -1390,6 +1413,24 @@ app.post('/', authenticateToken, async (req, res) => {
     // ── H. TIMETABLE ACTIONS ──
     if (action === 'upload_timetable') {
       const { department, semester, pdfBase64 } = req.body;
+
+      if (!pdfBase64) {
+        return res.json({ status: 'error', message: 'No file received for timetable upload.' });
+      }
+
+      // Validate size (5MB limit)
+      const sizeInBytes = (pdfBase64.length * 3) / 4;
+      const maxBytes = 5 * 1024 * 1024;
+      if (sizeInBytes > maxBytes) {
+        return res.json({ status: 'error', message: 'File size exceeds the 5MB limit.' });
+      }
+
+      // Validate format (Must be PDF)
+      const mimeType = pdfBase64.split(';')[0].split(':')[1] || '';
+      if (mimeType !== 'application/pdf') {
+        return res.json({ status: 'error', message: 'Invalid format. Timetables must be uploaded in PDF format.' });
+      }
+
       const fileId = 'TT' + Math.floor(100000 + Math.random() * 899999);
       const viewUrl = `http://localhost:${PORT}/timetables/file/${fileId}`;
       const downloadUrl = `http://localhost:${PORT}/timetables/file/${fileId}`;
