@@ -23,24 +23,22 @@ document.getElementById('adminLoginForm').addEventListener('submit', async funct
 
 	try {
 		const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
-		// Targeted admin sheet fetch with email optimization
-		const response = await fetch(`${SCRIPT_URL}?sheet=admin&email=${encodeURIComponent(email)}`);
-
-		if (!response.ok) {
-			throw new Error('Failed to connect to authentication server.');
-		}
-
-		const data = await response.json();
-
-		// Check matching record (handling case sensitivity for Email and Password keys)
-		const admin = data.find(row => {
-			const rEmail = (row.Email || row.email || "").toString().toLowerCase().trim();
-			const rPass = row.Password || row.password || "";
-			return rEmail === email.toLowerCase().trim() && rPass === password;
+		const response = await fetch(SCRIPT_URL, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ action: 'login', email, password, role: 'admin' })
 		});
 
-		if (admin) {
+		if (!response.ok) {
+			const errData = await response.json().catch(() => ({}));
+			throw new Error(errData.message || 'Invalid email or password.');
+		}
+
+		const result = await response.json();
+
+		if (result.status === 'success' && result.token) {
 			// Set session
+			sessionStorage.setItem('smartattend_token', result.token);
 			sessionStorage.setItem('isAdminAuthenticated', 'true');
 			sessionStorage.setItem('adminEmail', email);
 			sessionStorage.setItem('adminName', 'Admin User');

@@ -22,38 +22,25 @@ document.getElementById('studentLoginForm').addEventListener('submit', async fun
 
 	try {
 		const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
-		// Optimize: Pass email to backend to filter on server-side
-		const response = await fetch(`${SCRIPT_URL}?sheet=student&email=${encodeURIComponent(email)}`);
-
-		if (!response.ok) {
-			const text = await response.text();
-			throw new Error(`Server returned ${response.status}: ${text.substring(0, 50)}`);
-		}
-
-		let data;
-		try {
-			data = await response.json();
-		} catch (e) {
-			throw new Error("Invalid response format from server.");
-		}
-
-		// Handle error object returned from server
-		if (data.status === 'error') {
-			throw new Error(data.message || "Unknown server error.");
-		}
-
-		if (!Array.isArray(data)) {
-			throw new Error("Unexpected data format from server.");
-		}
-
-		// Check matching record (still doing local check for password safety)
-		const student = data.find(row => {
-			const rEmail = (row.Email || row.email || "").toString().toLowerCase().trim();
-			return rEmail === email.toLowerCase() && row.Password === password;
+		const response = await fetch(SCRIPT_URL, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ action: 'login', email, password, role: 'student' })
 		});
 
-		if (student) {
+		if (!response.ok) {
+			const errData = await response.json().catch(() => ({}));
+			throw new Error(errData.message || 'Invalid email or password.');
+		}
+
+		const result = await response.json();
+
+		if (result.status === 'success' && result.token) {
+			const student = result.user;
+			
 			// Authentic user
+			sessionStorage.setItem('smartattend_token', result.token);
+			localStorage.setItem('smartattend_token', result.token);
 			sessionStorage.setItem('isStudentAuthenticated', 'true');
 			sessionStorage.setItem('studentId', student.ID || student.id || student['Student ID'] || '');
 			sessionStorage.setItem('studentName', student.Name || student.name || 'Student');

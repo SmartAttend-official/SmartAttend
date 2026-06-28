@@ -29,34 +29,24 @@ document.getElementById('loginForm').addEventListener('submit', async function (
 
 	try {
 		const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
-		const response = await fetch(`${SCRIPT_URL}?sheet=professor&email=${encodeURIComponent(email)}`);
+		const response = await fetch(SCRIPT_URL, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ action: 'login', email, password, role: 'professor' })
+		});
 
 		if (!response.ok) {
-			throw new Error('Failed to connect to authentication server.');
+			const errData = await response.json().catch(() => ({}));
+			throw new Error(errData.message || 'Invalid email or password.');
 		}
 
-		const data = await response.json();
+		const result = await response.json();
+		const user = result.user;
 
-		// Check if there is a matching record
-		const user = data.find(row => row.Email === email && row.Password === password);
-
-		if (user) {
-			// Authentic user
+		if (result.status === 'success' && result.token) {
 			const sessionToken = Date.now().toString() + Math.random().toString(36).substring(2);
 
-			// Update token in DB
-			btnText.innerText = 'Securing Session...';
-			try {
-				await fetch(SCRIPT_URL, {
-					method: 'POST',
-					mode: 'no-cors',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ sheet: 'professor', action: 'update', searchCol: 'Email', searchVal: email, data: { SessionToken: sessionToken } })
-				});
-			} catch (e) {
-				console.error("Failed to secure session token in DB", e);
-			}
-
+			sessionStorage.setItem('smartattend_token', result.token);
 			sessionStorage.setItem('isAuthenticated', 'true');
 			sessionStorage.setItem('userEmail', email);
 			sessionStorage.setItem('sessionToken', sessionToken);

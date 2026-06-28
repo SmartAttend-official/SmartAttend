@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 const nodemailer = require('nodemailer');
+const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 const app = express();
@@ -44,6 +45,40 @@ if (!supabaseUrl || !supabaseServiceKey) {
 
 const supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', supabaseServiceKey || 'placeholder');
 
+const JWT_SECRET = process.env.JWT_SECRET || '55ebcfc623910c59dd6c32145391bd76abf8c05763137976e106d9d1c9ef25bf';
+
+// JWT Token Authentication Middleware
+function authenticateToken(req, res, next) {
+  // Allow login, send OTP, verify OTP, and root health check routes to bypass authentication
+  const action = req.query.action || (req.body && req.body.action);
+  const sheet = req.query.sheet || (req.body && req.body.sheet);
+  
+  if (action === 'login' || action === 'send_otp' || action === 'verify_otp' || (!action && !sheet)) {
+    return next();
+  }
+
+  // Also allow verify_lab_code (students scanning a QR code don't have to be logged in to mark attendance,
+  // or they might be logged in, so we make authentication optional/lenient for mark_attendance)
+  if (action === 'verify_lab_code') {
+    return next();
+  }
+
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1]; // Format: Bearer <token>
+
+  if (!token) {
+    return res.status(401).json({ status: 'error', message: 'Session Expired: Please log in again.' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ status: 'error', message: 'Session Expired: Please log in again.' });
+    }
+    req.user = decoded;
+    next();
+  });
+}
+
 // Initialize Nodemailer Transporter
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
@@ -67,8 +102,11 @@ async function logActivity(action, details) {
 // Helper: Format Student for frontend compatibility
 function formatStudent(row) {
   if (!row) return null;
+  const clone = { ...row };
+  delete clone.Password;
+  delete clone.password;
   return {
-    ...row,
+    ...clone,
     'id': row.ID,
     'Student ID': row.ID,
   };
@@ -77,10 +115,13 @@ function formatStudent(row) {
 // Helper: Format Professor for frontend compatibility
 function formatProfessor(row) {
   if (!row) return null;
+  const clone = { ...row };
+  delete clone.Password;
+  delete clone.password;
   const firstName = row['Professor  first_name'] || row['Professor first_name'] || '';
   const lastName = row['Professor  last_name'] || row['Professor last_name'] || '';
   return {
-    ...row,
+    ...clone,
     'id': row['Professor id'],
     'Professor id': row['Professor id'],
     'Name': `${firstName} ${lastName}`.trim() || 'Professor',
@@ -95,8 +136,11 @@ function formatProfessor(row) {
 // Helper: Format Admin for frontend compatibility
 function formatAdmin(row) {
   if (!row) return null;
+  const clone = { ...row };
+  delete clone.Password;
+  delete clone.password;
   return {
-    ...row,
+    ...clone,
     'id': row.Admin_id,
     'ID': row.Admin_id,
     'Name': `${row.First_name || ''} ${row.Last_name || ''}`.trim() || 'Admin User',
@@ -351,7 +395,7 @@ app.get('/timetables/file/:id', async (req, res) => {
 // ==========================================
 // 2. GET ROUTE (Replicates doGet)
 // ==========================================
-app.get('/', async (req, res) => {
+app.get('/', authenticateToken, async (req, res) => {
   try {
     const { action, sheet, email, studentId, department, semester, dept, sem, token, newPassword } = req.query;
 
@@ -805,9 +849,85 @@ app.get('/', async (req, res) => {
 // ==========================================
 // 3. POST ROUTE (Replicates doPost)
 // ==========================================
-app.post('/', async (req, res) => {
+app.post('/', authenticateToken, async (req, res) => {
   try {
     const { action, sheet, data, id, email, searchCol, searchVal } = req.body;
+
+    // ── SECURE LOGIN ACTION ──
+    if (action === 'login') {
+      const { email: loginEmail, password: loginPassword, role } = req.body;
+      const cleanEmail = (loginEmail || '').toString().toLowerCase().trim();
+      const cleanPass = (loginPassword || '').toString().trim();
+
+      if (!cleanEmail || !cleanPass || !role) {
+        return res.status(400).json({ status: 'error', message: 'Email, password, and role are required.' });
+      }
+
+      let user = null;
+      let matchedTable = '';
+
+      if (role === 'student') {
+        const { data: dbUser } = await supabase
+          .from('students')
+          .select('*')
+          .ilike('Email', cleanEmail)
+          .single();
+        user = dbUser;
+        matchedTable = 'students';
+      } else if (role === 'admin') {
+        const { data: dbUser } = await supabase
+          .from('ADMIN')
+          .select('*')
+          .ilike('Email', cleanEmail)
+          .single();
+        user = dbUser;
+        matchedTable = 'ADMIN';
+      } else if (role === 'professor') {
+        const deptSheets = ['BCA', 'MCA', 'BBA', 'MBA'];
+        for (const t of deptSheets) {
+          const { data: prof } = await supabase
+            .from(t)
+            .select('*')
+            .ilike('Email', cleanEmail)
+            .single();
+          if (prof) {
+            user = prof;
+            matchedTable = t;
+            break;
+          }
+        }
+      }
+
+      if (!user) {
+        return res.status(401).json({ status: 'error', message: 'User not found in database.' });
+      }
+
+      // Check Password (case-sensitive check as in original client code)
+      const dbPass = user.Password || user.password || '';
+      if (dbPass !== cleanPass) {
+        return res.status(401).json({ status: 'error', message: 'Invalid credentials. Password mismatch.' });
+      }
+
+      // Generate a signed JWT
+      const payload = {
+        id: user.ID || user.id || user['Student ID'] || user['Professor id'] || user['Admin_id'] || '',
+        email: cleanEmail,
+        role: role
+      };
+
+      const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' }); // Valid for 7 days
+
+      // Return token and user details (excluding password)
+      const userClone = { ...user };
+      delete userClone.Password;
+      delete userClone.password;
+
+      return res.json({
+        status: 'success',
+        token,
+        user: userClone
+      });
+    }
 
     // ── A. UPDATE DATA ──
     if (action === 'update') {
