@@ -1,0 +1,11 @@
+-->ERROR IN SMARTATTEND
+1) Mobile Number error while adding student from admin panal (04-06-2026 done)
+2) Fix Avatar issue in lab attendance of professor and remove logut button (04-06-2026 done)
+3) Fix class active/inactive status saving to Google Sheets in Admin Panel (04-06-2026 done)
+4) Fix student data not loading in Lab Attendance due to strict department filtering (04-06-2026 done)
+5) Fix Lab Attendance live grid polling failing to update Absent to Present due to date and semester formatting (04-06-2026 done)
+
+6) Fix lab attendance total class counting error (05-06-2026 done)
+7) Fix subject wise breakdown in student panel It is only showing Lab detail not the Class detail.   (05-06-2026 done)
+
+8) A double counting of the lab attendance error is still in the system

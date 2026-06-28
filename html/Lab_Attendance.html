@@ -1,0 +1,1269 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab Attendance — SmartAttend</title>
+  <script src="../backend/config.js"></script>
+  <script>
+    if (sessionStorage.getItem('isAuthenticated') !== 'true') {
+      window.location.replace('Login.html');
+    }
+    function logoutUser() {
+      sessionStorage.clear();
+      window.location.replace('Login.html');
+    }
+    function toggleProfile() {
+      const dropdown = document.getElementById('profileDropdown');
+      if (dropdown) dropdown.classList.toggle('show');
+    }
+    document.addEventListener('click', function(e) {
+      const wrapper = document.querySelector('.user-profile-wrapper');
+      const dropdown = document.getElementById('profileDropdown');
+      if (wrapper && dropdown && !wrapper.contains(e.target)) {
+        dropdown.classList.remove('show');
+      }
+    });
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0b1120;
+      --glass-bg: rgba(30, 41, 59, 0.7);
+      --glass-border: rgba(255, 255, 255, 0.1);
+      --accent-color: #3b82f6;
+      --accent-hover: #60a5fa;
+      --success: #10b981;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Outfit', sans-serif;
+      background-color: var(--bg-dark);
+      background-image:
+        radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.15), transparent 25%),
+        radial-gradient(circle at 85% 30%, rgba(16, 185, 129, 0.15), transparent 25%);
+      color: var(--text-main);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 280px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(12px);
+      border-right: 1px solid var(--glass-border);
+      display: flex;
+      flex-direction: column;
+      padding: 20px 0;
+      z-index: 10;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      margin-bottom: 40px;
+      gap: 12px;
+    }
+
+    .brand img {
+      height: 40px;
+      filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.5));
+    }
+
+    .brand h2 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #60a5fa, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .nav-links {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 0 16px;
+      overflow-y: auto;
+      flex: 1;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    .nav-links::-webkit-scrollbar {
+      display: none;
+    }
+
+    .nav-links a {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 12px 20px; /* Reduced */
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 15px; /* Reduced */
+      font-weight: 500;
+      border-radius: 12px;
+      transition: all 0.3s ease;
+    }
+
+    .nav-links a:hover,
+    .nav-links a.active {
+      background: rgba(59, 130, 246, 0.1);
+      color: var(--text-main);
+      box-shadow: inset 2px 0 0 var(--accent-color);
+    }
+
+    .nav-links a i {
+      font-size: 18px;
+      width: 24px;
+      text-align: center;
+      transition: transform 0.3s ease;
+    }
+
+    .nav-links a:hover i {
+      transform: scale(1.1);
+      color: var(--accent-hover);
+    }
+
+    /* Main Content */
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden; 
+    }
+
+    .topbar {
+      height: 70px; /* Reduced */
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      padding: 0 40px;
+      background: rgba(11, 17, 32, 0.5);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--glass-border);
+      flex-shrink: 0;
+      position: relative;
+      z-index: 1000;
+    }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent-color), #8b5cf6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
+      cursor: pointer;
+    }
+
+    .dashboard-container {
+      flex: 1;
+      padding: 20px 40px; /* Reduced padding */
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .page-header {
+      width: 100%;
+      max-width: 1000px;
+      margin-bottom: 15px; /* Reduced */
+      text-align: center;
+    }
+
+    .page-header h1 {
+      margin: 0;
+      font-size: 28px; /* Reduced */
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+
+    .page-header p {
+      color: var(--text-muted);
+      margin-top: 5px;
+      font-size: 15px; /* Reduced */
+    }
+
+    /* Horizontal Configuration Controls */
+    .controls-wrapper {
+      display: flex;
+      gap: 16px;
+      align-items: flex-end;
+      flex-wrap: wrap;
+      margin-bottom: 15px; /* Reduced */
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      padding: 16px 24px; /* Reduced */
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+      backdrop-filter: blur(16px);
+      width: 100%;
+      max-width: 1000px;
+      position: relative;
+    }
+
+    .controls-wrapper::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: linear-gradient(90deg, #3b82f6, #10b981);
+      border-top-left-radius: 16px;
+      border-top-right-radius: 16px;
+    }
+
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex: 1;
+      min-width: 150px;
+    }
+
+    .filter-group label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      padding-left: 4px;
+    }
+
+    .filter-select-wrapper {
+      position: relative;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      transition: all 0.3s;
+    }
+
+    .filter-select-wrapper:hover {
+      border-color: var(--accent-color);
+      box-shadow: 0 0 15px rgba(59, 130, 246, 0.1);
+    }
+
+    .filter-select-wrapper select, 
+    .filter-select-wrapper input {
+      width: 100%;
+      padding: 10px 35px 10px 14px; /* Reduced */
+      background: transparent;
+      border: none;
+      color: white;
+      font-family: inherit;
+      font-size: 13px; /* Reduced */
+      outline: none;
+      cursor: pointer;
+      appearance: none;
+      box-sizing: border-box;
+    }
+
+    .filter-select-wrapper select option {
+      color: black;
+    }
+
+    .filter-select-wrapper input[type="date"] {
+      padding-right: 14px;
+      color-scheme: dark;
+    }
+
+    .filter-select-wrapper.select-type::after {
+      content: '\f0d7';
+      font-family: 'Font Awesome 6 Free';
+      font-weight: 900;
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      pointer-events: none;
+      font-size: 12px;
+    }
+
+    /* Generate Button */
+    .generate-btn {
+      background: linear-gradient(135deg, var(--accent-color), #10b981);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px; /* Reduced */
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      flex: 1;
+      min-width: 160px;
+      height: 40px; /* Reduced */
+      transition: all 0.3s ease;
+      box-shadow: 0 5px 15px rgba(16, 185, 129, 0.3);
+    }
+
+    .generate-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px rgba(16, 185, 129, 0.4);
+    }
+
+    .generate-btn:disabled {
+      background: #334155;
+      color: #94a3b8;
+      cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
+    }
+
+    /* Live Session Code Card (Compact) */
+    .live-code-card {
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(59, 130, 246, 0.4);
+      border-radius: 20px;
+      padding: 20px; /* Reduced further */
+      width: 100%;
+      max-width: 350px; /* Reduced further */
+      margin-top: 10px;
+      box-shadow: 0 0 40px rgba(59, 130, 246, 0.1);
+      backdrop-filter: blur(20px);
+      position: relative;
+      display: none; 
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      animation: fadeIn 0.4s ease forwards;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    /* USER REQUESTED: WHITE BOX WITH BLACK TEXT FOR CODE */
+    .code-box {
+      font-size: 42px; /* Reduced from 64px */
+      font-weight: 800;
+      letter-spacing: 8px; /* Reduced from 12px */
+      color: #000000; /* Black text */
+      background: #ffffff; /* White background */
+      padding: 12px 24px; /* Reduced */
+      border-radius: 12px; /* Reduced */
+      border: 3px solid var(--accent-color);
+      box-shadow: 0 10px 25px rgba(59, 130, 246, 0.3);
+      margin-bottom: 16px;
+      margin-top: 10px;
+      user-select: all;
+    }
+
+    .timer-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(239, 68, 68, 0.1);
+      padding: 10px 20px;
+      border-radius: 30px;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .timer-container i {
+      color: #ef4444;
+      font-size: 18px;
+      animation: pulse 1s infinite;
+    }
+
+    .time-left {
+      color: #ef4444;
+      font-size: 20px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* Loader */
+    .loader {
+      display: none;
+      width: 18px;
+      height: 18px;
+      border: 3px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: white;
+      animation: spin 1s ease-in-out infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Alert */
+    .alert-box {
+      position: fixed;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-100px);
+      background: white;
+      padding: 16px 24px;
+      border-radius: 12px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+      z-index: 9999;
+      opacity: 0;
+      transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    }
+
+    .alert-box.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+
+    .alert-success { color: #10b981; border: 2px solid #10b981; }
+    .alert-error { color: #ef4444; border: 2px solid #ef4444; }
+
+    /* Profile Dropdown */
+    .user-profile-wrapper {
+      position: relative;
+      cursor: pointer;
+    }
+
+    .profile-dropdown {
+      position: absolute;
+      top: 50px;
+      right: 0;
+      width: 220px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(16px);
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+      z-index: 100;
+      opacity: 0;
+      transform: translateY(-10px);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    .profile-dropdown.show {
+      display: flex;
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .profile-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      color: var(--text-main);
+    }
+
+    .profile-item i {
+      color: var(--accent-color);
+      width: 16px;
+      text-align: center;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Global Alert -->
+  <div class="alert-box" id="globalAlert">
+    <i class="fa-solid fa-circle-info" id="alertIcon"></i>
+    <span id="alertText"></span>
+  </div>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="brand">
+      <img src="../images/bg1.1.png" alt="Logo" onerror="this.style.display='none'">
+      <h2>SmartAttend</h2>
+    </div>
+    <nav class="nav-links">
+      <a href="dashboard1.html"><i class="fa-solid fa-house"></i> Dashboard</a>
+      <a href="Start Attendance.html"><i class="fa-solid fa-user-check"></i> Start Attendance</a>
+      <a href="Lab_Attendance.html" class="active"><i class="fa-solid fa-laptop-code"></i> Lab Attendance</a>
+      <a href="Record.html"><i class="fa-solid fa-users"></i> Student Records</a>
+      <a href="History.html"><i class="fa-solid fa-clock-rotate-left"></i> Attendance History</a>
+      <a href="Assignments.html"><i class="fa-solid fa-book-open"></i> Assignments</a>
+      <a href="Proxy_Assignments.html"><i class="fa-solid fa-user-shield"></i> Proxy & Invigilation</a>
+      <a href="Leave_Requests.html"><i class="fa-solid fa-envelope-open-text"></i> Leave Requests</a>
+      <a href="Setting.html"><i class="fa-solid fa-gear"></i> Settings</a>
+      <a href="professorProfile.html"><i class="fa-solid fa-user-tie"></i> Profile</a>
+    </nav>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <header class="topbar">
+      <div class="user-info">
+        <h3>Welcome, Professor</h3>
+        <div class="user-profile-wrapper" onclick="toggleProfile()">
+          <div class="avatar" id="topbarAvatar">P</div>
+          
+          <!-- Dropdown Profile Card -->
+          <div class="profile-dropdown" id="profileDropdown">
+            <div class="profile-item">
+              <i class="fa-solid fa-user"></i>
+              <span id="topbarName">Professor</span>
+            </div>
+            <div class="profile-item">
+              <i class="fa-solid fa-envelope"></i>
+              <span id="topbarEmail">email@example.com</span>
+            </div>
+            <div class="profile-item">
+              <i class="fa-solid fa-phone"></i>
+              <span>+91 9122866169</span>
+            </div>
+            <div class="profile-item"
+              style="border-top: 1px solid var(--glass-border); padding-top: 12px; margin-top: 4px; color: #ef4444; cursor: pointer;"
+              onclick="logoutUser()">
+              <i class="fa-solid fa-right-from-bracket" style="color: #ef4444;"></i>
+              <span>Log Out</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="dashboard-container">
+      <div class="page-header">
+        <h1>Lab Attendance Generator</h1>
+        <p>Select the session details to securely generate an access code.</p>
+      </div>
+
+      <!-- CARD 1: Horizontal Configuration -->
+      <div class="controls-wrapper">
+        <div class="filter-group">
+          <label for="department">Department</label>
+          <div class="filter-select-wrapper select-type">
+            <select id="department" required>
+              <option value="" disabled selected>Loading...</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="filter-group">
+          <label for="semester">Semester</label>
+          <div class="filter-select-wrapper select-type">
+            <select id="semester" required>
+              <option value="" disabled selected>Select Sem</option>
+              <option value="1">1st Semester</option>
+              <option value="2">2nd Semester</option>
+              <option value="3">3rd Semester</option>
+              <option value="4">4th Semester</option>
+              <option value="5">5th Semester</option>
+              <option value="6">6th Semester</option>
+              <option value="7">7th Semester</option>
+              <option value="8">8th Semester</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="filter-group" style="flex: 1.5; min-width: 180px;">
+          <label for="subject">Subject / Course</label>
+          <div class="filter-select-wrapper select-type">
+            <select id="subject" required>
+              <option value="" disabled selected>Select Subject</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="filter-group">
+          <label for="date">Session Date</label>
+          <div class="filter-select-wrapper">
+            <input type="date" id="date" required>
+          </div>
+        </div>
+
+        <button class="generate-btn" id="generateBtn" onclick="generateCode()">
+          <i class="fa-solid fa-bolt" id="btnIcon"></i> 
+          <span id="btnText">Generate</span>
+          <div class="loader" id="btnLoader"></div>
+        </button>
+      </div>
+
+      <!-- CARD 2: Live Code Display -->
+      <div class="live-code-card" id="codeArea">
+        <h3 style="margin: 0; color: #ef4444; font-size: 13px; letter-spacing: 1px;">
+          <i class="fa-solid fa-satellite-dish" style="animation: pulse 1.5s infinite;"></i> LIVE SESSION ACTIVE
+        </h3>
+        
+        <!-- WHITE BOX WITH BLACK TEXT -->
+        <div class="code-box" id="displayCode">------</div>
+        
+        <div class="timer-container">
+          <i class="fa-solid fa-stopwatch"></i>
+          <div class="time-left" id="timeLeft">01:30</div>
+        </div>
+      </div>
+
+      <!-- CARD 3: Live Attendance Report (Starts Hidden) -->
+      <div class="report-section" id="attendanceReport" style="display: none; width: 100%; max-width: 1000px; margin-top: 20px;">
+        <div style="background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 16px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); backdrop-filter: blur(16px);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;">
+            <h2 style="margin: 0; font-size: 20px; font-weight: 600;"><i class="fa-solid fa-clipboard-list" style="color: #10b981;"></i> Live Lab Attendance Grid</h2>
+            <div style="display: flex; gap: 10px;">
+              <button class="generate-btn" style="min-width: auto; height: 36px; padding: 0 16px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.4); color: #3b82f6; box-shadow: none;" onclick="manualRefreshGrid()" id="refreshGridBtn">
+                <i class="fa-solid fa-rotate-right"></i> Refresh Grid
+              </button>
+              <button class="generate-btn" style="min-width: auto; height: 36px; padding: 0 20px;" onclick="saveLabAttendance()" id="saveLabBtn">
+                <i class="fa-solid fa-cloud-arrow-up"></i> Save Lab Session
+              </button>
+            </div>
+          </div>
+          <div style="max-height: 400px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
+            <table style="width: 100%; border-collapse: collapse; text-align: left;">
+              <thead style="background: rgba(15, 23, 42, 0.8); position: sticky; top: 0; z-index: 10;">
+                <tr>
+                  <th style="padding: 12px 16px; border-bottom: 1px solid var(--glass-border); font-size: 13px; color: var(--text-muted); text-transform: uppercase;">Roll No</th>
+                  <th style="padding: 12px 16px; border-bottom: 1px solid var(--glass-border); font-size: 13px; color: var(--text-muted); text-transform: uppercase;">Student Name</th>
+                  <th style="padding: 12px 16px; border-bottom: 1px solid var(--glass-border); font-size: 13px; color: var(--text-muted); text-transform: uppercase;">System Status</th>
+                  <th style="padding: 12px 16px; border-bottom: 1px solid var(--glass-border); font-size: 13px; color: var(--text-muted); text-transform: uppercase;">Late (Mins)</th>
+                  <th style="padding: 12px 16px; border-bottom: 1px solid var(--glass-border); font-size: 13px; color: var(--text-muted); text-transform: uppercase;">Manual Override</th>
+                </tr>
+              </thead>
+              <tbody id="reportTbody">
+                <!-- JS POPULATED -->
+              </tbody>
+            </table>
+          </div>
+          <div style="margin-top: 24px; display: flex; gap: 16px; justify-content: flex-end;">
+            <button id="alertStudentsBtn" class="generate-btn" onclick="handleStudentAlerts()"
+              style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.4); color: #ef4444; width: auto; padding: 12px 24px; margin-top: 0; box-shadow: none;">
+              <i class="fa-solid fa-envelope-open-text"></i> Alert Absentees
+            </button>
+            <button id="alertLateBtn" class="generate-btn" onclick="handleLateAlerts()"
+              style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.4); color: #f59e0b; width: auto; padding: 12px 24px; margin-top: 0; box-shadow: none;">
+              <i class="fa-solid fa-paper-plane"></i> Send Late Alerts
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
+    let currentLabCode = null;
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const name = sessionStorage.getItem('userName') || 'Professor';
+      const email = sessionStorage.getItem('userEmail') || '';
+      
+      const topNameEl = document.getElementById('topbarName');
+      const topEmailEl = document.getElementById('topbarEmail');
+      const topAvatarEl = document.getElementById('topbarAvatar');
+      
+      if (topNameEl) topNameEl.innerText = name;
+      if (topEmailEl) topEmailEl.innerText = email;
+      if (topAvatarEl) topAvatarEl.innerText = name.charAt(0).toUpperCase();
+      
+
+      const dateInput = document.getElementById('date');
+      if (dateInput) {
+        const todayStr = new Date().toLocaleDateString('en-CA');
+        dateInput.value = todayStr;
+        dateInput.min = todayStr;
+      }
+      
+      loadDropdownData();
+    });
+
+    async function loadDropdownData() {
+      const deptSelect = document.getElementById('department');
+      const semSelect = document.getElementById('semester');
+      const subjectSelect = document.getElementById('subject');
+
+      try {
+        const [depts, subjects] = await Promise.all([
+            fetch(`${SCRIPT_URL}?sheet=departments`).then(res => res.json()),
+            fetch(`${SCRIPT_URL}?sheet=subjects`).then(res => res.json())
+        ]);
+
+        deptSelect.innerHTML = '<option value="" disabled selected>Select Dept</option>';
+        if (Array.isArray(depts)) {
+            depts.forEach(d => {
+                const opt = document.createElement('option');
+                opt.value = d.Code;
+                opt.textContent = d.Name;
+                deptSelect.appendChild(opt);
+            });
+        }
+
+        const updateSubjects = () => {
+            const selectedDept = deptSelect.value;
+            const rawSem = semSelect.value;
+            
+            const formattedSem = rawSem ? (
+                rawSem == 1 ? "1st sem" : 
+                rawSem == 2 ? "2nd sem" : 
+                rawSem == 3 ? "3rd sem" : 
+                rawSem + "th sem"
+            ) : "";
+
+            if (!selectedDept || !rawSem) {
+                subjectSelect.innerHTML = '<option value="" disabled selected>Select Subject</option>';
+                return;
+            }
+
+            subjectSelect.innerHTML = '<option value="" disabled selected>Searching...</option>';
+
+            const filteredSubjects = Array.isArray(subjects) ? subjects.filter(s => {
+                const sDept = (s.DeptCode || s.Department || "").toString().toLowerCase();
+                const sSem = (s.Semester || "").toString().toLowerCase();
+                return sDept === selectedDept.toLowerCase() && sSem === formattedSem.toLowerCase();
+            }) : [];
+
+            if (filteredSubjects.length === 0) {
+                subjectSelect.innerHTML = '<option value="" disabled>No subjects</option>';
+            } else {
+                subjectSelect.innerHTML = '<option value="" disabled selected>Select Subject</option>';
+                filteredSubjects.forEach(sub => {
+                    const opt = document.createElement('option');
+                    opt.value = sub.Name; 
+                    opt.textContent = `${sub.Name} (${sub.Code || ''})`;
+                    subjectSelect.appendChild(opt);
+                });
+            }
+        };
+
+        deptSelect.addEventListener('change', updateSubjects);
+        semSelect.addEventListener('change', updateSubjects);
+
+      } catch (err) {
+        console.error("Failed to fetch data:", err);
+        deptSelect.innerHTML = '<option value="" disabled>Error</option>';
+      }
+    }
+
+    function showAlert(msg, isError = false) {
+      const alertBox = document.getElementById('globalAlert');
+      const text = document.getElementById('alertText');
+      const icon = document.getElementById('alertIcon');
+      
+      alertBox.className = 'alert-box show ' + (isError ? 'alert-error' : 'alert-success');
+      icon.className = isError ? 'fa-solid fa-circle-xmark' : 'fa-solid fa-circle-check';
+      text.innerText = msg;
+      
+      setTimeout(() => alertBox.classList.remove('show'), 3500);
+    }
+
+    let countdownInterval;
+
+    async function generateCode() {
+      const dateVal = document.getElementById('date').value;
+      if (dateVal) {
+        const selectedDate = new Date(dateVal);
+        // Adjust for timezone offset if necessary, but simply checking day of week:
+        const day = selectedDate.getUTCDay(); 
+        if (day === 0 || day === 6) {
+          showAlert('Lab attendance cannot be taken on weekends (Saturday & Sunday).', true);
+          return;
+        }
+      }
+
+      const dept = document.getElementById('department').value;
+      const sem = document.getElementById('semester').value;
+      const subjectSelect = document.getElementById('subject');
+      const date = document.getElementById('date').value;
+      const profEmail = sessionStorage.getItem('userEmail');
+      
+      if (!dept || !sem || !subjectSelect.value || !date) {
+        showAlert('Please select all filters!', true);
+        return;
+      }
+
+      const rawSubjectName = subjectSelect.options[subjectSelect.selectedIndex].text.split(' (')[0];
+      const labSubjectName = rawSubjectName + " (Lab)";
+
+      // UI State: Loading
+      const btn = document.getElementById('generateBtn');
+      const btnText = document.getElementById('btnText');
+      const btnIcon = document.getElementById('btnIcon');
+      const btnLoader = document.getElementById('btnLoader');
+      
+      btn.disabled = true;
+      btnText.innerText = "Processing...";
+      btnIcon.style.display = 'none';
+      btnLoader.style.display = 'block';
+      document.getElementById('codeArea').style.display = 'none';
+      clearInterval(countdownInterval);
+
+      try {
+        const payload = {
+          sheet: 'professor',
+          action: 'generate_lab_code',
+          professorId: profEmail,
+          subject: labSubjectName
+        };
+
+        const res = await fetch(SCRIPT_URL, {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        
+        if (data.status === 'success') {
+          // Put the code in the white box
+          document.getElementById('displayCode').innerText = data.code;
+          currentLabCode = data.code;
+          
+          // Show the box
+          document.getElementById('codeArea').style.display = 'flex';
+
+          showAlert(`Code Generated: ${labSubjectName}`);
+          
+          startTimer(300);
+
+          // NEW: Start the Live Grid
+          const deptName = document.getElementById('department').options[document.getElementById('department').selectedIndex].text;
+          const formattedSem = sem == 1 ? "1st sem" : sem == 2 ? "2nd sem" : sem == 3 ? "3rd sem" : sem + "th sem";
+          
+          await fetchLabStudents(deptName, formattedSem);
+          
+          if (labPollingInterval) clearInterval(labPollingInterval);
+          labPollingInterval = setInterval(() => {
+              pollAttendance(deptName, formattedSem, labSubjectName, date);
+          }, 3000); // Check every 3 seconds
+
+        } else {
+          showAlert(data.message || 'Failed to generate code', true);
+        }
+      } catch (err) {
+        showAlert('Network error occurred.', true);
+        console.error(err);
+      } finally {
+        btn.disabled = false;
+        btnText.innerText = "Generate";
+        btnIcon.style.display = 'block';
+        btnLoader.style.display = 'none';
+      }
+    }
+
+    function startTimer(seconds) {
+      let remaining = seconds;
+      const display = document.getElementById('timeLeft');
+      const codeBox = document.getElementById('displayCode');
+      
+      // Reset White Box Styles
+      codeBox.style.color = '#000000';
+      codeBox.style.borderColor = '#3b82f6';
+      codeBox.style.textShadow = 'none';
+      codeBox.style.background = '#ffffff';
+
+      function updateDisplay() {
+        const m = Math.floor(remaining / 60);
+        const s = remaining % 60;
+        display.innerText = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        
+        if (remaining <= 15) {
+          display.style.color = '#ef4444'; 
+          codeBox.style.borderColor = '#ef4444';
+        } else {
+          display.style.color = '#f59e0b'; 
+        }
+      }
+
+      updateDisplay();
+
+      countdownInterval = setInterval(() => {
+        remaining--;
+        updateDisplay();
+        
+        if (remaining <= 0) {
+          clearInterval(countdownInterval);
+          clearInterval(labPollingInterval); // Stop polling when code expires
+          display.innerText = "00:00 (EXPIRED)";
+          codeBox.innerText = "EXPIRED";
+          codeBox.style.color = '#ffffff';
+          codeBox.style.background = 'rgba(239, 68, 68, 0.8)';
+          codeBox.style.borderColor = '#ef4444';
+        }
+      }, 1000);
+    }
+
+    // ==========================================
+    // LIVE STUDENT GRID LOGIC
+    // ==========================================
+    let labStudents = [];
+    let labPollingInterval = null;
+
+    async function fetchLabStudents(dept, sem) {
+        try {
+          const fetchUrl = `${SCRIPT_URL}?sheet=student&dept=${encodeURIComponent(dept)}&sem=${encodeURIComponent(sem)}`;
+          const res = await fetch(fetchUrl);
+          const data = await res.json();
+
+          data.sort((a, b) => {
+            const idA = String(a.ID || a.id || '');
+            const idB = String(b.ID || b.id || '');
+            return idA.localeCompare(idB, undefined, { numeric: true, sensitivity: 'base' });
+          });
+
+          labStudents = data.map(s => ({
+            id: s.ID || s.id || '',
+            name: s.Name || s.NAME || 'Unknown',
+            detected: false, // Default to absent
+            lateMinutes: 0
+          }));
+          populateReport();
+          document.getElementById('attendanceReport').style.display = 'block';
+        } catch (e) {
+          console.error("Failed to fetch students", e);
+        }
+    }
+
+    function populateReport() {
+        const tbody = document.getElementById("reportTbody");
+        tbody.innerHTML = '';
+
+        labStudents.forEach((student) => {
+          const detectedStatus = student.detected
+            ? '<span style="color: #10b981;"><i class="fa-solid fa-check"></i> Present</span>'
+            : '<span style="color: #ef4444;"><i class="fa-solid fa-xmark"></i> Absent</span>';
+
+          const presentActive = student.detected ? 'background: #10b981; color: white;' : 'background: rgba(15,23,42,0.6); color: #94a3b8;';
+          const absentActive = student.detected ? 'background: rgba(15,23,42,0.6); color: #94a3b8;' : 'background: #ef4444; color: white;';
+
+          const tr = document.createElement('tr');
+          tr.id = `row-${student.id}`;
+          tr.style.borderBottom = "1px solid rgba(255,255,255,0.05)";
+          if ((student.lateMinutes || 0) > 0) {
+            tr.style.backgroundColor = "rgba(239, 68, 68, 0.15)";
+          }
+          tr.innerHTML = `
+            <td style="padding: 12px 16px;">${student.id}</td>
+            <td style="padding: 12px 16px;"><strong>${student.name}</strong></td>
+            <td style="padding: 12px 16px;">${detectedStatus}</td>
+            <td style="padding: 12px 16px;">
+              <input type="number" min="0" value="${student.lateMinutes || 0}" class="late-minutes-input" 
+                     style="width: 60px; padding: 4px; border-radius: 6px; border: 1px solid var(--glass-border); background: rgba(15, 23, 42, 0.6); color: white; text-align: center;"
+                     onchange="updateLateMinutes('${student.id}', this.value)">
+            </td>
+            <td style="padding: 12px 16px;">
+              <div style="display: flex; gap: 8px;">
+                <button onclick="overrideStatus('${student.id}', true)" style="${presentActive} border: 1px solid rgba(255,255,255,0.1); padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s;">Present</button>
+                <button onclick="overrideStatus('${student.id}', false)" style="${absentActive} border: 1px solid rgba(255,255,255,0.1); padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s;">Absent</button>
+              </div>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+    }
+
+    window.overrideStatus = function(studentId, isPresent) {
+        const student = labStudents.find(s => s.id === studentId);
+        if (student) {
+            student.detected = isPresent;
+            populateReport(); // re-render fast
+        }
+    }
+
+    window.updateLateMinutes = function (studentId, value) {
+      const student = labStudents.find(s => String(s.id).trim() === String(studentId).trim());
+      if (student) {
+        let mins = parseInt(value) || 0;
+        if (mins < 0) mins = 0; // No negative values
+        student.lateMinutes = mins;
+        
+        // Highlight row if > 0
+        const row = document.getElementById(`row-${student.id}`);
+        if (row) {
+          if (mins > 0) {
+            row.style.backgroundColor = 'rgba(239, 68, 68, 0.15)'; // Highlight late
+          } else {
+            row.style.backgroundColor = '';
+          }
+        }
+      }
+    };
+
+    async function pollAttendance(dept, sem, labSubjectName, date) {
+        if (!currentLabCode) return;
+        
+        try {
+            const fetchUrl = `${SCRIPT_URL}?sheet=active_code_scans&code=${encodeURIComponent(currentLabCode)}`;
+            const res = await fetch(fetchUrl);
+            const scannedIds = await res.json();
+            
+            let updated = false;
+            if (Array.isArray(scannedIds)) {
+                scannedIds.forEach(scannedId => {
+                    const s = labStudents.find(st => (st.id || '').toString().toLowerCase() === (scannedId || '').toString().toLowerCase());
+                    if (s && !s.detected) {
+                        s.detected = true;
+                        updated = true; // Only re-render if someone new marked present
+                    }
+                });
+            }
+            if (updated) populateReport();
+        } catch(e) {}
+    }
+
+    window.manualRefreshGrid = async function() {
+        const btn = document.getElementById('refreshGridBtn');
+        if (!btn) return;
+        const icon = btn.querySelector('i');
+        if (icon) icon.classList.add('fa-spin');
+        
+        try {
+            const subjectSelect = document.getElementById('subject');
+            const rawSubjectName = subjectSelect.options[subjectSelect.selectedIndex].text.split(' (')[0];
+            const labSubjectName = rawSubjectName + " (Lab)";
+
+            const deptSelect = document.getElementById('department');
+            const deptName = deptSelect.options[deptSelect.selectedIndex].text;
+            const semSelect = document.getElementById('semester');
+            const semNum = semSelect.value;
+            const formattedSem = semNum == 1 ? "1st sem" : semNum == 2 ? "2nd sem" : semNum == 3 ? "3rd sem" : semNum + "th sem";
+            const date = document.getElementById('date').value;
+
+            await pollAttendance(deptName, formattedSem, labSubjectName, date);
+            populateReport(); // Force re-render to assure user it updated
+            showAlert('Grid Refreshed!');
+        } catch(e) {
+            showAlert('Failed to refresh grid.', true);
+        } finally {
+            if (icon) {
+                setTimeout(() => {
+                    icon.classList.remove('fa-spin');
+                }, 500);
+            }
+        }
+    }
+
+    async function saveLabAttendance() {
+        const btn = document.getElementById('saveLabBtn');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+        btn.disabled = true;
+
+        const subjectSelect = document.getElementById('subject');
+        const rawSubjectName = subjectSelect.options[subjectSelect.selectedIndex].text.split(' (')[0];
+        const labSubjectName = rawSubjectName + " (Lab)";
+
+        const deptSelect = document.getElementById('department');
+        const deptName = deptSelect.options[deptSelect.selectedIndex].text;
+        const semSelect = document.getElementById('semester');
+        const semNum = semSelect.value;
+        const formattedSem = semNum == 1 ? "1st sem" : semNum == 2 ? "2nd sem" : semNum == 3 ? "3rd sem" : semNum + "th sem";
+
+        const payload = {
+            sheet: 'student',
+            action: 'save_session',
+            professorEmail: sessionStorage.getItem('userEmail'),
+            classInfo: {
+                subject: labSubjectName,
+                dept: deptName,
+                sem: formattedSem,
+                date: document.getElementById('date').value
+            },
+            students: labStudents.map(s => {
+                let late = s.lateMinutes || 0;
+                const row = document.getElementById(`row-${s.id}`);
+                if (row) {
+                  const input = row.querySelector('.late-minutes-input');
+                  if (input) {
+                    late = parseInt(input.value) || 0;
+                  }
+                }
+                return {
+                    id: s.id,
+                    name: s.name,
+                    status: s.detected ? 'Present' : 'Absent',
+                    lateMinutes: late
+                };
+            })
+        };
+
+        try {
+            const res = await fetch(SCRIPT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify(payload)
+            });
+            const result = await res.json();
+            if (result.status === 'success') {
+                showAlert(`Lab Attendance Saved Successfully! ✅`);
+                clearInterval(labPollingInterval);
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
+            } else {
+                showAlert(result.message || 'Error saving session', true);
+            }
+        } catch(e) {
+            showAlert('Network error while saving.', true);
+        } finally {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    }
+
+    // ==========================================
+    // ALERT STUDENTS (EMAIL)
+    // ==========================================
+    async function handleStudentAlerts() {
+      const btn = document.getElementById('alertStudentsBtn');
+      const originalHTML = btn.innerHTML;
+
+      if (!labStudents || labStudents.length === 0) {
+        showAlert('No student data found. Please generate a code first.', true);
+        return;
+      }
+
+      const absentStudents = labStudents.filter(s => !s.detected);
+      if (absentStudents.length === 0) {
+        showAlert('No absent students to alert!');
+        return;
+      }
+
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending Emails...';
+      btn.disabled = true;
+
+      const subjectSelect = document.getElementById('subject');
+      const rawSubjectName = subjectSelect.options[subjectSelect.selectedIndex].text.split(' (')[0];
+      const labSubjectName = rawSubjectName + " (Lab)";
+
+      const payload = {
+        sheet: 'student',
+        action: 'email_students',
+        classInfo: {
+          subject: labSubjectName,
+          date: document.getElementById('date').value || new Date().toLocaleDateString('en-IN')
+        },
+        students: absentStudents.map(s => ({
+          id: String(s.id).trim().replace(/\.0$/, ''),
+          name: s.name,
+          status: 'Absent'
+        }))
+      };
+
+      try {
+        const response = await fetch(`${SCRIPT_URL}?action=email_students`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+
+        if (result.status === 'success') {
+          showAlert(`Alert emails sent to ${result.sent} absent student(s) and parents ✅`);
+        } else {
+          throw new Error(result.message || result.error || 'Server error.');
+        }
+      } catch (err) {
+        console.error('Email alert process failed:', err);
+        showAlert('Alert Failed: ' + err.message, true);
+      } finally {
+        btn.innerHTML = originalHTML;
+        btn.disabled = false;
+      }
+    }
+
+    async function handleLateAlerts() {
+      const btn = document.getElementById('alertLateBtn');
+      const originalHTML = btn.innerHTML;
+
+      if (!labStudents || labStudents.length === 0) {
+        showAlert('No student data found.', true);
+        return;
+      }
+
+      const lateStudents = [];
+      labStudents.forEach(s => {
+        let late = s.lateMinutes || 0;
+        const row = document.getElementById(`row-${s.id}`);
+        if (row) {
+          const input = row.querySelector('.late-minutes-input');
+          if (input) {
+            late = parseInt(input.value) || 0;
+          }
+        }
+        if (late > 0) {
+          lateStudents.push({
+            id: String(s.id).trim().replace(/\.0$/, ''),
+            name: s.name,
+            lateMinutes: late
+          });
+        }
+      });
+
+      if (lateStudents.length === 0) {
+        showAlert('No students have been marked as late. Enter late minutes first.', true);
+        return;
+      }
+
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending...';
+      btn.disabled = true;
+
+      const subjectSelect = document.getElementById('subject');
+      const rawSubjectName = subjectSelect.options[subjectSelect.selectedIndex].text.split(' (')[0];
+      const labSubjectName = rawSubjectName + " (Lab)";
+
+      const payload = {
+        sheet: 'student',
+        action: 'email_late_students',
+        classInfo: {
+          subject: labSubjectName,
+          date: document.getElementById('date').value || new Date().toLocaleDateString('en-IN')
+        },
+        students: lateStudents
+      };
+
+      try {
+        const response = await fetch(`${SCRIPT_URL}?action=email_late_students`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+
+        if (result.status === 'success') {
+          showAlert(`Late alert emails sent to ${result.sent} student(s) and parents ✅`);
+        } else {
+          showAlert('Error: ' + (result.message || 'Failed to send late alerts.'), true);
+        }
+      } catch (e) {
+        console.error(e);
+        showAlert('Network error while sending late alerts.', true);
+      } finally {
+        btn.innerHTML = originalHTML;
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>

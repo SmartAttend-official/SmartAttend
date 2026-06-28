@@ -1,0 +1,160 @@
+================================================================================
+SMARTATTEND SYSTEM ARCHITECTURE - HIGHLY DETAILED SPECIFICATION
+================================================================================
+This file contains the extremely detailed specifications of the SmartAttend system.
+You can use this file to generate a highly detailed diagram using:
+1. Mermaid.js (Paste Option 1 into https://mermaid.live)
+2. AI Image Generators (Paste Option 2 into Midjourney/DALL-E/Imagen)
+3. Direct human or AI interpretation (Read Option 3)
+
+--------------------------------------------------------------------------------
+OPTION 1: DETAILED MERMAID.JS CODE (For exact, complex diagram generation)
+--------------------------------------------------------------------------------
+```mermaid
+graph TD
+    %% Define Styles
+    classDef frontend fill:#1e293b,stroke:#3b82f6,stroke-width:2px,color:#fff;
+    classDef backend fill:#0f172a,stroke:#a855f7,stroke-width:2px,color:#fff;
+    classDef database fill:#1e1b4b,stroke:#10b981,stroke-width:2px,color:#fff;
+    classDef external fill:#312e81,stroke:#f59e0b,stroke-width:2px,color:#fff;
+
+    %% Client / Frontend Layer
+    subgraph Frontend [Frontend Layer - HTML/CSS/JS]
+        direction TB
+        Admin[Admin Dashboard]:::frontend
+        Prof[Professor Portal]:::frontend
+        Student[Student App]:::frontend
+        Login[Login / Register Portal]:::frontend
+    end
+
+    %% API / Logic Layer
+    subgraph API [Backend Layer - Google Apps Script]
+        direction TB
+        Router{doGet / doPost Router}:::backend
+        
+        subgraph Auth [Auth & Security]
+            VerifyLogin[verify_login]:::backend
+            OTPGen[send_otp]:::backend
+            OTPVer[verify_otp]:::backend
+            PWDReset[confirm_reset]:::backend
+        end
+        
+        subgraph Attendance [Attendance Management]
+            SaveSess[save_session]:::backend
+            CalcPct[syncOverallAttendance]:::backend
+            GetStats[subject_stats]:::backend
+            Predictor[predict]:::backend
+        end
+        
+        subgraph Leave [Leave Management]
+            SubLeave[submit_leave]:::backend
+            ResLeave[resolve_leave]:::backend
+        end
+        
+        subgraph AdminOps [Admin Operations]
+            MngDepts[Manage Departments]:::backend
+            MngClasses[Manage Classes]:::backend
+            MngProxies[Manage Proxies]:::backend
+        end
+    end
+
+    %% Database / Storage Layer
+    subgraph Storage [Database Layer - Google Sheets]
+        direction TB
+        subgraph S_SS [Student Spreadsheet]
+            S_Data[(Sheet2: Student Master Data)]:::database
+            S_Hist[(AttendanceHistory: Raw Logs)]:::database
+            S_Leave[(LeaveRequests: Status)]:::database
+        end
+        subgraph P_SS [Professor Spreadsheet]
+            P_Data[(Professor Master Data)]:::database
+            Audit[(AuditLogs: Activity)]:::database
+        end
+        subgraph A_SS [Academic Spreadsheet]
+            A_Depts[(Departments)]:::database
+            A_Classes[(Classes)]:::database
+            A_Subs[(Subjects)]:::database
+            Proxies[(Proxies)]:::database
+        end
+    end
+
+    %% External Services
+    subgraph Ext [External Services]
+        Gmail[Gmail API / MailApp]:::external
+        PDFGen[jsPDF / SheetJS]:::external
+    end
+
+    %% Connections - Frontend to Backend
+    Login -->|AJAX POST| VerifyLogin
+    Login -->|AJAX GET| OTPGen
+    Prof -->|AJAX POST| SaveSess
+    Student -->|AJAX GET| GetStats
+    Student -->|AJAX POST| SubLeave
+    Admin -->|AJAX POST| MngDepts
+
+    %% Connections - Backend to Database
+    VerifyLogin -->|Read/Write| S_Data
+    VerifyLogin -->|Read/Write| P_Data
+    SaveSess -->|Append| S_Hist
+    SaveSess -->|Trigger| CalcPct
+    CalcPct -->|Update| S_Data
+    GetStats -->|Read| S_Hist
+    SubLeave -->|Append| S_Leave
+
+    %% Connections - Backend to External
+    SaveSess -->|Trigger| Gmail
+    ResLeave -->|Trigger| Gmail
+    Gmail -->|Send Email| Users[Students & Parents]
+    
+    %% Connections - Frontend to External (Client side libraries)
+    Prof -->|Export| PDFGen
+    Student -->|Export| PDFGen
+```
+
+--------------------------------------------------------------------------------
+OPTION 2: HYPER-DETAILED AI PROMPT (For high-fidelity visual diagrams)
+--------------------------------------------------------------------------------
+Prompt:
+A hyper-detailed, professional 3D isometric infographic of a cloud-based attendance management system architecture named 'SmartAttend'. The background is a clean, dark-mode grid with subtle glowing blue circuitry. 
+
+The diagram must show 4 distinct vertical or horizontal tiers:
+1. **The User Layer (Frontend)**: Three glowing holographic screens floating, labeled 'Admin Dashboard' (showing charts and tables), 'Professor Portal' (showing student lists and checkmarks), and 'Student App' (showing a large attendance percentage dial).
+2. **The Logic Layer (Backend)**: A central glowing processing core labeled 'Google Apps Script API Engine'. Smaller nodes branch out from it labeled 'Authentication (OTP)', 'Attendance Calculator', 'Leave Processor', and 'Role Router'. Glowing data streams connect this core to the other layers.
+3. **The Data Layer (Database)**: Represented as a stack of three glowing, transparent glass disks or cylinders labeled 'Student DB Spreadsheet', 'Professor DB Spreadsheet', and 'Academic Master Spreadsheet'. Each disk shows glowing rows and columns of data inside.
+4. **The Notification Layer**: A side module showing a mail icon with data waves emanating from it, labeled 'Automated Gmail Alerts', sending notifications to abstract figures labeled 'Students' and 'Parents'.
+
+The connections between all layers must be shown as glowing cyan, neon purple, and electric blue fiber-optic lines with arrows indicating data flow. The overall aesthetic must be extremely premium, modern, and detailed, suitable for a technical whitepaper or a state-of-the-art software presentation.
+
+--------------------------------------------------------------------------------
+OPTION 3: DETAILED TEXT SPECIFICATION (For manual recreation or AI reading)
+--------------------------------------------------------------------------------
+### 1. FRONTEND ARCHITECTURE (Client-Side)
+- **Technology**: Vanilla HTML5, CSS3 (Glassmorphism theme, dark mode preferred), and Plain JavaScript.
+- **Key Modules**:
+    - `Login.html` / `login.js`: Handles multi-role login (Admin/Professor/Student) and session token validation.
+    - `Record.html` / `record.js`: Interface for viewing and exporting attendance history (uses jsPDF and SheetJS).
+    - `Start Attendance.html` / `start_attendance.js`: Interface for professors to mark attendance in real-time.
+    - `Leave_Requests.html` / `leave_requests.js`: Interface for students to submit leaves and professors to approve them.
+
+### 2. BACKEND ARCHITECTURE (Cloud API)
+- **Technology**: Google Apps Script (GAS).
+- **Core File**: `SmartAttend_AppScript_FINAL.gs` (approx. 2,400+ lines).
+- **Key API Actions (GET)**:
+    - `verify_otp`: Validates 5-digit recovery codes.
+    - `subject_stats`: Fetches live attendance percentage calculated from raw history.
+    - `predict`: Calculates how many classes a student can miss or must attend to reach 75%.
+- **Key API Actions (POST)**:
+    - `verify_login`: Validates credentials and returns a UUID Session Token.
+    - `save_session`: Records a class session, updates student histories, and triggers background calculations.
+
+### 3. DATABASE ARCHITECTURE (Storage)
+- **Technology**: Google Sheets (Multi-Sheet distributed architecture).
+- **Spreadsheets**:
+    - **Student Sheet**: Contains `Sheet2` (Master student records with `Classes_Attended`, `Total_Classes`, and `Attendance_Percentage`) and `AttendanceHistory` (Every single present/absent log).
+    - **Professor Sheet**: Contains professor credentials, assigned departments, and `AuditLogs` for security tracking.
+    - **Academic Sheet**: Contains registries for `Departments`, `Classes`, `Subjects`, and `Proxies`.
+
+### 4. WORKFLOWS
+- **Attendance Flow**: Professor submits list -> Apps Script appends to `AttendanceHistory` -> Apps Script recalculates `Sheet2` totals -> Apps Script emails summary to Professor and alerts to Parents of absent students.
+- **Leave Flow**: Student submits request -> Apps Script logs to `LeaveRequests` -> Professor approves -> Apps Script updates status and notifies Parent.
+================================================================================

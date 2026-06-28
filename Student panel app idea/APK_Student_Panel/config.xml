@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<widget xmlns   = "http://www.w3.org/ns/widgets"
+        xmlns:gap   = "http://phonegap.com/ns/1.0"
+        id          = "com.smartattend.student"
+        versionCode = "10"
+        version     = "1.0.0" >
+
+  <name>SmartAttend Student</name>
+
+  <description>
+      Student Attendance Portal.
+  </description>
+
+  <author href="https://smartattend.com" email="support@smartattend.com">
+      SmartAttend Team
+  </author>
+
+  <content src="index.html" />
+
+  <access origin="*" />
+  <allow-intent href="http://*/*" />
+  <allow-intent href="https://*/*" />
+  
+  <icon src="icon.png" />
+  
+  <preference name="Orientation" value="portrait" />
+</widget>

@@ -1,0 +1,62 @@
+================================================================================
+SMARTATTEND (GOOGLE SHEETS STACK) - PRODUCTION READINESS ISSUES & ROADMAP
+================================================================================
+
+Below is the list of issues and enhancements that need to be resolved to make the 
+current Google Sheets + Apps Script system as secure, fast, and robust as possible 
+for university deployment (without migrating to a multi-language database system).
+
+--------------------------------------------------------------------------------
+🔴 CRITICAL FIXES (Security & API Hardening)
+--------------------------------------------------------------------------------
+
+1. API Obfuscation & Security
+   - Issue: The `SCRIPT_URL` in `config.js` is stored in plain text. A student with 
+     basic web browser console skills can find this URL and execute direct API 
+     requests to mark themselves present without opening the app or matching their face.
+   - Solution: Encrypt or obfuscate the `SCRIPT_URL` in `config.js` and implement a 
+     digital signature verification check in the Apps Script doPost handler to 
+     reject unauthorized raw API calls.
+
+2. Exposed Frontend API Keys
+   - Issue: External service API keys (e.g. Gemini AI integration keys) are hardcoded 
+     directly in the HTML frontend (e.g., dashboard1.html).
+   - Solution: Remove keys from client HTML files and route all API calls through 
+     backend Google Apps Script functions so that all keys remain hidden on Google's 
+     secure servers.
+
+--------------------------------------------------------------------------------
+🟡 MAJOR FIXES (Speed & Performance Optimization)
+--------------------------------------------------------------------------------
+
+3. Speed Optimization (Apps Script Caching)
+   - Issue: Right now, every time a dashboard loads, Apps Script has to read the 
+     Google Sheet from scratch, which takes 2–3 seconds and feels slow.
+   - Solution: Implement Google's `CacheService` in Apps Script to cache the 
+     roster, student list, and class timetable. This will make page loading and 
+     logins near-instant (under 0.5 seconds).
+
+4. Client-Side Face Encoding Filtering
+   - Issue: As the student list grows, downloading all student face encodings from 
+     Sheets down to client browsers consumes high bandwidth and slows down loading.
+   - Solution: Filter encoding queries so that the scanner only downloads face 
+     encodings for the specific department and semester of the class being taken 
+     at that moment, rather than the entire database.
+
+--------------------------------------------------------------------------------
+🟢 MINOR FIXES (Polish & UX Experience)
+--------------------------------------------------------------------------------
+
+5. Smart Offline Mode & Queueing
+   - Issue: If the classroom's Wi-Fi drops or a student has a bad mobile connection, 
+     the PWA attendance transmission fails and data is lost.
+   - Solution: Store the scanned attendance locally in the browser's IndexedDB/LocalStorage 
+     queue, and automatically upload it to Google Sheets the moment their phone reconnects.
+
+6. High-Tech Visuals: Face-Detection Bounding Boxes
+   - Issue: The camera scanner works in the background but doesn't feel visually 
+     interactive.
+   - Solution: Overlay a real-time canvas box (rectangle) directly on the student’s 
+     face on the screen, showing the name and matching percentage dynamically 
+     above their head during scanning.
+================================================================================

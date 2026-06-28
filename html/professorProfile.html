@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'none';">
+    <title>Professor Profile - SmartAttend</title>
+    <script src="../backend/config.js"></script>
+    <script>
+        if (sessionStorage.getItem('isAuthenticated') !== 'true') {
+            window.location.replace('Login.html');
+        } else {
+            const userEmail = sessionStorage.getItem('userEmail');
+            const localToken = sessionStorage.getItem('sessionToken');
+            const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
+
+            // OPTIMISTIC UI: Fill data from sessionStorage immediately for instant loading
+            const cachedName = sessionStorage.getItem('userName') || 'Professor';
+            const cachedInitial = cachedName.charAt(0).toUpperCase();
+            
+            document.addEventListener('DOMContentLoaded', () => {
+                if (document.getElementById('topbarName')) document.getElementById('topbarName').innerText = cachedName;
+                if (document.getElementById('topbarAvatar')) document.getElementById('topbarAvatar').innerText = cachedInitial;
+                if (document.getElementById('topbarEmail')) document.getElementById('topbarEmail').innerText = userEmail;
+                if (document.getElementById('profileName')) document.getElementById('profileName').innerText = cachedName;
+                if (document.getElementById('profileEmail')) document.getElementById('profileEmail').value = userEmail;
+                if (document.getElementById('profileLargeAvatar')) {
+                    document.getElementById('profileLargeAvatar').innerHTML = cachedInitial + `
+                        <div class="edit-avatar-btn" title="Change Avatar">
+                            <i class="fa-solid fa-camera"></i>
+                        </div>`;
+                }
+            });
+
+            // Fetch fresh data in background
+            fetch(`${SCRIPT_URL}?sheet=professor&email=${encodeURIComponent(userEmail)}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data && data.length > 0) {
+                        const p = data[0];
+                        if (p.SessionToken && p.SessionToken !== localToken) {
+                            alert("Session expired: You logged in from another device.");
+                            logoutUser();
+                        } else {
+                            // Robust field finder
+                            const getField = (obj, target) => {
+                                const normTarget = target.toLowerCase().replace(/[\s_]/g, '');
+                                for (let key in obj) {
+                                    if (key.toLowerCase().replace(/[\s_]/g, '') === normTarget) return obj[key];
+                                }
+                                return '';
+                            };
+
+                            const firstNameVal = getField(p, 'Professor  first_name') || getField(p, 'Professor first_name') || getField(p, 'First_name') || '';
+                            const lastNameVal = getField(p, 'Professor  last_name') || getField(p, 'Professor last_name') || getField(p, 'Last_name') || '';
+                            const deptVal = getField(p, 'Department') || 'N/A';
+
+                            let name = (firstNameVal + ' ' + lastNameVal).trim();
+                            if (!name) name = p.Name || sessionStorage.getItem('userName') || 'Professor';
+                            const initial = name.charAt(0).toUpperCase();
+
+                            // Update all fields with fresh data
+                            if (document.getElementById('topbarName')) document.getElementById('topbarName').innerText = name;
+                            if (document.getElementById('topbarAvatar')) document.getElementById('topbarAvatar').innerText = initial;
+                            if (document.getElementById('profileName')) document.getElementById('profileName').innerText = name;
+                            
+                            if (document.getElementById('profileId')) document.getElementById('profileId').value = getField(p, 'Professor id') || '';
+                            if (document.getElementById('profileFirstName')) document.getElementById('profileFirstName').value = firstNameVal;
+                            if (document.getElementById('profileLastName')) document.getElementById('profileLastName').value = lastNameVal;
+                            if (document.getElementById('currentPassword')) document.getElementById('currentPassword').value = p.Password || '';
+                            
+                            const deptSelect = document.getElementById('profileDept');
+                            if (deptSelect) {
+                                deptSelect.innerHTML = `<option value="${deptVal}" selected>${deptVal}</option>`;
+                            }
+
+                            // Cache the fresh name
+                            sessionStorage.setItem('userName', name);
+                        }
+                    }
+                })
+                .catch(err => console.error("Fresh fetch failed", err));
+        }
+        function logoutUser() {
+            sessionStorage.clear();
+            window.location.replace('Login.html');
+        }
+        function toggleProfile() {
+            const dropdown = document.getElementById('profileDropdown');
+            if (dropdown) dropdown.classList.toggle('show');
+        }
+        document.addEventListener('click', function(e) {
+            const wrapper = document.querySelector('.user-profile-wrapper');
+            const dropdown = document.getElementById('profileDropdown');
+            if (wrapper && dropdown && !wrapper.contains(e.target)) {
+                dropdown.classList.remove('show');
+            }
+        });
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0b1120;
+            --glass-bg: rgba(30, 41, 59, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --accent-color: #3b82f6;
+            --accent-hover: #60a5fa;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --success-color: #10b981;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-dark);
+            background-image:
+                radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.15), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.15), transparent 25%);
+            color: var(--text-main);
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 280px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-right: 1px solid var(--glass-border);
+            display: flex;
+            flex-direction: column;
+            padding: 20px 0;
+            z-index: 10;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            padding: 0 24px;
+            margin-bottom: 40px;
+            gap: 12px;
+        }
+
+        .brand img {
+            height: 40px;
+            width: auto;
+            filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.5));
+        }
+
+        .brand h2 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #60a5fa, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .nav-links {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 0 16px;
+            overflow-y: auto;
+            flex: 1;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+
+        .nav-links::-webkit-scrollbar {
+            display: none;
+        }
+
+        .nav-links a {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 14px 20px;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 16px;
+            font-weight: 500;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .nav-links a:hover,
+        .nav-links a.active {
+            background: rgba(59, 130, 246, 0.1);
+            color: var(--text-main);
+            box-shadow: inset 2px 0 0 var(--accent-color);
+        }
+
+        .nav-links a i {
+            font-size: 20px;
+            width: 24px;
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+
+        .nav-links a:hover i {
+            transform: scale(1.1);
+            color: var(--accent-hover);
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        /* Top Navbar */
+        .topbar {
+            height: 80px;
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            padding: 0 40px;
+            background: rgba(11, 17, 32, 0.5);
+            backdrop-filter: blur(8px);
+            border-bottom: 1px solid var(--glass-border);
+            position: relative;
+            z-index: 1000;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .user-info h3 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 500;
+        }
+
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-color), #8b5cf6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
+            position: relative;
+        }
+
+        /* Profile Dropdown */
+        .user-profile-wrapper {
+            position: relative;
+            cursor: pointer;
+        }
+
+        .profile-dropdown {
+            position: absolute;
+            top: 50px;
+            right: 0;
+            width: 220px;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(16px);
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+            z-index: 100;
+            opacity: 0;
+            transform: translateY(-10px);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+
+        .profile-dropdown.show {
+            display: flex;
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .profile-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 14px;
+            color: var(--text-main);
+        }
+
+        .profile-item i {
+            color: var(--accent-color);
+            width: 16px;
+            text-align: center;
+        }
+
+        /* Profile Page Layout */
+        .profile-container {
+            flex: 1;
+            padding: 40px;
+            overflow-y: auto;
+        }
+
+        .page-header {
+            margin-bottom: 30px;
+        }
+
+        .page-header h1 {
+            margin: 0;
+            font-size: 32px;
+            font-weight: 600;
+        }
+
+        .page-header p {
+            color: var(--text-muted);
+            margin-top: 8px;
+            font-size: 16px;
+        }
+
+        .profile-grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 24px;
+            max-width: 1200px;
+        }
+
+        @media (max-width: 1024px) {
+            .profile-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Profile Cards */
+        .card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 32px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(16px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+            opacity: 0.5;
+        }
+
+        .card h3 {
+            margin: 0 0 24px 0;
+            font-size: 20px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .card h3 i {
+            color: var(--accent-color);
+        }
+
+        /* Avatar Header Card */
+        .avatar-header {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        .large-avatar {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-color), #8b5cf6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            font-weight: bold;
+            color: white;
+            box-shadow: 0 0 30px rgba(59, 130, 246, 0.4);
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        .edit-avatar-btn {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            background: var(--bg-dark);
+            border: 1px solid var(--glass-border);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .edit-avatar-btn:hover {
+            background: var(--accent-color);
+            transform: scale(1.1);
+        }
+
+        .avatar-header h2 {
+            margin: 0 0 8px 0;
+            font-size: 24px;
+        }
+
+        .avatar-header p {
+            color: var(--accent-color);
+            margin: 0 0 16px 0;
+            font-weight: 500;
+        }
+
+        /* Forms */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-muted);
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 14px 16px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            color: white;
+            font-family: inherit;
+            font-size: 15px;
+            transition: all 0.3s ease;
+            box-sizing: border-box;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+            background: rgba(15, 23, 42, 0.8);
+        }
+
+        .form-row {
+            display: flex;
+            gap: 20px;
+        }
+
+        .form-row .form-group {
+            flex: 1;
+        }
+
+        /* Buttons */
+        .btn {
+            background: linear-gradient(135deg, var(--accent-color), #6366f1);
+            color: white;
+            border: none;
+            padding: 14px 24px;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3);
+            width: fit-content;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 30px rgba(59, 130, 246, 0.4);
+            background: linear-gradient(135deg, var(--accent-hover), #818cf8);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            box-shadow: none;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Lists & Items */
+        .list-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .list-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px;
+            background: rgba(15, 23, 42, 0.4);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+        }
+
+        .list-info h4 {
+            margin: 0 0 4px 0;
+            font-size: 15px;
+        }
+
+        .list-info p {
+            margin: 0;
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        .badge {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            background: rgba(59, 130, 246, 0.2);
+            color: var(--accent-hover);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        /* Toggles */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 26px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.1);
+            transition: .4s;
+            border-radius: 34px;
+            border: 1px solid var(--glass-border);
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked+.slider {
+            background-color: var(--success-color);
+            border-color: var(--success-color);
+        }
+
+        input:checked+.slider:before {
+            transform: translateX(24px);
+        }
+
+        /* Custom Alert */
+        .custom-alert {
+            position: fixed;
+            top: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-100px);
+            background-color: white;
+            border: 2px solid var(--success-color);
+            padding: 16px 24px;
+            border-radius: 8px;
+            color: var(--success-color);
+            font-weight: 600;
+            font-size: 16px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        }
+
+        .custom-alert.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Custom Alert -->
+    <div class="custom-alert" id="globalAlert">
+        <i class="fa-solid fa-circle-check"></i>
+        <span id="globalAlertText">Changes saved successfully!</span>
+    </div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="brand">
+            <img src="../images/bg1.1.png" alt="Logo"
+                onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjM2I4MmY2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDJhMTAgMTAgMCAxIDAgMTAgMTAgMTAgMTAgMCAwIDAtMTAgMTB6Ii8+PC9zdmc+'">
+            <h2>SmartAttend</h2>
+        </div>
+        <nav class="nav-links">
+            <a href="dashboard1.html"><i class="fa-solid fa-house"></i> Dashboard</a>
+            <a href="Start Attendance.html"><i class="fa-solid fa-user-check"></i> Start Attendance</a>
+            <a href="Lab_Attendance.html"><i class="fa-solid fa-laptop-code"></i> Lab Attendance</a>
+            <a href="Record.html"><i class="fa-solid fa-users"></i> Student Records</a>
+            <a href="History.html"><i class="fa-solid fa-clock-rotate-left"></i> Attendance History</a>
+            <a href="Assignments.html"><i class="fa-solid fa-book-open"></i> Assignments</a>
+            <a href="Proxy_Assignments.html"><i class="fa-solid fa-user-shield"></i> Proxy & Invigilation</a>
+            <a href="Leave_Requests.html"><i class="fa-solid fa-envelope-open-text"></i> Leave Requests</a>
+            <a href="Setting.html"><i class="fa-solid fa-gear"></i> Settings</a>
+            <a href="professorProfile.html" class="active"><i class="fa-solid fa-user-tie"></i> Profile</a>
+        </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+
+        <!-- Topbar -->
+        <header class="topbar">
+            <div class="user-info">
+                <h3>Welcome, Professor</h3>
+                <div class="user-profile-wrapper" onclick="toggleProfile()">
+                    <div class="avatar" id="topbarAvatar">P</div>
+                    <div class="profile-dropdown" id="profileDropdown">
+                        <div class="profile-item"><i class="fa-solid fa-user"></i><span id="topbarName">Professor</span></div>
+                        <div class="profile-item"><i class="fa-solid fa-envelope"></i><span id="topbarEmail">email@example.com</span></div>
+                        <div class="profile-item"><i class="fa-solid fa-phone"></i><span>+91 9122866169</span></div>
+                        <div class="profile-item" style="border-top: 1px solid var(--glass-border); padding-top: 12px; margin-top: 4px; color: #ef4444; cursor: pointer;" onclick="event.stopPropagation(); logoutUser();">
+                            <i class="fa-solid fa-right-from-bracket" style="color: #ef4444;"></i><span>Log Out</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Profile Content -->
+        <div class="profile-container">
+            <div class="page-header">
+                <h1>Professor Profile</h1>
+                <p>Manage your personal information, security settings, and teaching assignments.</p>
+            </div>
+
+            <div class="profile-grid">
+
+                <!-- Left Column -->
+                <div style="display: flex; flex-direction: column; gap: 24px;">
+                    <!-- Avatar Card -->
+                    <div class="card">
+                        <div class="avatar-header">
+                            <div class="large-avatar" id="profileLargeAvatar">
+                                P
+                                <div class="edit-avatar-btn" title="Change Avatar">
+                                    <i class="fa-solid fa-camera"></i>
+                                </div>
+                            </div>
+                            <h2 id="profileName">Professor</h2>
+                            <p>Senior Professor</p>
+                            <div style="display: flex; gap: 8px; margin-top: 8px;">
+                                <span class="badge"><i class="fa-solid fa-shield-halved"></i> Verified</span>
+                                <span class="badge"
+                                    style="background: rgba(16, 185, 129, 0.2); color: #10b981; border-color: rgba(16, 185, 129, 0.3);">Active</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Security Card -->
+                    <div class="card">
+                        <h3><i class="fa-solid fa-lock"></i> Security</h3>
+
+                        <form onsubmit="updatePassword(event)">
+                            <div class="form-group">
+                                <label>Current Password</label>
+                                <div style="position: relative;">
+                                    <input type="password" id="currentPassword" class="form-control"
+                                        placeholder="••••••••" autocomplete="off" required>
+                                    <i class="fa-solid fa-eye"
+                                        onclick="togglePasswordVisibility('currentPassword', this)"
+                                        style="position: absolute; right: 16px; top: 50%; transform: translateY(-50%); color: var(--text-muted); cursor: pointer;"></i>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>New Password</label>
+                                <div style="position: relative;">
+                                    <input type="password" id="newPassword" class="form-control" placeholder="••••••••"
+                                        autocomplete="off" required minlength="8">
+                                    <i class="fa-solid fa-eye" onclick="togglePasswordVisibility('newPassword', this)"
+                                        style="position: absolute; right: 16px; top: 50%; transform: translateY(-50%); color: var(--text-muted); cursor: pointer;"></i>
+                                </div>
+                            </div>
+                            <button type="submit" id="updatePasswordBtn" class="btn btn-secondary"
+                                style="width: 100%; margin-top: 8px;">Update Password</button>
+                        </form>
+
+                        <div style="margin-top: 32px; border-top: 1px solid var(--glass-border); padding-top: 24px;">
+                            <h4 style="margin: 0 0 16px 0; font-size: 15px; color: var(--text-muted);">Active Sessions
+                            </h4>
+                            <div class="list-group">
+                                <div class="list-item" style="padding: 12px; background: rgba(59, 130, 246, 0.1);">
+                                    <div class="list-info">
+                                        <h4>Windows 11 • Chrome</h4>
+                                        <p>Current Session</p>
+                                    </div>
+                                    <i class="fa-solid fa-desktop" style="color: var(--accent-hover);"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column -->
+                <div style="display: flex; flex-direction: column; gap: 24px;">
+
+                    <!-- Personal Info Card -->
+                    <div class="card">
+                        <h3><i class="fa-solid fa-address-card"></i> Personal Information</h3>
+                        <form onsubmit="updatePersonalInfo(event)">
+                            <div class="form-group">
+                                <label>Professor ID</label>
+                                <input type="text" id="profileId" class="form-control" value="" disabled
+                                    style="opacity: 0.7; cursor: not-allowed; font-weight: 600; color: var(--accent-color);">
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>First Name</label>
+                                    <input type="text" id="profileFirstName" class="form-control" value="" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Last Name</label>
+                                    <input type="text" id="profileLastName" class="form-control" value="" required>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Email Address</label>
+                                    <input type="email" id="profileEmail" class="form-control"
+                                        value="email@ukatarsadiya.edu" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Phone Number</label>
+                                    <input type="tel" class="form-control" value="+91 9122866169">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Department</label>
+                                <select id="profileDept" class="form-control" disabled
+                                    style="opacity: 0.7; cursor: not-allowed; font-weight: 600; color: var(--accent-color);">
+                                    <option selected>Loading...</option>
+                                </select>
+                                <small style="color: var(--text-muted); margin-top: 4px; display: block;">Contact admin
+                                    to change primary department.</small>
+                            </div>
+                            <button type="submit" id="updateProfileBtn" class="btn" style="margin-top: 8px;">
+                                <i class="fa-solid fa-floppy-disk"></i> Save Changes
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Class Assignments Card -->
+                    <div class="card">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                            <h3 style="margin: 0;"><i class="fa-solid fa-chalkboard-user"></i> Class Assignments</h3>
+                            <span class="badge">3 Classes</span>
+                        </div>
+                        <p style="color: var(--text-muted); font-size: 14px; margin-top: 0; line-height: 1.5; font-family: inherit;">
+                            View, assign, and manage study materials, projects, or quizzes assigned to your classes. Automatically broadcasts emails to all students.
+                        </p>
+                        <a href="Assignments.html" class="btn" style="width: 100%; text-decoration: none; margin-top: 16px;">
+                            <i class="fa-solid fa-book-open"></i> Go to Assignments Panel
+                        </a>
+                    </div>
+
+                    <!-- Notification Preferences -->
+                    <div class="card">
+                        <h3><i class="fa-solid fa-bell"></i> Notification Preferences</h3>
+                        <div class="list-group">
+                            <div class="list-item">
+                                <div class="list-info">
+                                    <h4>Post-Class Email Report</h4>
+                                    <p>Receive an automatic email summary after saving attendance.</p>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" checked onchange="handleToggle()">
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <div class="list-item">
+                                <div class="list-info">
+                                    <h4>Absentee SMS Alerts</h4>
+                                    <p>Automatically send SMS alerts to students marked absent.</p>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" onchange="handleToggle()">
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+
+        </div>
+    </main>
+
+    <script src="../backend/professor_profile.js"></script>
+</body>
+
+</html>

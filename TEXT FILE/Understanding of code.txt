@@ -1,0 +1,40 @@
+# SmartAttend Code Understanding Guide & Checklist
+
+Welcome to the SmartAttend code learning path! This document outlines the exact order you should read the files to fully understand how the 18,000+ lines of code work together. 
+
+Whenever you finish reading and understanding a file, just tell me, and I will check it off for you!
+
+## Phase 1: The Entry Points (Frontend UI)
+Understand what the user sees first when they open the system.
+- [x] Task 1: Read `index.html` (The absolute starting point of the web app)
+- [x] Task 2: Read `html/Login.html` (The UI for the main login page)
+- [ ] Task 3: Read `html/admin_login.html` (The UI for the administrator login page)
+
+## Phase 2: Connecting Frontend to Backend
+Understand how the buttons on the HTML page actually send data.
+- [ ] Task 4: Read `backend/config.js` (Contains the crucial SCRIPT_URL linking to Google)
+- [ ] Task 5: Read `backend/login.js` (See how it grabs username/password from Login.html and sends it to the server)
+
+## Phase 3: The Cloud Database (Google Apps Script)
+Understand where the data goes and how it gets saved into Google Sheets.
+- [ ] Task 6: Read `Google script code/SmartAttend_AppScript_FINAL.gs` (This is the most important backend file. See how it processes the login request sent from login.js)
+
+## Phase 4: Core Dashboards (The Main Features)
+Now that you know how logging in works, see how the main application operates.
+- [ ] Task 7: Read `html/admin_dashboard.html` & `backend/admin_dashboard.js` (How admins view attendance and manage the system)
+- [ ] Task 8: Read `html/student_dashboard.html` & `backend/student_dashboard.js` (How students see their own attendance)
+
+## Phase 5: The Artificial Intelligence (Local Facial Recognition)
+Understand how the offline camera system marks attendance automatically.
+- [ ] Task 9: Read `Start_SmartAttend.bat` (How the local system is booted up)
+- [ ] Task 10: Read `install_libraries.bat` (See what Python dependencies are required)
+- [ ] Task 11: Read `python files/local_bridge.py` (The Python code that runs the facial recognition using dlib/face_recognition)
+
+## Phase 6: Advanced Web Features (Progressive Web App)
+Understand how the app can be installed on phones and work partially offline.
+- [ ] Task 12: Read `html/manifest.json` (Tells the browser this is an installable app)
+- [ ] Task 13: Read `html/sw.js` (The Service Worker that caches files so the UI loads fast and works offline)
+
+---
+**Status:** 0/13 Tasks Completed. 
+Ready to begin? Start with Task 1 and let me know when you're done!

@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartAttend — Register Face</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: #0b1120;
+      color: #f8fafc;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    /* Animated background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 60% at 20% 20%, rgba(99, 102, 241, 0.12) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 50% at 80% 80%, rgba(139, 92, 246, 0.1) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    .page-wrap {
+      width: 100%;
+      max-width: 520px;
+      position: relative;
+    }
+
+    /* Header */
+    .logo-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    .logo-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+    }
+
+    .logo-bar h1 {
+      font-size: 22px;
+      font-weight: 700;
+    }
+
+    .logo-bar span {
+      color: #94a3b8;
+      font-size: 14px;
+      display: block;
+    }
+
+    /* Card */
+    .card {
+      background: rgba(30, 41, 59, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      padding: 32px;
+      backdrop-filter: blur(12px);
+    }
+
+    .card h2 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: #c4b5fd;
+    }
+
+    .card p {
+      color: #94a3b8;
+      font-size: 13px;
+      margin-bottom: 24px;
+      line-height: 1.6;
+    }
+
+    /* Steps bar */
+    .steps {
+      display: flex;
+      gap: 0;
+      margin-bottom: 24px;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .step {
+      flex: 1;
+      text-align: center;
+      padding: 10px 6px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #64748b;
+      background: rgba(15, 23, 42, 0.5);
+      transition: all 0.3s;
+    }
+
+    .step.active {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+
+    .step.done {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+    }
+
+    .step span {
+      display: block;
+      font-size: 18px;
+      margin-bottom: 2px;
+    }
+
+    /* Select */
+    select {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      color: #f8fafc;
+      font-size: 15px;
+      font-family: 'Outfit', sans-serif;
+      outline: none;
+      cursor: pointer;
+      margin-bottom: 16px;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14L2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      background-size: 12px;
+    }
+
+    select option {
+      background: #1e293b;
+      color: #f8fafc;
+    }
+
+    select:focus {
+      border-color: rgba(99, 102, 241, 0.7);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    }
+
+    /* Camera box */
+    .camera-box {
+      position: relative;
+      border-radius: 14px;
+      overflow: hidden;
+      background: #0f172a;
+      height: 280px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.07);
+    }
+
+    #regVideo {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    #placeholder {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      color: #475569;
+    }
+
+    #placeholder i {
+      font-size: 40px;
+    }
+
+    #placeholder span {
+      font-size: 14px;
+    }
+
+    /* Status overlay */
+    #statusBar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 12px;
+      background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+      text-align: center;
+      font-weight: 600;
+      font-size: 14px;
+      min-height: 44px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+
+    /* Buttons */
+    .btn-row {
+      display: flex;
+      gap: 12px;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 14px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 600;
+      font-family: 'Outfit', sans-serif;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #6d28d9, #4f46e5);
+      color: white;
+      box-shadow: 0 4px 20px rgba(99, 102, 241, 0.3);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      filter: brightness(1.1);
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #94a3b8;
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    /* Result list */
+    #resultList {
+      display: none;
+      margin-top: 20px;
+    }
+
+    #resultList h3 {
+      font-size: 14px;
+      color: #94a3b8;
+      margin-bottom: 10px;
+    }
+
+    .result-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border-radius: 10px;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .result-item span {
+      color: #34d399;
+      font-size: 18px;
+    }
+
+    /* Loading */
+    #loadingBar {
+      text-align: center;
+      padding: 16px;
+      color: #818cf8;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .spinner {
+      display: inline-block;
+      animation: spin 1s linear infinite;
+      margin-right: 8px;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .back-link {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #64748b;
+      font-size: 13px;
+      text-decoration: none;
+      margin-top: 20px;
+      justify-content: center;
+      transition: color 0.2s;
+    }
+
+    .back-link:hover {
+      color: #a5b4fc;
+    }
+
+    /* Filters Layout */
+    .filter-row {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+
+    .filter-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .filter-col.full-width {
+      margin-top: 4px;
+      margin-bottom: 16px;
+    }
+
+    .filter-col label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .filter-col select {
+      margin-bottom: 0;
+    }
+
+    @media (max-width: 480px) {
+      .filter-row {
+        flex-direction: column;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="page-wrap">
+
+    <!-- Logo -->
+    <div class="logo-bar">
+      <div class="logo-icon"><i class="fa-solid fa-brain"></i></div>
+      <div>
+        <h1>SmartAttend</h1>
+        <span>Face Registration Portal</span>
+      </div>
+    </div>
+
+    <!-- Card -->
+    <div class="card">
+      <h2><i class="fa-solid fa-user-plus" style="margin-right:8px;"></i>Register Student Face</h2>
+      <p>Register each student's face once. The system remembers it permanently for instant recognition during
+        attendance scans.</p>
+
+      <!-- Steps -->
+      <div class="steps">
+        <div class="step active" id="step1"><span>1️⃣</span>Select</div>
+        <div class="step" id="step2"><span>2️⃣</span>Camera</div>
+        <div class="step" id="step3"><span>3️⃣</span>Capture</div>
+      </div>
+
+      <!-- Loading state -->
+      <div id="loadingBar">
+        <i class="fa-solid fa-spinner spinner"></i> Loading AI models...
+      </div>
+
+      <!-- Form (hidden until ready) -->
+      <div id="formArea" style="display:none;">
+        <div class="filter-row">
+          <div class="filter-col">
+            <label for="deptSelect">Department</label>
+            <select id="deptSelect">
+              <option value="all">All Departments</option>
+            </select>
+          </div>
+          <div class="filter-col">
+            <label for="semesterSelect">Semester</label>
+            <select id="semesterSelect">
+              <option value="all">All Semesters</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="filter-col full-width">
+          <label for="studentSelect">Select Student</label>
+          <select id="studentSelect">
+            <option value="">-- Select Student --</option>
+          </select>
+        </div>
+
+        <div class="camera-box">
+          <div id="placeholder">
+            <i class="fa-solid fa-camera-slash"></i>
+            <span>Click "Start Camera" to begin</span>
+          </div>
+          <video id="regVideo" autoplay playsinline muted style="display:none;"></video>
+          <canvas id="regCanvas" style="display:none;"></canvas>
+          <div id="statusBar"></div>
+        </div>
+
+        <div class="btn-row">
+          <button id="cameraBtn" class="btn btn-secondary" onclick="startCamera()">
+            <i class="fa-solid fa-video"></i> Start Camera
+          </button>
+          <button id="captureBtn" class="btn btn-primary" onclick="captureAndSave()" disabled>
+            <i class="fa-solid fa-camera"></i> Capture Face
+          </button>
+        </div>
+
+        <!-- Registered list -->
+        <div id="resultList">
+          <h3><i class="fa-solid fa-check-circle" style="color:#34d399;"></i> Registered Students</h3>
+          <div id="resultItems"></div>
+        </div>
+      </div>
+    </div>
+
+    <a class="back-link" href="dashboard1.html">
+      <i class="fa-solid fa-arrow-left"></i> Back to Dashboard
+    </a>
+
+  </div>
+
+  <script src="../backend/config.js"></script>
+  <script src="../backend/register.js"></script>
+</body>
+
+</html>

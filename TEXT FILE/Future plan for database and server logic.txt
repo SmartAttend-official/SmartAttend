@@ -1,0 +1,56 @@
+====================================================================
+FUTURE PLAN FOR DATABASE AND SERVER LOGIC (SMARTATTEND MIGRATION)
+====================================================================
+
+Currently, SmartAttend relies on a "Serverless" architecture using Google Apps Script as the backend and Google Sheets as the database. While this is an excellent, cost-free setup for creating a Minimum Viable Product (MVP), it has limitations regarding concurrency, speed, and real-time capabilities as the user base grows.
+
+When the product is ready to scale across the university, migrating to a professional tech stack is recommended. Supabase (an open-source Firebase alternative powered by PostgreSQL) is the ideal target architecture.
+
+--------------------------------------------------------------------
+1. WHY MIGRATE TO SUPABASE? (BENEFITS)
+--------------------------------------------------------------------
+* True Concurrency & Reliability: 
+  If hundreds of students submit attendance at the exact same millisecond, Supabase handles it flawlessly. Google Sheets, however, would likely lock, crash, or overwrite data.
+
+* Lightning Fast Speed: 
+  Supabase responds in milliseconds. The app will feel instantly responsive, whereas Google Sheets usually takes 1 to 3 seconds to process a request because it has to parse entire spreadsheet files.
+
+* Real-Time Data (WebSockets): 
+  Supabase supports live subscriptions. The Professor Dashboard could be updated so that as soon as a student scans their face or enters a lab code, their name pops up on the professor's screen instantly, without requiring a page refresh.
+
+* Built-in Security (Row Level Security - RLS): 
+  Supabase has "Row Level Security." This means rules can be written directly in the database (e.g., "Students can only read rows where `student_id` matches their own ID"). This makes it mathematically impossible for a student to hack the API and view someone else's attendance.
+
+* Built-in Authentication: 
+  Supabase handles User Logins, Passwords, and OTPs natively and securely, removing the need to build and maintain custom password reset logic and session tokens in Apps Script.
+
+--------------------------------------------------------------------
+2. COST AND PRICING (IS IT FREE?)
+--------------------------------------------------------------------
+Yes, Supabase has a very generous forever-free tier that is more than sufficient for a university-level project.
+The free tier includes:
+* 50,000 Monthly Active Users (plenty for a whole university)
+* 500 MB of Database Space (Text data like attendance takes up almost zero space. 500MB can hold millions of attendance rows)
+* Unlimited API Requests and up to 200 concurrent database connections.
+
+--------------------------------------------------------------------
+3. MIGRATION ROADMAP (HOW TO MOVE FROM GOOGLE SHEETS)
+--------------------------------------------------------------------
+If the decision is made to migrate, it is a straightforward 4-step process:
+
+Step 1: Set up the Database (Schema)
+Instead of creating "Tabs" in a spreadsheet, create "Tables" in Supabase (e.g., `students`, `professors`, `attendance_history`). Define exact data types (e.g., "Status must be text," "Date must be a timestamp") to enforce data integrity.
+
+Step 2: Migrate Existing Data
+No data is lost. Simply download the current Google Sheets as `.csv` files. Supabase provides a dashboard interface to upload these `.csv` files, instantly populating the new database tables.
+
+Step 3: Replace Google Apps Script with a Real Backend
+Stop using `SmartAttend_AppScript_FINAL.gs`. Instead, write a small Node.js server. 
+Instead of writing this to add a row in Google Sheets:
+  sheet.appendRow([date, subject, studentId]);
+
+The new Node.js server will use the Supabase library:
+  await supabase.from('attendance_history').insert({ date: date, subject: subject, student_id: studentId });
+
+Step 4: Point the Frontend to the New Server
+In the frontend `config.js`, the `SCRIPT_URL` currently points to a Google macro. Simply change that URL to point to the new Node.js server. The rest of the HTML, CSS, and Frontend JS will stay exactly the same!

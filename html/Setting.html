@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'none';">
+  <title>Settings - SmartAttend</title>
+  <script>
+    if (sessionStorage.getItem('isAuthenticated') !== 'true') {
+      window.location.replace('Login.html');
+    } else {
+      const userEmail = sessionStorage.getItem('userEmail');
+      const localToken = sessionStorage.getItem('sessionToken');
+      if (userEmail && localToken) {
+        const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
+        fetch(`${SCRIPT_URL}?sheet=professor&email=${encodeURIComponent(userEmail)}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data && data.length > 0) {
+              if (data[0].SessionToken && data[0].SessionToken !== localToken) {
+                alert("Session expired: You logged in from another device.");
+                logoutUser();
+              }
+            }
+          })
+          .catch(err => console.error("Session verification failed", err));
+      }
+    }
+    function logoutUser() {
+      sessionStorage.clear();
+      window.location.replace('Login.html');
+    }
+    function toggleProfile() {
+      const dropdown = document.getElementById('profileDropdown');
+      if (dropdown) dropdown.classList.toggle('show');
+    }
+    document.addEventListener('click', function(e) {
+      const wrapper = document.querySelector('.user-profile-wrapper');
+      const dropdown = document.getElementById('profileDropdown');
+      if (wrapper && dropdown && !wrapper.contains(e.target)) {
+        dropdown.classList.remove('show');
+      }
+    });
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0b1120;
+      --glass-bg: rgba(30, 41, 59, 0.7);
+      --glass-border: rgba(255, 255, 255, 0.1);
+      --accent-color: #3b82f6;
+      --accent-hover: #60a5fa;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --danger: #ef4444;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Outfit', sans-serif;
+      background-color: var(--bg-dark);
+      background-image:
+        radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.15), transparent 25%),
+        radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.15), transparent 25%);
+      color: var(--text-main);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 280px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-right: 1px solid var(--glass-border);
+      display: flex;
+      flex-direction: column;
+      padding: 20px 0;
+      z-index: 10;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      margin-bottom: 40px;
+      gap: 12px;
+    }
+
+    .brand img {
+      height: 40px;
+      width: auto;
+      filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.5));
+    }
+
+    .brand h2 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #60a5fa, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .nav-links {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 0 16px;
+      overflow-y: auto;
+      flex: 1;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    .nav-links::-webkit-scrollbar {
+      display: none;
+    }
+
+    .nav-links a {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 14px 20px;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 16px;
+      font-weight: 500;
+      border-radius: 12px;
+      transition: all 0.3s ease;
+    }
+
+    .nav-links a:hover,
+    .nav-links a.active {
+      background: rgba(59, 130, 246, 0.1);
+      color: var(--text-main);
+      box-shadow: inset 2px 0 0 var(--accent-color);
+    }
+
+    .nav-links a i {
+      font-size: 20px;
+      width: 24px;
+      text-align: center;
+      transition: transform 0.3s ease;
+    }
+
+    .nav-links a:hover i {
+      transform: scale(1.1);
+      color: var(--accent-hover);
+    }
+
+    /* Main Content */
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    /* Top Navbar */
+    .topbar {
+      height: 80px;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      padding: 0 40px;
+      background: rgba(11, 17, 32, 0.5);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--glass-border);
+      position: relative;
+      z-index: 1000;
+    }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .user-info h3 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 500;
+    }
+
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent-color), #8b5cf6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
+    }
+
+    /* Dashboard Layout */
+    .dashboard-container {
+      flex: 1;
+      padding: 40px;
+      overflow-y: auto;
+    }
+
+    .page-header {
+      margin-bottom: 30px;
+    }
+
+    .page-header h1 {
+      margin: 0;
+      font-size: 32px;
+      font-weight: 600;
+    }
+
+    .page-header p {
+      color: var(--text-muted);
+      margin-top: 8px;
+      font-size: 16px;
+    }
+
+    /* Settings Layout */
+    .settings-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      max-width: 1200px;
+    }
+
+    @media (max-width: 1000px) {
+      .settings-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Setting Card */
+    .setting-card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(16px);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .setting-card-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .setting-card-header i {
+      font-size: 20px;
+      color: var(--accent-color);
+      background: rgba(59, 130, 246, 0.1);
+      padding: 10px;
+      border-radius: 8px;
+    }
+
+    .setting-card-header h2 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--text-muted);
+      font-weight: 500;
+      font-size: 14px;
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 12px 16px;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      color: white;
+      font-family: inherit;
+      font-size: 15px;
+      transition: all 0.3s ease;
+      box-sizing: border-box;
+    }
+
+    .form-control:focus {
+      outline: none;
+      border-color: var(--accent-color);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+    }
+
+    /* Toggle Switch */
+    .toggle-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      padding: 12px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+    }
+
+    .toggle-info h4 {
+      margin: 0 0 4px 0;
+      font-size: 15px;
+      font-weight: 500;
+    }
+
+    .toggle-info p {
+      margin: 0;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 48px;
+      height: 26px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(255, 255, 255, 0.1);
+      transition: .4s;
+      border-radius: 34px;
+      border: 1px solid var(--glass-border);
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 4px;
+      bottom: 3px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+
+    input:checked+.slider {
+      background-color: var(--accent-color);
+      border-color: var(--accent-color);
+    }
+
+    input:checked+.slider:before {
+      transform: translateX(22px);
+    }
+
+    /* Buttons */
+    .btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-family: inherit;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.3s;
+      border: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent-color), #6366f1);
+      color: white;
+      box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 15px rgba(59, 130, 246, 0.4);
+    }
+
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--glass-border);
+      color: white;
+    }
+
+    .btn-outline:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    /* Subtle decorative elements */
+    .glow-circle {
+      position: absolute;
+      width: 300px;
+      height: 300px;
+      background: rgba(59, 130, 246, 0.2);
+      border-radius: 50%;
+      filter: blur(80px);
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    /* Profile Dropdown */
+    .user-profile-wrapper {
+      position: relative;
+      cursor: pointer;
+    }
+
+    .profile-dropdown {
+      position: absolute;
+      top: 50px;
+      right: 0;
+      width: 220px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(16px);
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+      z-index: 100;
+      opacity: 0;
+      transform: translateY(-10px);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    .profile-dropdown.show {
+      display: flex;
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .profile-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      color: var(--text-main);
+    }
+
+    .profile-item i {
+      color: var(--accent-color);
+      width: 16px;
+      text-align: center;
+    }
+
+    /* Custom White/Green Alert */
+    .custom-alert {
+      position: fixed;
+      top: 20px;
+      right: -300px;
+      /* Hidden initially */
+      background: white;
+      border: 2px solid #10b981;
+      color: #10b981;
+      padding: 16px 24px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 10px 25px rgba(16, 185, 129, 0.2);
+      transition: right 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      z-index: 9999;
+      font-weight: 500;
+    }
+
+    .custom-alert.show {
+      right: 20px;
+    }
+
+    .custom-alert i {
+      font-size: 20px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Custom Alert -->
+  <div class="custom-alert" id="successAlert">
+    <i class="fa-solid fa-circle-check"></i>
+    IP address changed
+  </div>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="brand">
+      <img src="../images/bg1.1.png" alt="Logo"
+        onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjM2I4MmY2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDJhMTAgMTAgMCAxIDAgMTAgMTAgMTAgMTAgMCAwIDAtMTAgMTB6Ii8+PC9zdmc+'">
+      <h2>SmartAttend</h2>
+    </div>
+    <nav class="nav-links">
+      <a href="dashboard1.html"><i class="fa-solid fa-house"></i> Dashboard</a>
+      <a href="Start Attendance.html"><i class="fa-solid fa-user-check"></i> Start Attendance</a>
+      <a href="Lab_Attendance.html"><i class="fa-solid fa-laptop-code"></i> Lab Attendance</a>
+      <a href="Record.html"><i class="fa-solid fa-users"></i> Student Records</a>
+      <a href="History.html"><i class="fa-solid fa-clock-rotate-left"></i> Attendance History</a>
+      <a href="Assignments.html"><i class="fa-solid fa-book-open"></i> Assignments</a>
+      <a href="Proxy_Assignments.html"><i class="fa-solid fa-user-shield"></i> Proxy & Invigilation</a>
+      <a href="Leave_Requests.html"><i class="fa-solid fa-envelope-open-text"></i> Leave Requests</a>
+      <a href="Setting.html" class="active"><i class="fa-solid fa-gear"></i> Settings</a>
+      <a href="professorProfile.html"><i class="fa-solid fa-user-tie"></i> Profile</a>
+    </nav>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+
+    <!-- Topbar -->
+    <header class="topbar">
+      <div class="user-info">
+        <h3>Welcome, Professor</h3>
+        <div class="user-profile-wrapper" onclick="toggleProfile()">
+          <div class="avatar" id="topbarAvatar">P</div>
+
+          <!-- Dropdown Profile Card -->
+          <div class="profile-dropdown" id="profileDropdown">
+            <div class="profile-item">
+              <i class="fa-solid fa-user"></i>
+              <span id="topbarName">Professor</span>
+            </div>
+            <div class="profile-item">
+              <i class="fa-solid fa-envelope"></i>
+              <span id="topbarEmail">email@example.com</span>
+            </div>
+            <div class="profile-item">
+              <i class="fa-solid fa-phone"></i>
+              <span>+91 9122866169</span>
+            </div>
+            <div class="profile-item"
+              style="border-top: 1px solid var(--glass-border); padding-top: 12px; margin-top: 4px; color: #ef4444; cursor: pointer;"
+              onclick="logoutUser()">
+              <i class="fa-solid fa-right-from-bracket" style="color: #ef4444;"></i>
+              <span>Log Out</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Dashboard Content -->
+    <div class="dashboard-container">
+      <div class="glow-circle" style="top: 10%; right: 30%;"></div>
+      <div class="glow-circle" style="bottom: 20%; left: 10%; background: rgba(139, 92, 246, 0.15);"></div>
+
+      <div class="page-header">
+        <h1>Settings</h1>
+        <p>Manage your account preferences and hardware configuration.</p>
+      </div>
+
+      <div class="settings-grid">
+      
+        <!-- Timetable Configuration -->
+        <div class="setting-card" style="grid-column: 1 / -1;">
+          <div class="setting-card-header">
+            <i class="fa-solid fa-calendar-days"></i>
+            <h2>Course Timetables</h2>
+          </div>
+          
+          <div style="display:flex; flex-direction:column; gap:16px; margin-bottom:24px;">
+              <div style="display: flex; gap: 16px; width: 100%;">
+                  <div class="form-group" style="margin:0; flex: 1;">
+                      <label>Select Department</label>
+                      <select id="profDeptSelect" class="form-control">
+                          <option value="">Choose Department</option>
+                      </select>
+                  </div>
+                  <div class="form-group" style="margin:0; flex: 1;">
+                      <label>Select Semester</label>
+                      <select id="profSemSelect" class="form-control">
+                          <option value="">Choose Semester</option>
+                          <option value="1st sem">1st Semester</option>
+                          <option value="2nd sem">2nd Semester</option>
+                          <option value="3rd sem">3rd Semester</option>
+                          <option value="4th sem">4th Semester</option>
+                          <option value="5th sem">5th Semester</option>
+                          <option value="6th sem">6th Semester</option>
+                          <option value="7th sem">7th Semester</option>
+                          <option value="8th sem">8th Semester</option>
+                      </select>
+                  </div>
+              </div>
+              <button class="btn btn-primary" onclick="loadProfTimetable()" style="width:100%; justify-content:center;">
+                  <i class="fa-solid fa-search"></i> View Timetable
+              </button>
+          </div>
+          
+          <div id="profTimetableResult" style="padding:20px; border-radius:12px; background:rgba(0,0,0,0.2); border:1px solid rgba(255,255,255,0.05); text-align:center;">
+              <i class="fa-solid fa-book-open" style="font-size:32px; color:var(--text-muted); opacity:0.5; margin-bottom:12px;"></i>
+              <p style="color:var(--text-muted); margin:0;">Select a course to view its timetable.</p>
+          </div>
+        </div>
+
+        <!-- Hardware / Camera Configuration -->
+        <div class="setting-card" style="grid-column: 1 / -1;">
+          <div class="setting-card-header">
+            <i class="fa-solid fa-camera-web"></i>
+            <h2>Camera Configuration</h2>
+          </div>
+
+          <div class="form-group">
+            <label>IP Camera URL</label>
+            <input type="text" id="ipCameraUrlInput" class="form-control" value="http://"
+              placeholder="Enter IP webcam URL (e.g. http://100.80.76.38:8080/video)">
+          </div>
+
+          <div class="form-group">
+            <label>Recognition Threshold (%)</label>
+            <input type="number" class="form-control" value="85" min="50" max="99">
+          </div>
+
+          <div style="display: flex; gap: 12px; margin-top: 24px;">
+            <button class="btn btn-primary" id="saveCameraBtn"><i class="fa-solid fa-floppy-disk"></i> Save
+              Settings</button>
+            <button class="btn btn-outline" id="testConnectionBtn"><i class="fa-solid fa-link"></i> Test
+              Connection</button>
+          </div>
+        </div>
+
+
+
+        <!-- System Preferences -->
+        <div class="setting-card" style="grid-column: 1 / -1;">
+          <div class="setting-card-header">
+            <i class="fa-solid fa-sliders"></i>
+            <h2>System Preferences</h2>
+          </div>
+
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <h4>Auto-save Attendance</h4>
+              <p>Automatically save the record to the database when scanning stops.</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <h4>Email Notifications</h4>
+              <p>Send an automated email to absent students after class.</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox">
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="toggle-row" style="border-bottom: none;">
+            <div class="toggle-info">
+              <h4>SMS Notifications</h4>
+              <p>Send an automated SMS to absent student parents after class.</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="smsToggle">
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Analytic Reports -->
+        <div class="setting-card" style="grid-column: 1 / -1;">
+          <div class="setting-card-header">
+            <i class="fa-solid fa-chart-line"></i>
+            <h2>Generate Analytic Reports</h2>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label>Department</label>
+              <select id="reportDept" class="form-control" required>
+                <option value="" disabled selected>Loading Departments...</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label>Semester</label>
+              <select id="reportSem" class="form-control" required>
+                <option value="" disabled selected>Select Semester</option>
+                <option value="1">1st Semester</option>
+                <option value="2">2nd Semester</option>
+                <option value="3">3rd Semester</option>
+                <option value="4">4th Semester</option>
+                <option value="5">5th Semester</option>
+                <option value="6">6th Semester</option>
+                <option value="7">7th Semester</option>
+                <option value="8">8th Semester</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;">
+            <div class="form-group">
+              <label>Subject</label>
+              <select id="reportSub" class="form-control" required>
+                <option value="" disabled selected>Select Subject (Choose Dept & Sem)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Session Type</label>
+              <select id="reportSessionType" class="form-control" required>
+                <option value="All" selected>All (Theory & Lab)</option>
+                <option value="Theory">Theory</option>
+                <option value="Lab">Lab</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Timeframe</label>
+              <select id="reportTimeframe" class="form-control" required>
+                <option value="" disabled selected>Select Timeframe</option>
+                <option value="Weekly">Weekly (Last 7 Days)</option>
+                <option value="Monthly">Monthly (Last 30 Days)</option>
+                <option value="Half-Yearly">Half-Yearly (Last 182 Days)</option>
+                <option value="Yearly">Yearly (Last 365 Days)</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="margin-top: 16px;">
+            <button class="btn btn-primary" id="emailReportBtn" style="width: 100%; justify-content: center;">
+              <i class="fa-solid fa-paper-plane" id="reportBtnIcon"></i> 
+              <span id="reportBtnText">Email Report to Me</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </main>
+
+  <script src="../backend/config.js"></script>
+  <script src="../backend/setting.js"></script>
+</body>
+
+</html>

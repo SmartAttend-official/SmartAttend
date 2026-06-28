@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<!-- Ensures the website scales perfectly on mobile devices by matching the screen width -->
+	<meta charset="UTF-8">
+	<!-- Ensures the website scales perfectly on mobile devices by matching the screen width -->
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<!-- Sets the browser tab title to reflect that this is the Professor login page -->
+	<title>Professor Portal — SmartAttend</title>
+	<!-- Loads the Font Awesome library for all the icons (like email/lock symbols) used in the UI -->
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+	<!-- Loads the 'Outfit' typography from Google Fonts to give the text a modern look -->
+	<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+	<!-- Enables Progressive Web App (PWA) features so users can install this site on their home screen -->
+	<link rel="manifest" href="manifest.json">
+	<!-- This line tells the mobile browser to change its top status bar color to match our website's blue theme, making it feel like a native app. -->
+	<meta name="theme-color" content="#3b82f6">
+	<style>
+		/* :root is the highest level of the document. It acts as a global storage space where we can save values to be used anywhere on the page. */
+		:root {
+			/* The '--' creates a Custom CSS Variable. Instead of memorizing hex colors, we save them under a name (like '--bg-dark') to reuse them easily! */
+			--bg-dark: #0b1120;
+			--glass-bg: rgba(30, 41, 59, 0.7);
+			--glass-border: rgba(255, 255, 255, 0.1);
+			--accent-color: #3b82f6;
+			/* Blue for Professors */
+			--text-main: #f8fafc;
+			--text-muted: #94a3b8;
+		}
+
+		* {
+			box-sizing: border-box;
+			margin: 0;
+			padding: 0;
+		}
+
+		body {
+			font-family: 'Outfit', sans-serif;
+			background-color: var(--bg-dark);
+			background-image:
+				radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.15), transparent 25%),
+				radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.15), transparent 25%);
+			color: var(--text-main);
+			height: 100vh;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			overflow: hidden;
+		}
+
+		.login-container {
+			width: 100%;
+			max-width: 1000px;
+			height: 600px;
+			background: var(--glass-bg);
+			backdrop-filter: blur(20px);
+			-webkit-backdrop-filter: blur(20px);
+			border: 1px solid var(--glass-border);
+			border-radius: 24px;
+			display: flex;
+			overflow: hidden;
+			box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+		}
+
+		/* Left Branding Side */
+		.branding-side {
+			flex: 1.2;
+			background: linear-gradient(135deg, rgba(15, 23, 42, 0.8), rgba(11, 17, 32, 0.9));
+			padding: 60px;
+			display: flex;
+			flex-direction: column;
+			justify-content: center;
+			position: relative;
+			border-right: 1px solid var(--glass-border);
+		}
+
+		.branding-side::before {
+			content: '';
+			position: absolute;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 4px;
+			background: linear-gradient(90deg, #3b82f6, #6366f1);
+		}
+
+		.branding-side img {
+			width: 180px;
+			height: auto;
+			margin-bottom: 24px;
+			filter: drop-shadow(0 0 15px rgba(59, 130, 246, 0.4));
+		}
+
+		.branding-side h2 {
+			font-size: 32px;
+			font-weight: 700;
+			margin: 0 0 16px 0;
+			background: linear-gradient(135deg, #60a5fa, #818cf8);
+			-webkit-background-clip: text;
+			-webkit-text-fill-color: transparent;
+		}
+
+		.branding-side p {
+			color: var(--text-muted);
+			font-size: 16px;
+			line-height: 1.6;
+			margin: 0;
+		}
+
+		/* Right Form Side */
+		.form-side {
+			flex: 1;
+			padding: 50px;
+			display: flex;
+			flex-direction: column;
+			justify-content: center;
+		}
+
+		.form-header {
+			margin-bottom: 32px;
+		}
+
+		.form-header h3 {
+			margin: 0 0 8px 0;
+			font-size: 28px;
+			font-weight: 600;
+		}
+
+		.form-header p {
+			margin: 0;
+			color: var(--text-muted);
+			font-size: 15px;
+		}
+
+		/* Role Tabs Feature */
+		.role-tabs {
+			display: flex;
+			background: rgba(15, 23, 42, 0.6);
+			border-radius: 12px;
+			padding: 6px;
+			margin-bottom: 32px;
+			border: 1px solid var(--glass-border);
+		}
+
+		.role-tab {
+			flex: 1;
+			padding: 10px;
+			text-align: center;
+			color: var(--text-muted);
+			font-weight: 500;
+			font-size: 14px;
+			border-radius: 8px;
+			cursor: pointer;
+			transition: all 0.3s;
+		}
+
+		.role-tab.active {
+			background: var(--accent-color);
+			color: white;
+			box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3);
+		}
+
+		.role-tab:hover:not(.active) {
+			color: var(--text-main);
+			background: rgba(255, 255, 255, 0.05);
+		}
+
+		/* Form Fields */
+		.form-group {
+			margin-bottom: 24px;
+			position: relative;
+		}
+
+		.form-group label {
+			display: block;
+			margin-bottom: 8px;
+			color: var(--text-muted);
+			font-weight: 500;
+			font-size: 14px;
+		}
+
+		.form-group i {
+			position: absolute;
+			bottom: 14px;
+			left: 16px;
+			color: var(--text-muted);
+			font-size: 16px;
+		}
+
+		.toggle-password {
+			left: auto !important;
+			right: 16px;
+			cursor: pointer;
+			transition: color 0.3s;
+			z-index: 2;
+		}
+
+		.toggle-password:hover {
+			color: var(--text-main);
+		}
+
+		.form-control {
+			width: 100%;
+			padding: 14px 44px 14px 44px;
+			background: rgba(15, 23, 42, 0.6);
+			border: 1px solid var(--glass-border);
+			border-radius: 12px;
+			color: white;
+			font-family: inherit;
+			font-size: 15px;
+			transition: all 0.3s ease;
+			box-sizing: border-box;
+		}
+
+		.form-control:focus {
+			outline: none;
+			border-color: var(--accent-color);
+			box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+			background: rgba(15, 23, 42, 0.8);
+		}
+
+		.login-btn {
+			width: 100%;
+			background: linear-gradient(135deg, var(--accent-color), #2563eb);
+			color: white;
+			border: none;
+			padding: 16px;
+			border-radius: 12px;
+			font-size: 16px;
+			font-weight: 600;
+			cursor: pointer;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 12px;
+			transition: all 0.3s;
+			box-shadow: 0 10px 20px rgba(59, 130, 246, 0.2);
+		}
+
+		.login-btn:hover {
+			transform: translateY(-2px);
+			box-shadow: 0 15px 30px rgba(59, 130, 246, 0.3);
+		}
+
+		.login-btn:active {
+			transform: translateY(0);
+		}
+
+		.login-btn:disabled {
+			opacity: 0.7;
+			cursor: not-allowed;
+		}
+
+		.error-msg {
+			background: rgba(239, 68, 68, 0.1);
+			border: 1px solid rgba(239, 68, 68, 0.2);
+			color: #f87171;
+			padding: 12px;
+			border-radius: 10px;
+			font-size: 14px;
+			margin-bottom: 20px;
+			text-align: center;
+			display: none;
+		}
+
+		.form-footer {
+			margin-top: 24px;
+			text-align: center;
+		}
+
+		.form-footer a {
+			color: var(--accent-color);
+			text-decoration: none;
+			font-size: 14px;
+			transition: 0.3s;
+		}
+
+		.form-footer a:hover {
+			text-decoration: underline;
+		}
+
+		@media (max-width: 900px) {
+			.branding-side {
+				display: none;
+			}
+
+			.login-container {
+				max-width: 450px;
+			}
+		}
+	</style>
+</head>
+
+<body>
+	<div class="login-container">
+		<!-- Left Branding Side -->
+		<div class="branding-side">
+			<!-- The 'onerror' acts as a fail-safe. If the main logo image (bg1.1.png) is missing or deleted, it instantly replaces it with a hardcoded Base64 text-image (a blue circle outline) so the user never sees an ugly broken image icon. -->
+			<img src="../images/bg1.1.png" alt="SmartAttend Logo"
+				onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjM2I4MmY2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDJhMTAgMTAgMCAxIDAgMTAgMTAgMTAgMTAgMCAwIDAtMTAgMTB6Ii8+PC9zdmc+'">
+			<h2>Professor Portal</h2>
+			<p>Secure access for marking attendance, managing classes, and reviewing academic records.</p>
+		</div>
+
+		<!-- Right Form Side -->
+		<div class="form-side">
+			<div class="form-header">
+				<h3>Sign In</h3>
+				<p>Enter your credentials to manage your sessions.</p>
+			</div>
+
+			<!-- Role Selection Tabs -->
+			<div class="role-tabs">
+				<!-- The 'active' class tells the CSS to highlight this specific tab, showing the user they are currently on the Professor page -->
+				<div class="role-tab active">Professor</div>
+				<div class="role-tab" onclick="window.location.href='student_login.html'">Student</div>
+				<div class="role-tab" onclick="window.location.href='admin_login.html'">Admin</div>
+			</div>
+
+			<!-- This is an empty, invisible bucket. If a login fails, the JavaScript file (login.js) finds this ID and injects the actual text of the error message directly into it to make it visible. -->
+			<div id="loginError" class="error-msg"></div>
+
+			<form id="loginForm">
+				<div class="form-group">
+					<label>University Email Address</label>
+					<i class="fa-solid fa-envelope"></i>
+					<input type="email" id="emailInput" class="form-control" placeholder="professor@university.edu"
+						required>
+				</div>
+
+				<div class="form-group">
+					<label>Password</label>
+					<i class="fa-solid fa-lock"></i>
+					<input type="password" id="passwordInput" class="form-control" placeholder="••••••••" required>
+					<i class="fa-solid fa-eye toggle-password"
+						onclick="const p=document.getElementById('passwordInput'); if(p.type==='password'){p.type='text';this.classList.remove('fa-eye');this.classList.add('fa-eye-slash');}else{p.type='password';this.classList.remove('fa-eye-slash');this.classList.add('fa-eye');}"></i>
+					<!--eye button in password because of fa-eye -->
+				</div>
+
+				<button type="submit" id="loginBtn" class="login-btn">
+					<span id="btnText">Sign In</span>
+					<i id="btnIcon" class="fa-solid fa-arrow-right-to-bracket"></i>
+				</button>
+			</form>
+
+			<div class="form-footer">
+				<a href="forget.html">Forgot Password?</a>
+			</div>
+		</div>
+	</div>
+
+	<script src="../backend/config.js"></script>
+	<script src="../backend/login.js"></script>
+	<script>
+		/* Checks if the user's browser is modern enough to support Service Workers */
+		if ('serviceWorker' in navigator) {
+			/* Waits until the login page is 100% finished loading visually so it doesn't slow down the UI */
+			window.addEventListener('load', () => {
+				/* Registers a background file (sw.js) that will silently cache the website so it can work offline */
+				navigator.serviceWorker.register('sw.js')
+					/* Prints a hidden success message to the developer console if registration works */
+					.then(reg => console.log('SmartAttend App Registered!'))
+					/* Prints a hidden error message to the developer console if registration fails */
+					.catch(err => console.log('Registration failed:', err));
+			});
+		}
+	</script>
+</body>
+
+</html>

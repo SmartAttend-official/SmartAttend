@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'none';">
+  <title>Student Records - SmartAttend</title>
+  <script src="../backend/config.js"></script>
+  <script>
+    if (sessionStorage.getItem('isAuthenticated') !== 'true') {
+      window.location.replace('Login.html');
+    } else {
+      const userEmail = sessionStorage.getItem('userEmail');
+      const localToken = sessionStorage.getItem('sessionToken');
+      const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
+        fetch(`${SCRIPT_URL}?sheet=professor&email=${encodeURIComponent(userEmail)}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data && data.length > 0) {
+              if (data[0].SessionToken && data[0].SessionToken !== localToken) {
+                alert("Session expired: You logged in from another device.");
+                logoutUser();
+              }
+            }
+          })
+          .catch(err => console.error("Session verification failed", err));
+      }
+    function logoutUser() {
+      sessionStorage.clear();
+      window.location.replace('Login.html');
+    }
+    function toggleProfile() {
+      const dropdown = document.getElementById('profileDropdown');
+      if (dropdown) dropdown.classList.toggle('show');
+    }
+    document.addEventListener('click', function(e) {
+      const wrapper = document.querySelector('.user-profile-wrapper');
+      const dropdown = document.getElementById('profileDropdown');
+      if (wrapper && dropdown && !wrapper.contains(e.target)) {
+        dropdown.classList.remove('show');
+      }
+    });
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- jsPDF libraries for PDF export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+  <!-- SheetJS for Excel export -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --bg-dark: #0b1120;
+      --glass-bg: rgba(30, 41, 59, 0.7);
+      --glass-border: rgba(255, 255, 255, 0.1);
+      --accent-color: #3b82f6;
+      --accent-hover: #60a5fa;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Outfit', sans-serif;
+      background-color: var(--bg-dark);
+      background-image:
+        radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.15), transparent 25%),
+        radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.15), transparent 25%);
+      color: var(--text-main);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 280px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-right: 1px solid var(--glass-border);
+      display: flex;
+      flex-direction: column;
+      padding: 20px 0;
+      z-index: 10;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      margin-bottom: 40px;
+      gap: 12px;
+    }
+
+    .brand img {
+      height: 40px;
+      width: auto;
+      filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.5));
+    }
+
+    .brand h2 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #60a5fa, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .nav-links {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 0 16px;
+      overflow-y: auto;
+      flex: 1;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    .nav-links::-webkit-scrollbar {
+      display: none;
+    }
+
+    .nav-links a {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 14px 20px;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 16px;
+      font-weight: 500;
+      border-radius: 12px;
+      transition: all 0.3s ease;
+    }
+
+    .nav-links a:hover,
+    .nav-links a.active {
+      background: rgba(59, 130, 246, 0.1);
+      color: var(--text-main);
+      box-shadow: inset 2px 0 0 var(--accent-color);
+    }
+
+    .nav-links a i {
+      font-size: 20px;
+      width: 24px;
+      text-align: center;
+      transition: transform 0.3s ease;
+    }
+
+    .nav-links a:hover i {
+      transform: scale(1.1);
+      color: var(--accent-hover);
+    }
+
+    /* Main Content */
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    /* Top Navbar */
+    .topbar {
+      height: 80px;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      padding: 0 40px;
+      background: rgba(11, 17, 32, 0.5);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--glass-border);
+      position: relative;
+      z-index: 1000;
+    }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .user-info h3 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 500;
+    }
+
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent-color), #8b5cf6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
+    }
+
+    /* Dashboard Layout */
+    .dashboard-container {
+      flex: 1;
+      padding: 40px;
+      overflow-y: auto;
+    }
+
+    .page-header {
+      margin-bottom: 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .page-header h1 {
+      margin: 0;
+      font-size: 32px;
+      font-weight: 600;
+    }
+
+    .page-header p {
+      color: var(--text-muted);
+      margin-top: 8px;
+      font-size: 16px;
+    }
+
+    /* Filters and Search */
+    .controls-wrapper {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .search-box {
+      position: relative;
+      width: 250px;
+    }
+
+    .search-box i {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+    }
+
+    .search-box input {
+      width: 100%;
+      padding: 10px 16px 10px 40px;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      color: white;
+      font-family: inherit;
+      box-sizing: border-box;
+      outline: none;
+      transition: all 0.3s;
+    }
+
+    .search-box input:focus {
+      border-color: var(--accent-color);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+    }
+
+    /* Filter Select Styles */
+    .filter-select-wrapper {
+      position: relative;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      transition: all 0.3s;
+    }
+
+    .filter-select-wrapper:hover {
+      border-color: var(--accent-color);
+    }
+
+    .filter-select-wrapper select {
+      padding: 10px 35px 10px 16px;
+      background: transparent;
+      border: none;
+      color: white;
+      font-family: inherit;
+      font-size: 14px;
+      outline: none;
+      cursor: pointer;
+      appearance: none;
+      width: auto;
+    }
+
+    .filter-select-wrapper::after {
+      content: '\f0d7'; /* font-awesome chevron-down */
+      font-family: 'Font Awesome 6 Free';
+      font-weight: 900;
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      pointer-events: none;
+      font-size: 12px;
+    }
+
+    .filter-btn {
+      background: rgba(30, 41, 59, 0.7);
+      border: 1px solid var(--glass-border);
+      color: white;
+      padding: 9px 13px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: inherit;
+      font-size: 13px;
+      white-space: nowrap;
+      transition: all 0.3s;
+    }
+
+    .filter-btn:hover {
+      background: rgba(59, 130, 246, 0.2);
+      border-color: var(--accent-color);
+    }
+
+    /* Table Card */
+    .table-card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(16px);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .table-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      background: linear-gradient(90deg, #f59e0b, #ec4899);
+    }
+
+    .records-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+
+    .records-table th {
+      padding: 16px;
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .records-table td {
+      padding: 16px;
+      font-size: 15px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      vertical-align: middle;
+    }
+
+    .records-table tbody tr {
+      transition: background 0.3s ease;
+    }
+
+    .records-table tbody tr:hover {
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    /* Student Info Column */
+    .student-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .student-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: #334155;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      color: #e2e8f0;
+      font-size: 14px;
+    }
+
+    .student-details {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .student-name {
+      font-weight: 500;
+      color: white;
+    }
+
+    .student-email {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* Badges */
+    .badge {
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      display: inline-block;
+    }
+
+    .badge-success {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .badge-warning {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .badge-danger {
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    /* Action Buttons */
+    .action-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 16px;
+      padding: 6px;
+      border-radius: 6px;
+      transition: all 0.2s;
+    }
+
+    .action-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+    }
+
+    /* Subtle decorative elements */
+    .glow-circle {
+      position: absolute;
+      width: 300px;
+      height: 300px;
+      background: rgba(236, 72, 153, 0.15);
+      border-radius: 50%;
+      filter: blur(80px);
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    /* Profile Dropdown */
+    .user-profile-wrapper {
+      position: relative;
+      cursor: pointer;
+    }
+
+    .profile-dropdown {
+      position: absolute;
+      top: 50px;
+      right: 0;
+      width: 220px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(16px);
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+      z-index: 100;
+      opacity: 0;
+      transform: translateY(-10px);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    .profile-dropdown.show {
+      display: flex;
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .profile-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      color: var(--text-main);
+    }
+
+    .profile-item i {
+      color: var(--accent-color);
+      width: 16px;
+      text-align: center;
+    }
+
+    /* Edit Modal Styles */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(11, 17, 32, 0.8);
+      backdrop-filter: blur(8px);
+      z-index: 1000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      width: 450px;
+      max-width: 90%;
+      padding: 32px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      transform: translateY(20px) scale(0.95);
+      transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+      position: relative;
+    }
+
+    .modal-overlay.active .modal-card {
+      transform: translateY(0) scale(1);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--glass-border);
+      padding-bottom: 16px;
+    }
+
+    .modal-header h2 {
+      margin: 0;
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .modal-header i {
+      color: var(--accent-color);
+      font-size: 24px;
+    }
+
+    .close-modal {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 20px;
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+
+    .close-modal:hover {
+      color: #ef4444;
+    }
+
+    .modal-form-group {
+      margin-bottom: 16px;
+    }
+
+    .modal-form-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .modal-form-control {
+      width: 100%;
+      padding: 12px 16px;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      color: white;
+      font-family: inherit;
+      font-size: 15px;
+      box-sizing: border-box;
+      transition: border-color 0.3s;
+    }
+
+    .modal-form-control:focus {
+      outline: none;
+      border-color: var(--accent-color);
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .modal-btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      border: none;
+      transition: all 0.2s;
+    }
+
+    .btn-cancel {
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+    }
+
+    .btn-cancel:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-save {
+      background: var(--accent-color);
+      color: white;
+    }
+
+    .btn-save:hover {
+      background: var(--accent-hover);
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="brand">
+      <img src="../images/bg1.1.png" alt="Logo"
+        onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjM2I4MmY2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDJhMTAgMTAgMCAxIDAgMTAgMTAgMTAgMTAgMCAwIDAtMTAgMTB6Ii8+PC9zdmc+'">
+      <h2>SmartAttend</h2>
+    </div>
+    <nav class="nav-links">
+      <a href="dashboard1.html"><i class="fa-solid fa-house"></i> Dashboard</a>
+      <a href="Start Attendance.html"><i class="fa-solid fa-user-check"></i> Start Attendance</a>
+      <a href="Lab_Attendance.html"><i class="fa-solid fa-laptop-code"></i> Lab Attendance</a>
+      <a href="Record.html" class="active"><i class="fa-solid fa-users"></i> Student Records</a>
+      <a href="History.html"><i class="fa-solid fa-clock-rotate-left"></i> Attendance History</a>
+      <a href="Assignments.html"><i class="fa-solid fa-book-open"></i> Assignments</a>
+      <a href="Proxy_Assignments.html"><i class="fa-solid fa-user-shield"></i> Proxy & Invigilation</a>
+      <a href="Leave_Requests.html"><i class="fa-solid fa-envelope-open-text"></i> Leave Requests</a>
+      <a href="Setting.html"><i class="fa-solid fa-gear"></i> Settings</a>
+      <a href="professorProfile.html"><i class="fa-solid fa-user-tie"></i> Profile</a>
+    </nav>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+
+    <!-- Topbar -->
+    <header class="topbar">
+      <div class="user-info">
+        <h3>Welcome, Professor</h3>
+        <div class="user-profile-wrapper" onclick="toggleProfile()">
+          <div class="avatar" id="topbarAvatar">P</div>
+
+          <!-- Dropdown Profile Card -->
+          <div class="profile-dropdown" id="profileDropdown">
+            <div class="profile-item">
+              <i class="fa-solid fa-user"></i>
+              <span id="topbarName">Professor</span>
+            </div>
+            <div class="profile-item">
+              <i class="fa-solid fa-envelope"></i>
+              <span id="topbarEmail">email@example.com</span>
+            </div>
+            <div class="profile-item">
+              <i class="fa-solid fa-phone"></i>
+              <span>+91 9122866169</span>
+            </div>
+            <div class="profile-item"
+              style="border-top: 1px solid var(--glass-border); padding-top: 12px; margin-top: 4px; color: #ef4444; cursor: pointer;"
+              onclick="logoutUser()">
+              <i class="fa-solid fa-right-from-bracket" style="color: #ef4444;"></i>
+              <span>Log Out</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Dashboard Content -->
+    <div class="dashboard-container">
+      <div class="glow-circle" style="top: 20%; left: 10%;"></div>
+      <div class="glow-circle" style="bottom: 10%; right: 20%; background: rgba(245, 158, 11, 0.15);"></div>
+
+      <div class="page-header">
+        <div>
+          <h1>Student Records</h1>
+          <p>View, manage, and export comprehensive student attendance data.</p>
+        </div>
+        <div class="controls-wrapper">
+          <div class="search-box">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" id="searchInput" placeholder="Search by name, ID, department...">
+          </div>
+          <!-- ID Lookup Result -->
+          <div id="idLookupResult"
+            style="display:none; background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.3); border-radius: 8px; padding: 8px 14px; font-size: 13px; color: #93c5fd; white-space: nowrap;">
+            <i class="fa-solid fa-user"></i> <span id="idLookupText"></span>
+          </div>
+          <div class="filter-select-wrapper">
+            <select id="departmentFilter">
+              <option value="all" style="background: var(--bg-dark); color: white;">All Departments</option>
+            </select>
+          </div>
+          <div class="filter-select-wrapper">
+            <select id="semesterFilter">
+              <option value="all" style="background: var(--bg-dark); color: white;">All Semesters</option>
+              <option value="1st sem" style="background: var(--bg-dark); color: white;">1st Semester</option>
+              <option value="2nd sem" style="background: var(--bg-dark); color: white;">2nd Semester</option>
+              <option value="3rd sem" style="background: var(--bg-dark); color: white;">3rd Semester</option>
+              <option value="4th sem" style="background: var(--bg-dark); color: white;">4th Semester</option>
+              <option value="5th sem" style="background: var(--bg-dark); color: white;">5th Semester</option>
+              <option value="6th sem" style="background: var(--bg-dark); color: white;">6th Semester</option>
+              <option value="7th sem" style="background: var(--bg-dark); color: white;">7th Semester</option>
+              <option value="8th sem" style="background: var(--bg-dark); color: white;">8th Semester</option>
+            </select>
+          </div>
+          <button class="filter-btn" onclick="exportTableToCSV('student_records.csv')"
+            style="background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.4); color: #34d399;">
+            <i class="fa-solid fa-download"></i> Export CSV
+          </button>
+          <button class="filter-btn" onclick="exportToExcel()"
+            style="background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.4); color: #34d399;">
+            <i class="fa-solid fa-file-excel"></i> Export Excel
+          </button>
+          <button class="filter-btn" onclick="exportTableToPDF('student_records.pdf')"
+            style="background: rgba(139, 92, 246, 0.2); border-color: rgba(139, 92, 246, 0.4); color: #c084fc;">
+            <i class="fa-solid fa-file-pdf"></i> Export PDF
+          </button>
+        </div>
+      </div>
+
+      <!-- Data Table Card -->
+      <div class="table-card">
+        <table class="records-table">
+          <thead>
+            <tr>
+              <th>Roll No</th>
+              <th>Student Details</th>
+              <th>Department</th>
+              <th>Semester</th>
+              <th>Attendance %</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="recordsTbody">
+            <tr>
+              <td colspan="7" style="text-align: center; padding: 40px; color: var(--text-muted);"><i
+                  class="fa-solid fa-spinner fa-spin"></i> Loading records from Google Sheets...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <!-- View Student Modal -->
+    <div class="modal-overlay" id="viewModal">
+      <div class="modal-card" style="width: 500px; padding: 0; overflow: hidden;">
+        <!-- Header area -->
+        <div
+          style="height: 120px; background: linear-gradient(135deg, var(--accent-color), #8b5cf6); position: relative;">
+          <button class="close-modal" onclick="closeViewModal()"
+            style="position: absolute; top: 16px; right: 16px; color: white; background: rgba(0,0,0,0.2); width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: none; cursor: pointer; transition: background 0.3s;"><i
+              class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="view-profile-content" style="padding: 0 32px 32px 32px; position: relative; margin-top: -50px;">
+          <!-- Avatar and basic info -->
+          <div style="display: flex; gap: 20px; align-items: flex-end; margin-bottom: 24px;">
+            <div class="student-avatar" id="viewAvatar"
+              style="width: 100px; height: 100px; font-size: 40px; background: var(--bg-dark); border: 4px solid #1e293b; box-shadow: 0 10px 25px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; border-radius: 50%; color: white;">
+              A</div>
+            <div style="margin-bottom: 8px;">
+              <h3 id="viewName" style="margin: 0 0 4px 0; font-size: 24px; color: white;">Alex Johnson</h3>
+              <p id="viewId" style="margin: 0; color: var(--accent-color); font-weight: 600; letter-spacing: 1px;">
+                CS21045</p>
+            </div>
+          </div>
+
+          <div
+            style="display: flex; align-items: center; gap: 8px; margin-bottom: 24px; color: var(--text-muted); font-size: 15px;">
+            <i class="fa-solid fa-envelope" style="color: var(--accent-color);"></i>
+            <span id="viewEmail">alex.j@university.edu</span>
+          </div>
+
+          <!-- Academic details -->
+          <div class="academic-details"
+            style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px;">
+            <div class="detail-box"
+              style="background: rgba(15, 23, 42, 0.4); padding: 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
+              <span
+                style="display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px;">Department</span>
+              <strong style="color: white; font-size: 16px; display: flex; align-items: center;"><i
+                  class="fa-solid fa-building" style="color: var(--text-muted); margin-right: 8px;"></i><span
+                  id="viewDeptText">Bachelor of computer application</span></strong>
+            </div>
+            <div class="detail-box"
+              style="background: rgba(15, 23, 42, 0.4); padding: 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
+              <span
+                style="display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px;">Semester</span>
+              <strong style="color: white; font-size: 16px; display: flex; align-items: center;"><i
+                  class="fa-solid fa-graduation-cap" style="color: var(--text-muted); margin-right: 8px;"></i><span
+                  id="viewSemText">5th Sem</span></strong>
+            </div>
+          </div>
+
+          <!-- Attendance Highlight Removed -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Student Modal -->
+    <div class="modal-overlay" id="editModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h2><i class="fa-solid fa-user-pen"></i> Edit Student</h2>
+          <button class="close-modal" onclick="closeEditModal()"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <form id="editStudentForm" onsubmit="handleEditSubmit(event)">
+          <div class="modal-form-group">
+            <label>Student ID</label>
+            <input type="text" id="editId" class="modal-form-control" readonly
+              style="background: rgba(255,255,255,0.05); color: var(--text-muted);">
+          </div>
+          <div class="modal-form-group">
+            <label>Student Name</label>
+            <input type="text" id="editName" class="modal-form-control" required>
+          </div>
+          <div class="modal-form-group">
+            <label>Email Address</label>
+            <input type="email" id="editEmail" class="modal-form-control" required>
+          </div>
+          <div class="modal-form-group">
+            <label>Semester</label>
+            <select id="editSem" class="modal-form-control" style="cursor: pointer;">
+              <option value="1st sem">1st Semester</option>
+              <option value="2nd sem">2nd Semester</option>
+              <option value="3rd sem">3rd Semester</option>
+              <option value="4th sem">4th Semester</option>
+              <option value="5th sem">5th Semester</option>
+              <option value="6th sem">6th Semester</option>
+              <option value="7th sem">7th Semester</option>
+              <option value="8th sem">8th Semester</option>
+            </select>
+          </div>
+          <!-- Attendance Field Removed -->
+          <div class="modal-actions">
+            <button type="button" class="modal-btn btn-cancel" onclick="closeEditModal()">Cancel</button>
+            <button type="submit" class="modal-btn btn-save">Save Changes</button>
+            <button type="button" class="modal-btn" style="background: #ef4444; color: white;"
+              onclick="handleDeleteStudent()">Delete</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+  </main>
+
+  <script src="../backend/record.js"></script>
+</body>
+
+</html>

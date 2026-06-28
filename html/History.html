@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'none';">
+  <title>Attendance History - SmartAttend</title>
+  <script src="../backend/config.js"></script>
+  <script>
+    if (sessionStorage.getItem('isAuthenticated') !== 'true') {
+      window.location.replace('Login.html');
+    } else {
+      const userEmail = sessionStorage.getItem('userEmail');
+      const localToken = sessionStorage.getItem('sessionToken');
+      const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
+      if (SCRIPT_URL) {
+        fetch(`${SCRIPT_URL}?sheet=professor&email=${encodeURIComponent(userEmail)}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data && data.length > 0) {
+              if (data[0].SessionToken && data[0].SessionToken !== localToken) {
+                alert("Session expired: You logged in from another device.");
+                logoutUser();
+              }
+            }
+          })
+          .catch(err => console.error("Session verification failed", err));
+      }
+    }
+    function logoutUser() {
+      sessionStorage.clear();
+      window.location.replace('Login.html');
+    }
+    function toggleProfile() {
+      const dropdown = document.getElementById('profileDropdown');
+      if (dropdown) dropdown.classList.toggle('show');
+    }
+    document.addEventListener('click', function(e) {
+      const wrapper = document.querySelector('.user-profile-wrapper');
+      const dropdown = document.getElementById('profileDropdown');
+      if (wrapper && dropdown && !wrapper.contains(e.target)) {
+        dropdown.classList.remove('show');
+      }
+    });
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0b1120;
+      --glass-bg: rgba(30, 41, 59, 0.7);
+      --glass-border: rgba(255, 255, 255, 0.1);
+      --accent-color: #3b82f6;
+      --accent-hover: #60a5fa;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --purple: #8b5cf6;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Outfit', sans-serif;
+      background-color: var(--bg-dark);
+      background-image:
+        radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.15), transparent 25%),
+        radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.15), transparent 25%);
+      color: var(--text-main);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 280px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-right: 1px solid var(--glass-border);
+      display: flex;
+      flex-direction: column;
+      padding: 20px 0;
+      z-index: 10;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      margin-bottom: 40px;
+      gap: 12px;
+    }
+
+    .brand img {
+      height: 40px;
+      width: auto;
+      filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.5));
+    }
+
+    .brand h2 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #60a5fa, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .nav-links {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 0 16px;
+      overflow-y: auto;
+      flex: 1;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    .nav-links::-webkit-scrollbar {
+      display: none;
+    }
+
+    .nav-links a {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 14px 20px;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 16px;
+      font-weight: 500;
+      border-radius: 12px;
+      transition: all 0.3s ease;
+    }
+
+    .nav-links a:hover,
+    .nav-links a.active {
+      background: rgba(59, 130, 246, 0.1);
+      color: var(--text-main);
+      box-shadow: inset 2px 0 0 var(--accent-color);
+    }
+
+    .nav-links a i {
+      font-size: 20px;
+      width: 24px;
+      text-align: center;
+      transition: transform 0.3s ease;
+    }
+
+    .nav-links a:hover i {
+      transform: scale(1.1);
+      color: var(--accent-hover);
+    }
+
+    /* Main Content */
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    /* Top Navbar */
+    .topbar {
+      height: 80px;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      padding: 0 40px;
+      background: rgba(11, 17, 32, 0.5);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--glass-border);
+      position: relative;
+      z-index: 1000;
+    }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .user-info h3 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 500;
+    }
+
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent-color), var(--purple));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
+    }
+
+    /* Dashboard Layout */
+    .dashboard-container {
+      flex: 1;
+      padding: 40px;
+      overflow-y: auto;
+    }
+
+    .page-header {
+      margin-bottom: 30px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .page-header h1 {
+      margin: 0;
+      font-size: 32px;
+      font-weight: 600;
+    }
+
+    .page-header p {
+      color: var(--text-muted);
+      font-size: 16px;
+    }
+
+    /* Unified Filter Styles */
+    .controls-wrapper {
+      display: flex;
+      gap: 16px;
+      align-items: flex-end;
+      flex-wrap: wrap;
+      margin-bottom: 30px;
+    }
+
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .filter-group label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      padding-left: 4px;
+    }
+
+    .filter-select-wrapper {
+      position: relative;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      transition: all 0.3s;
+    }
+
+    .filter-select-wrapper:hover {
+      border-color: var(--accent-color);
+      box-shadow: 0 0 15px rgba(59, 130, 246, 0.1);
+    }
+
+    .filter-select-wrapper select, 
+    .filter-select-wrapper input {
+      padding: 10px 35px 10px 16px;
+      background: transparent;
+      border: none;
+      color: white; /* Select text is white */
+      font-family: inherit;
+      font-size: 14px;
+      outline: none;
+      cursor: pointer;
+      appearance: none;
+      min-width: 150px;
+    }
+
+    .filter-select-wrapper select option {
+      color: black; /* Option text is black for visibility */
+    }
+
+    .filter-select-wrapper input[type="date"] {
+      padding-right: 16px;
+      color-scheme: dark;
+    }
+
+    .filter-select-wrapper.select-type::after {
+      content: '\f0d7';
+      font-family: 'Font Awesome 6 Free';
+      font-weight: 900;
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      pointer-events: none;
+      font-size: 12px;
+    }
+
+    .filter-btn {
+      background: var(--accent-color);
+      color: white;
+      padding: 10px 24px;
+      border-radius: 8px;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.3s;
+      height: 42px;
+    }
+
+    .filter-btn:hover {
+      background: var(--accent-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(59, 130, 246, 0.3);
+    }
+
+    /* Table Card */
+    .table-card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(16px);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .records-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+
+    .records-table th {
+      padding: 16px;
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .records-table td {
+      padding: 16px;
+      font-size: 15px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      vertical-align: middle;
+    }
+
+    .badge {
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      display: inline-block;
+    }
+
+    .badge-success { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+    .badge-danger { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+
+    /* Profile Dropdown */
+    .user-profile-wrapper {
+      position: relative;
+      cursor: pointer;
+    }
+
+    .profile-dropdown {
+      position: absolute;
+      top: 50px;
+      right: 0;
+      width: 220px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(16px);
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+      z-index: 100;
+      opacity: 0;
+      transform: translateY(-10px);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    .profile-dropdown.show {
+      display: flex;
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .profile-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      color: var(--text-main);
+    }
+
+    .profile-item i {
+      color: var(--accent-color);
+      width: 16px;
+      text-align: center;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="brand">
+      <img src="../images/bg1.1.png" alt="Logo">
+      <h2>SmartAttend</h2>
+    </div>
+    <nav class="nav-links">
+      <a href="dashboard1.html"><i class="fa-solid fa-house"></i> Dashboard</a>
+      <a href="Start Attendance.html"><i class="fa-solid fa-user-check"></i> Start Attendance</a>
+      <a href="Lab_Attendance.html"><i class="fa-solid fa-laptop-code"></i> Lab Attendance</a>
+      <a href="Record.html"><i class="fa-solid fa-users"></i> Student Records</a>
+      <a href="History.html" class="active"><i class="fa-solid fa-clock-rotate-left"></i> Attendance History</a>
+      <a href="Assignments.html"><i class="fa-solid fa-book-open"></i> Assignments</a>
+      <a href="Proxy_Assignments.html"><i class="fa-solid fa-user-shield"></i> Proxy & Invigilation</a>
+      <a href="Leave_Requests.html"><i class="fa-solid fa-envelope-open-text"></i> Leave Requests</a>
+      <a href="Setting.html"><i class="fa-solid fa-gear"></i> Settings</a>
+      <a href="professorProfile.html"><i class="fa-solid fa-user-tie"></i> Profile</a>
+    </nav>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+
+    <!-- Topbar -->
+    <header class="topbar">
+      <div class="user-info">
+        <h3>Welcome, Professor</h3>
+        <div class="user-profile-wrapper" onclick="toggleProfile()">
+          <div class="avatar" id="topbarAvatar">P</div>
+          <div class="profile-dropdown" id="profileDropdown">
+            <div class="profile-item"><i class="fa-solid fa-user"></i><span id="topbarName">Professor</span></div>
+            <div class="profile-item"><i class="fa-solid fa-envelope"></i><span id="topbarEmail">email@example.com</span></div>
+            <div class="profile-item"><i class="fa-solid fa-phone"></i><span>+91 9122866169</span></div>
+            <div class="profile-item" style="border-top: 1px solid var(--glass-border); padding-top: 12px; margin-top: 4px; color: #ef4444; cursor: pointer;" onclick="logoutUser()">
+              <i class="fa-solid fa-right-from-bracket" style="color: #ef4444;"></i><span>Log Out</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Dashboard Content -->
+    <div class="dashboard-container">
+      <div class="page-header">
+        <h1>Attendance History</h1>
+        <p>Review and audit student attendance records by session.</p>
+      </div>
+
+      <!-- Historical Filters -->
+      <div class="controls-wrapper">
+        <div class="filter-group">
+          <label>Date</label>
+          <div class="filter-select-wrapper">
+            <input type="date" id="historyDate">
+          </div>
+        </div>
+        
+        <div class="filter-group">
+          <label>Department</label>
+          <div class="filter-select-wrapper select-type">
+            <select id="historyDept">
+              <option value="">Select Department</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="filter-group">
+          <label>Semester</label>
+          <div class="filter-select-wrapper select-type">
+            <select id="historySem">
+              <option value="">Select Semester</option>
+              <option value="1st Sem">1st Semester</option>
+              <option value="2nd Sem">2nd Semester</option>
+              <option value="3rd Sem">3rd Semester</option>
+              <option value="4th Sem">4th Semester</option>
+              <option value="5th Sem">5th Semester</option>
+              <option value="6th Sem">6th Semester</option>
+              <option value="7th Sem">7th Semester</option>
+              <option value="8th Sem">8th Semester</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="filter-group">
+          <label>Subject</label>
+          <div class="filter-select-wrapper select-type">
+            <select id="historySub">
+              <option value="">Select Subject</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="filter-group">
+          <label>Session Type</label>
+          <div class="filter-select-wrapper select-type">
+            <select id="historyType">
+              <option value="All" selected>All Sessions</option>
+              <option value="Class">Theory Class</option>
+              <option value="Lab">Lab Session</option>
+            </select>
+          </div>
+        </div>
+
+        <button class="filter-btn" onclick="fetchHistory()">
+          <i class="fa-solid fa-magnifying-glass"></i> Search
+        </button>
+      </div>
+
+      <!-- Results Table -->
+      <div class="table-card">
+        <table class="records-table">
+          <thead>
+            <tr>
+              <th>Roll No</th>
+              <th>Student Name</th>
+              <th>Status</th>
+              <th>Date</th>
+              <th>Subject</th>
+            </tr>
+          </thead>
+          <tbody id="historyTbody">
+            <tr>
+              <td colspan="5" style="text-align: center; padding: 60px; color: var(--text-muted);">
+                <i class="fa-solid fa-filter" style="font-size: 40px; margin-bottom: 16px; display: block; opacity: 0.5;"></i>
+                Use the filters above to retrieve historical attendance data.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="../backend/history.js"></script>
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      const name = sessionStorage.getItem('userName') || 'Professor';
+      const email = sessionStorage.getItem('userEmail') || '';
+      
+      const topNameEl = document.getElementById('topbarName');
+      const topEmailEl = document.getElementById('topbarEmail');
+      const topAvatarEl = document.getElementById('topbarAvatar');
+      
+      if (topNameEl) topNameEl.innerText = name;
+      if (topEmailEl) topEmailEl.innerText = email;
+      if (topAvatarEl) topAvatarEl.innerText = name.charAt(0).toUpperCase();
+    });
+  </script>
+</body>
+</html>

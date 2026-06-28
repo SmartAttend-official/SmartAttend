@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'none';">
+  <title>Leave Requests - SmartAttend</title>
+  <script src="../backend/config.js"></script>
+  <script>
+    if (sessionStorage.getItem('isAuthenticated') !== 'true') {
+      window.location.replace('Login.html');
+    } else {
+      const userEmail = sessionStorage.getItem('userEmail');
+      const localToken = sessionStorage.getItem('sessionToken');
+      const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
+      if (userEmail && localToken) {
+        fetch(`${SCRIPT_URL}?sheet=professor&email=${encodeURIComponent(userEmail)}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data && data.length > 0) {
+              if (data[0].SessionToken && data[0].SessionToken !== localToken) {
+                alert("Session expired: You logged in from another device.");
+                logoutUser();
+              } else {
+                const fn = data[0]['Professor  first_name'] || data[0]['Professor first_name'] || '';
+                const ln = data[0]['Professor  last_name'] || data[0]['Professor last_name'] || '';
+                const fullName = (fn + ' ' + ln).trim() || sessionStorage.getItem('userName') || 'Professor';
+
+                if (document.getElementById('topbarName')) document.getElementById('topbarName').innerText = fullName;
+                if (document.getElementById('topbarAvatar')) document.getElementById('topbarAvatar').innerText = fullName.charAt(0).toUpperCase();
+              }
+            }
+          })
+          .catch(err => console.error("Session verification failed", err));
+      }
+    }
+    function logoutUser() {
+      sessionStorage.clear();
+      window.location.replace('Login.html');
+    }
+    function toggleProfile() {
+      const dropdown = document.getElementById('profileDropdown');
+      if (dropdown) dropdown.classList.toggle('show');
+    }
+    document.addEventListener('click', function(e) {
+      const wrapper = document.querySelector('.user-profile-wrapper');
+      const dropdown = document.getElementById('profileDropdown');
+      if (wrapper && dropdown && !wrapper.contains(e.target)) {
+        dropdown.classList.remove('show');
+      }
+    });
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0b1120;
+      --glass-bg: rgba(30, 41, 59, 0.7);
+      --glass-border: rgba(255, 255, 255, 0.1);
+      --accent-color: #3b82f6;
+      --accent-hover: #60a5fa;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --purple: #8b5cf6;
+    }
+    body {
+      margin: 0; padding: 0; font-family: 'Outfit', sans-serif;
+      background-color: var(--bg-dark);
+      background-image: radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.15), transparent 25%), radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.15), transparent 25%);
+      color: var(--text-main); display: flex; height: 100vh; overflow: hidden;
+    }
+    .sidebar { width: 280px; background: var(--glass-bg); backdrop-filter: blur(12px); border-right: 1px solid var(--glass-border); display: flex; flex-direction: column; padding: 20px 0; z-index: 10; }
+    .brand { display: flex; align-items: center; padding: 0 24px; margin-bottom: 40px; gap: 12px; }
+    .brand img { height: 40px; width: auto; filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.5)); }
+    .brand h2 { margin: 0; font-size: 24px; font-weight: 700; background: linear-gradient(135deg, #60a5fa, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .nav-links { display: flex; flex-direction: column; gap: 8px; padding: 0 16px; overflow-y: auto; flex: 1; scrollbar-width: none; -ms-overflow-style: none; }
+    .nav-links::-webkit-scrollbar { display: none; }
+    .nav-links a { display: flex; align-items: center; gap: 16px; padding: 14px 20px; color: var(--text-muted); text-decoration: none; font-size: 16px; font-weight: 500; border-radius: 12px; transition: all 0.3s ease; }
+    .nav-links a:hover, .nav-links a.active { background: rgba(59, 130, 246, 0.1); color: var(--text-main); box-shadow: inset 2px 0 0 var(--accent-color); }
+    .nav-links a i { font-size: 20px; width: 24px; text-align: center; transition: transform 0.3s ease; }
+    .nav-links a:hover i { transform: scale(1.1); color: var(--accent-hover); }
+    .main-content { flex: 1; display: flex; flex-direction: column; position: relative; }
+    .topbar { height: 80px; display: flex; justify-content: flex-end; align-items: center; padding: 0 40px; background: rgba(11, 17, 32, 0.5); backdrop-filter: blur(8px); border-bottom: 1px solid var(--glass-border); position: relative; z-index: 1000; }
+    .user-info { display: flex; align-items: center; gap: 12px; }
+    .user-info h3 { margin: 0; font-size: 16px; font-weight: 500; }
+    .avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--accent-color), var(--purple)); display: flex; align-items: center; justify-content: center; font-weight: bold; box-shadow: 0 0 15px rgba(59, 130, 246, 0.3); }
+    .dashboard-container { flex: 1; padding: 40px; overflow-y: auto; }
+    .page-header { margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; }
+    .page-header h1 { margin: 0; font-size: 32px; font-weight: 600; }
+    .page-header p { color: var(--text-muted); margin-top: 8px; font-size: 16px; }
+    .glow-circle { position: absolute; width: 300px; height: 300px; background: rgba(139, 92, 246, 0.15); border-radius: 50%; filter: blur(80px); z-index: -1; pointer-events: none; }
+    .user-profile-wrapper { position: relative; cursor: pointer; }
+    .profile-dropdown { position: absolute; top: 50px; right: 0; width: 220px; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 12px; padding: 16px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5); backdrop-filter: blur(16px); display: none; flex-direction: column; gap: 12px; z-index: 100; opacity: 0; transform: translateY(-10px); transition: opacity 0.3s ease, transform 0.3s ease; }
+    .profile-dropdown.show { display: flex; opacity: 1; transform: translateY(0); }
+    .profile-item { display: flex; align-items: center; gap: 12px; font-size: 14px; color: var(--text-main); }
+    .profile-item i { color: var(--accent-color); width: 16px; text-align: center; }
+    
+    /* Requests Layout */
+    .requests-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 24px; }
+    .request-card { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 16px; padding: 24px; box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5); backdrop-filter: blur(16px); position: relative; overflow: hidden; display: flex; flex-direction: column;}
+    .request-card::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: linear-gradient(180deg, var(--warning), var(--danger)); }
+    .request-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; border-bottom: 1px solid var(--glass-border); padding-bottom: 16px; }
+    .student-info { display: flex; flex-direction: column; }
+    .student-info h3 { margin: 0 0 4px 0; font-size: 18px; color: white; }
+    .student-info span { font-size: 13px; color: var(--text-muted); }
+    .status-badge { background: rgba(245, 158, 11, 0.2); color: var(--warning); padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .request-body { margin-bottom: 20px; flex: 1; }
+    .request-body .date { font-weight: 600; color: var(--accent-hover); margin-bottom: 8px; font-size: 14px; }
+    .request-body .reason { color: var(--text-muted); font-size: 14px; line-height: 1.5; margin: 0; }
+    .attachments { display: flex; gap: 12px; margin-top: 16px; }
+    .attach-btn { flex: 1; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); padding: 8px; border-radius: 8px; color: white; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; text-decoration: none; transition: 0.2s;}
+    .attach-btn:hover { background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.3); }
+    .actions { display: flex; gap: 12px; margin-top: auto; }
+    .btn-approve { flex: 1; background: rgba(16, 185, 129, 0.2); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.4); padding: 10px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: 0.2s;}
+    .btn-approve:hover { background: var(--success); color: white; }
+    .btn-reject { flex: 1; background: rgba(239, 68, 68, 0.2); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.4); padding: 10px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: 0.2s;}
+    .btn-reject:hover { background: var(--danger); color: white; }
+    
+    .empty-state { text-align: center; padding: 40px; color: var(--text-muted); font-size: 18px; grid-column: 1 / -1; }
+  </style>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">
+      <img src="../images/bg1.1.png" alt="Logo" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjM2I4MmY2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDJhMTAgMTAgMCAxIDAgMTAgMTAgMTAgMTAgMCAwIDAtMTAgMTB6Ii8+PC9zdmc+'">
+      <h2>SmartAttend</h2>
+    </div>
+    <nav class="nav-links">
+      <a href="dashboard1.html"><i class="fa-solid fa-house"></i> Dashboard</a>
+      <a href="Start Attendance.html"><i class="fa-solid fa-user-check"></i> Start Attendance</a>
+      <a href="Lab_Attendance.html"><i class="fa-solid fa-laptop-code"></i> Lab Attendance</a>
+      <a href="Record.html"><i class="fa-solid fa-users"></i> Student Records</a>
+      <a href="History.html"><i class="fa-solid fa-clock-rotate-left"></i> Attendance History</a>
+      <a href="Assignments.html"><i class="fa-solid fa-book-open"></i> Assignments</a>
+      <a href="Proxy_Assignments.html"><i class="fa-solid fa-user-shield"></i> Proxy & Invigilation</a>
+      <a href="Leave_Requests.html" class="active"><i class="fa-solid fa-envelope-open-text"></i> Leave Requests</a>
+      <a href="Setting.html"><i class="fa-solid fa-gear"></i> Settings</a>
+      <a href="professorProfile.html"><i class="fa-solid fa-user-tie"></i> Profile</a>
+    </nav>
+  </aside>
+
+  <main class="main-content">
+    <header class="topbar">
+      <div class="user-info">
+        <h3>Welcome, Professor</h3>
+        <div class="user-profile-wrapper" onclick="toggleProfile()">
+          <div class="avatar" id="topbarAvatar">P</div>
+          <div class="profile-dropdown" id="profileDropdown">
+            <div class="profile-item"><i class="fa-solid fa-user"></i><span id="topbarName">Professor</span></div>
+            <div class="profile-item"><i class="fa-solid fa-envelope"></i><span id="topbarEmail">email@example.com</span></div>
+            <div class="profile-item"><i class="fa-solid fa-phone"></i><span>+91 9122866169</span></div>
+            <div class="profile-item" style="border-top: 1px solid var(--glass-border); padding-top: 12px; margin-top: 4px; color: #ef4444; cursor: pointer;" onclick="logoutUser()">
+              <i class="fa-solid fa-right-from-bracket" style="color: #ef4444;"></i><span>Log Out</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="dashboard-container">
+      <div class="glow-circle" style="top: 10%; right: 10%;"></div>
+      <div class="glow-circle" style="bottom: 20%; left: 20%; background: rgba(59, 130, 246, 0.15);"></div>
+
+      <div class="page-header">
+        <div>
+          <h1>Leave & Medical Requests</h1>
+          <p>Review and process student disputes and medical document submissions.</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <div style="position: relative;">
+                <i class="fa-solid fa-calendar-days" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--accent-color);"></i>
+                <input type="date" id="leaveDateFilter" onchange="renderRequests()" style="padding: 10px 16px 10px 42px; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 10px; color: white; font-family: inherit; font-size: 14px; outline: none; transition: 0.3s; width: 180px;">
+            </div>
+            <button onclick="document.getElementById('leaveDateFilter').value=''; renderRequests();" style="background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); color: var(--text-muted); padding: 10px 15px; border-radius: 10px; cursor: pointer; font-size: 14px; transition: 0.2s;"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+        </div>
+      </div>
+
+      <div class="requests-grid" id="requestsContainer">
+        <!-- Rendered via JS -->
+      </div>
+    </div>
+  </main>
+
+  <script src="../backend/leave_requests.js"></script>
+</body>
+</html>

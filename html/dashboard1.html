@@ -1,0 +1,1947 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'none';">
+  <title>SmartAttend Dashboard</title>
+  <script src="../backend/config.js"></script>
+  <script>
+    if (sessionStorage.getItem('isAuthenticated') !== 'true') {
+      window.location.replace('Login.html');
+    } else {
+      const userEmail = sessionStorage.getItem('userEmail');
+      const localToken = sessionStorage.getItem('sessionToken');
+      const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
+      if (userEmail && localToken) {
+        fetch(`${SCRIPT_URL}?sheet=professor&email=${encodeURIComponent(userEmail)}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data && data.length > 0) {
+              if (data[0].SessionToken && data[0].SessionToken !== localToken) {
+                alert("Session expired: You logged in from another device.");
+                logout();
+              } else {
+                // Save real name from sheet into sessionStorage (double-space column names)
+                const fn = data[0]['Professor  first_name'] || data[0]['Professor first_name'] || '';
+                const ln = data[0]['Professor  last_name'] || data[0]['Professor last_name'] || '';
+                const fullName = (fn + ' ' + ln).trim();
+                if (fullName) {
+                  sessionStorage.setItem('userName', fullName);
+                  // Update topbar greeting if already rendered
+                  const topbarName = document.getElementById('topbarName');
+                  if (topbarName) topbarName.innerText = fullName;
+                  const topbarAvatar = document.getElementById('topbarAvatar');
+                  if (topbarAvatar) topbarAvatar.innerText = fullName.charAt(0).toUpperCase();
+                }
+              }
+            }
+          })
+          .catch(err => console.error("Session verification failed", err));
+      }
+    }
+    function logoutUser() {
+      sessionStorage.clear();
+      window.location.replace('Login.html');
+    }
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0b1120;
+      --glass-bg: rgba(30, 41, 59, 0.7);
+      --glass-border: rgba(255, 255, 255, 0.1);
+      --accent-color: #3b82f6;
+      --accent-hover: #60a5fa;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Outfit', sans-serif;
+      background-color: var(--bg-dark);
+      background-image:
+        radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.15), transparent 25%),
+        radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.15), transparent 25%);
+      color: var(--text-main);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 280px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-right: 1px solid var(--glass-border);
+      display: flex;
+      flex-direction: column;
+      padding: 20px 0;
+      z-index: 10;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      margin-bottom: 40px;
+      gap: 12px;
+    }
+
+    .brand img {
+      height: 40px;
+      width: auto;
+      filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.5));
+    }
+
+    .brand h2 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #60a5fa, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .nav-links {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 0 16px;
+      overflow-y: auto;
+      flex: 1;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    .nav-links::-webkit-scrollbar {
+      display: none;
+    }
+
+    .nav-links a {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 14px 20px;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 16px;
+      font-weight: 500;
+      border-radius: 12px;
+      transition: all 0.3s ease;
+    }
+
+    .nav-links a:hover,
+    .nav-links a.active {
+      background: rgba(59, 130, 246, 0.1);
+      color: var(--text-main);
+      box-shadow: inset 2px 0 0 var(--accent-color);
+    }
+
+    .nav-links a i {
+      font-size: 20px;
+      width: 24px;
+      text-align: center;
+      transition: transform 0.3s ease;
+    }
+
+    .nav-links a:hover i {
+      transform: scale(1.1);
+      color: var(--accent-hover);
+    }
+
+    /* Main Content */
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    /* Top Navbar */
+    .topbar {
+      height: 80px;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      padding: 0 40px;
+      background: rgba(11, 17, 32, 0.5);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--glass-border);
+      position: relative;
+      z-index: 1000;
+    }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .user-info h3 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 500;
+    }
+
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent-color), #8b5cf6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
+    }
+
+    /* Dashboard Layout */
+    .dashboard-container {
+      flex: 1;
+      padding: 40px;
+      overflow-y: auto;
+    }
+
+    .page-header {
+      margin-bottom: 30px;
+    }
+
+    .page-header h1 {
+      margin: 0;
+      font-size: 32px;
+      font-weight: 600;
+    }
+
+    .page-header p {
+      color: var(--text-muted);
+      margin-top: 8px;
+      font-size: 16px;
+    }
+
+    /* Camera Card */
+    .camera-card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      max-width: 800px;
+      margin: 0 auto;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(16px);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .camera-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+    }
+
+    .feed-container {
+      width: 100%;
+      aspect-ratio: 16/9;
+      background: #000;
+      border-radius: 12px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .feed-container img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 2;
+      display: none;
+    }
+
+    .feed-placeholder {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      color: var(--text-muted);
+      z-index: 1;
+    }
+
+    .feed-placeholder i {
+      font-size: 48px;
+      opacity: 0.5;
+    }
+
+    .scan-btn {
+      background: linear-gradient(135deg, var(--accent-color), #6366f1);
+      color: white;
+      border: none;
+      padding: 14px 40px;
+      border-radius: 30px;
+      font-size: 16px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: all 0.3s ease;
+      box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3);
+    }
+
+    .scan-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 15px 30px rgba(59, 130, 246, 0.4);
+      background: linear-gradient(135deg, var(--accent-hover), #818cf8);
+    }
+
+    .scan-btn:active {
+      transform: translateY(1px);
+    }
+
+    .scan-btn i {
+      font-size: 18px;
+    }
+
+    /* Subtle decorative elements */
+    .glow-circle {
+      position: absolute;
+      width: 300px;
+      height: 300px;
+      background: rgba(59, 130, 246, 0.2);
+      border-radius: 50%;
+      filter: blur(80px);
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    /* Profile Dropdown */
+    .user-profile-wrapper {
+      position: relative;
+      cursor: pointer;
+    }
+
+    .profile-dropdown {
+      position: absolute;
+      top: 50px;
+      right: 0;
+      width: 220px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(16px);
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+      z-index: 100;
+      opacity: 0;
+      transform: translateY(-10px);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    .profile-dropdown.show {
+      display: flex;
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .profile-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      color: var(--text-main);
+    }
+
+    .profile-item i {
+      color: var(--accent-color);
+      width: 16px;
+      text-align: center;
+    }
+
+    /* Custom Alert */
+    .custom-alert {
+      position: fixed;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-100px);
+      background-color: white;
+      border: 2px solid #10b981;
+      padding: 16px 24px;
+      border-radius: 8px;
+      color: #10b981;
+      font-weight: 600;
+      font-size: 16px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      opacity: 0;
+      transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    }
+
+    .custom-alert.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+
+    /* Attendance Report */
+    .attendance-report {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      padding: 32px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(16px);
+      margin-top: 24px;
+      display: none;
+    }
+
+    .report-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 16px;
+    }
+
+    .report-table th,
+    .report-table td {
+      padding: 16px;
+      text-align: left;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .report-table th {
+      color: var(--text-muted);
+      font-weight: 500;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .report-table td {
+      color: white;
+      font-size: 15px;
+    }
+
+    .status-toggle {
+      display: flex;
+      gap: 8px;
+    }
+
+    .toggle-btn {
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-muted);
+      transition: all 0.2s;
+    }
+
+    .toggle-btn.present.active {
+      background: rgba(16, 185, 129, 0.2);
+      color: #10b981;
+      border-color: #10b981;
+    }
+
+    .toggle-btn.absent.active {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+      border-color: #ef4444;
+    }
+
+    /* Face Scanning Animation */
+    .scan-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(to bottom, rgba(16, 185, 129, 0) 0%, rgba(16, 185, 129, 0.2) 50%, rgba(16, 185, 129, 0) 100%);
+      background-size: 100% 20%;
+      background-repeat: no-repeat;
+      display: none;
+      pointer-events: none;
+      animation: scanLaser 2s infinite ease-in-out;
+      border: 2px solid rgba(16, 185, 129, 0.5);
+      border-radius: 16px;
+      z-index: 5;
+    }
+
+    @keyframes scanLaser {
+      0% {
+        background-position: 0 -100%;
+      }
+
+      100% {
+        background-position: 0 200%;
+      }
+    }
+
+    #faceCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    /* AI Chatbot Styles */
+    .ai-fab {
+      position: fixed;
+      bottom: 30px;
+      right: 30px;
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--purple), var(--accent-color));
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      box-shadow: 0 10px 25px rgba(139, 92, 246, 0.4);
+      cursor: pointer;
+      z-index: 1000;
+      transition: all 0.3s ease;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .ai-fab:hover {
+      transform: scale(1.1) translateY(-5px);
+      box-shadow: 0 15px 35px rgba(139, 92, 246, 0.6);
+    }
+
+    /* Custom SVG Bot Animations */
+    .bot-eye {
+      animation: blink 4s infinite;
+      transform-origin: center;
+      transform-box: fill-box;
+    }
+
+    .bot-antenna {
+      animation: botGlow 2s infinite alternate;
+    }
+
+    @keyframes blink {
+
+      0%,
+      96%,
+      98% {
+        transform: scaleY(1);
+      }
+
+      97% {
+        transform: scaleY(0.1);
+      }
+    }
+
+    @keyframes botGlow {
+      from {
+        fill: #60a5fa;
+        filter: drop-shadow(0 0 2px #60a5fa);
+      }
+
+      to {
+        fill: #ffffff;
+        filter: drop-shadow(0 0 8px #ffffff);
+      }
+    }
+
+    .ai-chat-window {
+      position: fixed;
+      bottom: 110px;
+      right: 30px;
+      width: 350px;
+      height: 400px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(20px);
+      z-index: 999;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(20px);
+      transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    }
+
+    .ai-chat-window.active {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    .ai-header {
+      padding: 16px 20px;
+      background: rgba(15, 23, 42, 0.6);
+      border-bottom: 1px solid var(--glass-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .ai-header h3 {
+      margin: 0;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: white;
+    }
+
+    .ai-header h3 i {
+      color: var(--purple);
+    }
+
+    .close-ai {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 18px;
+      transition: color 0.2s;
+    }
+
+    .close-ai:hover {
+      color: #ef4444;
+    }
+
+    .ai-messages {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .message {
+      max-width: 85%;
+      padding: 12px 16px;
+      border-radius: 16px;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    .msg-ai {
+      background: rgba(139, 92, 246, 0.15);
+      border: 1px solid rgba(139, 92, 246, 0.3);
+      color: #e2e8f0;
+      align-self: flex-start;
+      border-bottom-left-radius: 4px;
+    }
+
+    .msg-user {
+      background: var(--accent-color);
+      color: white;
+      align-self: flex-end;
+      border-bottom-right-radius: 4px;
+    }
+
+    .ai-input-area {
+      padding: 16px;
+      background: rgba(15, 23, 42, 0.4);
+      border-top: 1px solid var(--glass-border);
+      display: flex;
+      gap: 12px;
+    }
+
+    .ai-input-area input {
+      flex: 1;
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--glass-border);
+      padding: 10px 16px;
+      border-radius: 20px;
+      color: white;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.3s;
+    }
+
+    .ai-input-area input:focus {
+      border-color: var(--purple);
+    }
+
+    .ai-send-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: var(--purple);
+      border: none;
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.3s;
+    }
+
+    .ai-send-btn:hover {
+      background: #7c3aed;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Custom Alert -->
+  <div class="custom-alert" id="globalAlert">
+    <i class="fa-solid fa-circle-check"></i>
+    <span id="globalAlertText"></span>
+  </div>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="brand">
+      <img src="../images/bg1.1.png" alt="Logo"
+        onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjM2I4MmY2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDJhMTAgMTAgMCAxIDAgMTAgMTAgMTAgMTAgMCAwIDAtMTAgMTB6Ii8+PC9zdmc+'">
+      <h2>SmartAttend</h2>
+    </div>
+    <nav class="nav-links">
+      <a href="dashboard1.html" class="active"><i class="fa-solid fa-house"></i> Dashboard</a>
+      <a href="Start Attendance.html"><i class="fa-solid fa-user-check"></i> Start Attendance</a>
+      <a href="Lab_Attendance.html"><i class="fa-solid fa-laptop-code"></i> Lab Attendance</a>
+      <a href="Record.html"><i class="fa-solid fa-users"></i> Student Records</a>
+      <a href="History.html"><i class="fa-solid fa-clock-rotate-left"></i> Attendance History</a>
+      <a href="Assignments.html"><i class="fa-solid fa-book-open"></i> Assignments</a>
+      <a href="Proxy_Assignments.html"><i class="fa-solid fa-user-shield"></i> Proxy & Invigilation</a>
+      <a href="Leave_Requests.html"><i class="fa-solid fa-envelope-open-text"></i> Leave Requests</a>
+      <a href="Setting.html"><i class="fa-solid fa-gear"></i> Settings</a>
+      <a href="professorProfile.html"><i class="fa-solid fa-user-tie"></i> Profile</a>
+    </nav>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+
+    <!-- Topbar -->
+    <header class="topbar">
+      <div class="user-info">
+        <h3>Welcome, Professor</h3>
+        <div class="user-profile-wrapper" onclick="toggleProfile()">
+          <div class="avatar" id="topbarAvatar">P</div>
+
+          <!-- Dropdown Profile Card -->
+          <div class="profile-dropdown" id="profileDropdown">
+            <div class="profile-item">
+              <i class="fa-solid fa-user"></i>
+              <span id="topbarName">Professor</span>
+            </div>
+            <div class="profile-item">
+              <i class="fa-solid fa-envelope"></i>
+              <span id="topbarEmail">email@example.com</span>
+            </div>
+            <div class="profile-item">
+              <i class="fa-solid fa-phone"></i>
+              <span>+91 9122866169</span>
+            </div>
+            <div class="profile-item"
+              style="border-top: 1px solid var(--glass-border); padding-top: 12px; margin-top: 4px; color: #ef4444; cursor: pointer;"
+              onclick="logoutUser()">
+              <i class="fa-solid fa-right-from-bracket" style="color: #ef4444;"></i>
+              <span>Log Out</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Dashboard Content -->
+    <div class="dashboard-container">
+      <div class="glow-circle" style="top: 20%; left: 30%;"></div>
+      <div class="glow-circle" style="bottom: 10%; right: 20%; background: rgba(139, 92, 246, 0.15);"></div>
+
+      <div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+          <h1>Overview</h1>
+          <p>Monitor your active class and capture attendance in real-time.</p>
+          <div id="sessionDataBadge"
+            style="display: none; margin-top: 12px; padding: 8px 16px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; color: #60a5fa; font-weight: 500; font-size: 14px; width: fit-content;">
+          </div>
+        </div>
+        <div id="ipCameraBadge"
+          style="display: flex; align-items: center; gap: 8px; padding: 10px 16px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; color: #34d399; font-weight: 500; font-size: 14px; margin-top: 8px;">
+          <i class="fa-solid fa-network-wired"></i>
+          <span id="ipCameraText">URL: Not Set</span>
+        </div>
+      </div>
+
+      <!-- Camera Section -->
+      <div class="camera-card">
+        <div class="feed-container" style="position: relative;">
+          <div class="feed-placeholder">
+            <i class="fa-solid fa-video-slash"></i>
+            <span>Camera Feed Offline</span>
+          </div>
+          <!-- The image tag where the IP Camera stream will load -->
+          <img id="camera" src="" alt="" crossorigin="anonymous">
+          <canvas id="faceCanvas"></canvas>
+          <!-- Scanning Overlay -->
+          <div class="scan-overlay" id="scanOverlay"></div>
+        </div>
+
+        <button id="camera_btn" class="scan-btn">
+          <i class="fa-solid fa-expand"></i> Start Face Scan
+        </button>
+
+        <!-- Register Faces Button -->
+        <a href="register.html" target="_blank" style="display:flex; align-items:center; justify-content:center; gap:10px; margin-top:10px;
+          padding:14px; border-radius:14px; font-size:15px; font-weight:600; text-decoration:none;
+          background:rgba(139,92,246,0.15); border:1px solid rgba(139,92,246,0.35); color:#c4b5fd;
+          font-family:'Outfit',sans-serif; transition:all 0.2s; cursor:pointer;"
+          onmouseover="this.style.background='rgba(139,92,246,0.25)'"
+          onmouseout="this.style.background='rgba(139,92,246,0.15)'">
+          <i class="fa-solid fa-user-plus"></i> Register Student Faces
+        </a>
+      </div>
+
+
+
+      <!-- Detailed Report -->
+      <div class="attendance-report" id="attendanceReport">
+        <h2 style="margin: 0 0 8px 0; color: white;">Scan Results</h2>
+        <p style="color: var(--text-muted); margin: 0 0 24px 0;">Manual override is available if face scan was not
+          proper.</p>
+
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Auto-Detected</th>
+              <th>Late Minutes</th>
+              <th>Manual Override</th>
+            </tr>
+          </thead>
+          <tbody id="reportTbody">
+            <!-- Populated by JS -->
+          </tbody>
+        </table>
+
+        <!-- 📊 Attendance Analytics Chart -->
+        <div
+          style="margin-top: 28px; padding: 20px; background: rgba(15,23,42,0.5); border: 1px solid var(--glass-border); border-radius: 16px;">
+          <h3 style="margin: 0 0 16px 0; font-size: 16px; color: var(--text-muted); font-weight: 500;"><i
+              class="fa-solid fa-chart-pie" style="color: var(--accent-color); margin-right: 8px;"></i>Today's
+            Attendance Summary</h3>
+          <div style="display: flex; align-items: center; gap: 32px;">
+            <div style="width: 140px; height: 140px; flex-shrink: 0;">
+              <canvas id="attendanceChart"></canvas>
+            </div>
+            <div id="chartLegend" style="display: flex; flex-direction: column; gap: 12px;"></div>
+          </div>
+        </div>
+
+        <div style="margin-top: 24px; display: flex; gap: 16px; justify-content: flex-end;">
+          <button id="alertStudentsBtn" class="scan-btn" onclick="handleStudentAlerts()"
+            style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.4); color: #ef4444; width: auto; padding: 12px 24px; margin-top: 0;">
+            <i class="fa-solid fa-envelope-open-text"></i> Alert Absentees
+          </button>
+          <button id="alertLateBtn" class="scan-btn" onclick="handleLateAlerts()"
+            style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.4); color: #f59e0b; width: auto; padding: 12px 24px; margin-top: 0;">
+            <i class="fa-solid fa-paper-plane"></i> Send Late Alerts
+          </button>
+          <button id="emailReportBtn" class="scan-btn" onclick="handleEmailReport()"
+            style="background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.4); color: #60a5fa; width: auto; padding: 12px 24px; margin-top: 0;">
+            <i class="fa-solid fa-envelope"></i> Email Report
+          </button>
+          <button class="scan-btn" onclick="triggerSaveAlert()"
+            style="background: linear-gradient(135deg, #10b981, #059669); width: auto; padding: 12px 24px; margin-top: 0; border: none;">
+            <i class="fa-solid fa-floppy-disk"></i> Save Changes
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- AI Chatbot FAB -->
+  <div class="ai-fab" id="aiFab" onclick="toggleAI()">
+    <svg viewBox="0 0 100 100" width="34" height="34" style="overflow: visible;">
+      <defs>
+        <linearGradient id="botGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#ffffff" />
+          <stop offset="100%" stop-color="#e2e8f0" />
+        </linearGradient>
+      </defs>
+      <!-- Head -->
+      <rect x="20" y="35" width="60" height="45" rx="15" fill="url(#botGrad)"
+        filter="drop-shadow(0 4px 6px rgba(0,0,0,0.3))" />
+      <!-- Eyes -->
+      <circle cx="35" cy="55" r="5" fill="#3b82f6" class="bot-eye" />
+      <circle cx="65" cy="55" r="5" fill="#3b82f6" class="bot-eye" />
+      <!-- Smile -->
+      <path d="M 40 68 Q 50 75 60 68" fill="none" stroke="#3b82f6" stroke-width="3" stroke-linecap="round" />
+      <!-- Antenna line -->
+      <line x1="50" y1="35" x2="50" y2="15" stroke="#ffffff" stroke-width="4" stroke-linecap="round" />
+      <!-- Antenna dot -->
+      <circle cx="50" cy="15" r="6" fill="#60a5fa" class="bot-antenna" />
+    </svg>
+  </div>
+
+  <!-- AI Chat Window -->
+  <div class="ai-chat-window" id="aiChatWindow">
+    <div class="ai-header">
+      <h3 style="display: flex; align-items: center; margin: 0;">
+        <svg viewBox="0 0 100 100" width="22" height="22" style="margin-right: 8px;">
+          <rect x="20" y="35" width="60" height="45" rx="15" fill="#8b5cf6" />
+          <circle cx="35" cy="55" r="4.5" fill="#ffffff" class="bot-eye" />
+          <circle cx="65" cy="55" r="4.5" fill="#ffffff" class="bot-eye" />
+          <path d="M 40 68 Q 50 75 60 68" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" />
+          <line x1="50" y1="35" x2="50" y2="15" stroke="#8b5cf6" stroke-width="4" stroke-linecap="round" />
+          <circle cx="50" cy="15" r="6" fill="#60a5fa" class="bot-antenna" />
+        </svg> SmartAssist AI
+      </h3>
+      <button class="close-ai" onclick="toggleAI()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="ai-messages" id="aiMessages">
+      <div class="message msg-ai">
+        Hello Professor! I am your AI assistant. You can ask me to "Start the camera", "Who is absent?", or "Save
+        attendance".
+      </div>
+    </div>
+    <div class="ai-input-area">
+      <input type="text" id="aiInput" placeholder="Ask me anything..." onkeypress="handleAIEnter(event)">
+      <button class="ai-send-btn" onclick="sendAIQuery()">
+        <i class="fa-solid fa-paper-plane"></i>
+      </button>
+    </div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <script>
+    // Toggle Profile Dropdown
+    function toggleProfile() {
+      const dropdown = document.getElementById('profileDropdown');
+      if (dropdown.style.display === 'flex') {
+        dropdown.classList.remove('show');
+        setTimeout(() => dropdown.style.display = 'none', 300);
+      } else {
+        dropdown.style.display = 'flex';
+        setTimeout(() => dropdown.classList.add('show'), 10);
+      }
+    }
+
+    // Close dropdown if clicked outside
+    document.addEventListener('click', function (event) {
+      const wrapper = document.querySelector('.user-profile-wrapper');
+      const dropdown = document.getElementById('profileDropdown');
+      if (wrapper && !wrapper.contains(event.target) && dropdown.classList.contains('show')) {
+        dropdown.classList.remove('show');
+        setTimeout(() => dropdown.style.display = 'none', 300);
+      }
+    });
+
+    // Global variable for NLP Assistant
+    let students = [];
+
+    $(document).ready(function () {
+      // Dynamic Session Data
+      const dept = localStorage.getItem('activeClassDept');
+      const sem = localStorage.getItem('activeClassSem');
+      const sub = localStorage.getItem('activeClassSub');
+
+      if (dept && sem && sub) {
+        const badge = $("#sessionDataBadge");
+        badge.html(`<i class="fa-solid fa-graduation-cap"></i> Currently Scanning: ${dept} &bull; ${sem} &bull; ${sub}`);
+        badge.show();
+      }
+
+      // Display Camera IP Badge - with validation
+      function updateCameraBadge() {
+        const storedUrl = localStorage.getItem('ipCameraUrl') || '';
+        const displayUrl = (storedUrl.startsWith('http') && storedUrl.length > 10)
+          ? storedUrl
+          : 'Not Set - Go to Settings to configure';
+        $("#ipCameraText").text(displayUrl);
+      }
+      updateCameraBadge();
+
+      // Live update badge if URL is saved from Settings page (same browser, another tab)
+      window.addEventListener('storage', function (e) {
+        if (e.key === 'ipCameraUrl') updateCameraBadge();
+      });
+
+      let isScanning = false;
+      let faceMatcher = null;
+      let detectionInterval = null;
+      let modelsLoaded = false;
+
+      // Dynamic data fetched from Google Sheets
+      const API_URL = `${window.SMART_ATTEND_CONFIG.SCRIPT_URL}?sheet=student`;
+
+      async function fetchStudentsFromDB() {
+        try {
+          const activeDept = localStorage.getItem('activeClassDept') || '';
+          const activeSem = localStorage.getItem('activeClassSem') || '';
+          const fetchUrl = `${window.SMART_ATTEND_CONFIG.SCRIPT_URL}?sheet=student&dept=${encodeURIComponent(activeDept)}&sem=${encodeURIComponent(activeSem)}`;
+          const res = await fetch(fetchUrl);
+          const data = await res.json();
+
+          // Sort data by ID (Ascending)
+          data.sort((a, b) => {
+            const idA = (a.ID || a.id || a.StudentID || a.Student_ID || a['Student ID']) ? String(a.ID || a.id || a.StudentID || a.Student_ID || a['Student ID']) : '';
+            const idB = (b.ID || b.id || b.StudentID || b.Student_ID || b['Student ID']) ? String(b.ID || b.id || b.StudentID || b.Student_ID || b['Student ID']) : '';
+            return idA.localeCompare(idB, undefined, { numeric: true, sensitivity: 'base' });
+          });
+
+          students = data.map(s => ({
+            id: s.ID || s.id || s.StudentID || s.Student_ID || s['Student ID'] || '',
+            name: s.Name || s.NAME || s['Student Name'] || s.Student_Name || s.StudentName || 'Unknown Student',
+            detected: s.Attendance_Status === 'Present',
+            rawEncoding: s.Face_Encoding // Grab encoding from the sheet column
+          }));
+          populateReport();
+        } catch (e) {
+          console.error("Failed to fetch from Google Sheets", e);
+        }
+      }
+
+      // Initialize Face Recognition - loads from localStorage ONLY (instant)
+      async function initFaceRecognition() {
+        try {
+          const btn = $("#camera_btn");
+          btn.prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> Loading AI Models...');
+
+          const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
+          await Promise.all([
+            faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+            faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+            faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+            faceapi.nets.ageGenderNet.loadFromUri(MODEL_URL)
+          ]);
+
+          // Read face encodings from Google Sheets (already fetched in students array)
+          const labeledDescriptors = [];
+          students.forEach(s => {
+            if (s.rawEncoding) {
+              try {
+                const arr = new Float32Array(JSON.parse(s.rawEncoding));
+                labeledDescriptors.push(new faceapi.LabeledFaceDescriptors(s.id, [arr]));
+              } catch (e) {
+                console.warn(`Corrupted encoding for student ${s.id}`);
+              }
+            }
+          });
+
+          if (labeledDescriptors.length > 0) {
+            faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.9);
+            showGlobalAlert(`✅ Ready! ${labeledDescriptors.length} student face(s) loaded.`);
+          } else {
+            showGlobalAlert('ℹ️ No faces registered yet. Click "Register Student Faces" to register.');
+          }
+
+          modelsLoaded = true;
+          btn.prop('disabled', false).html('<i class="fa-solid fa-expand"></i> Start Face Scan');
+        } catch (err) {
+          console.error('Error loading AI models:', err);
+          showGlobalAlert('Failed to load AI models. Check internet connection.');
+          $("#camera_btn").prop('disabled', false).html('<i class="fa-solid fa-expand"></i> Start Face Scan');
+        }
+      }
+
+      // Start initialization
+      async function startApp() {
+        await fetchStudentsFromDB();
+        await initFaceRecognition();
+      }
+      startApp();
+
+      function populateReport() {
+        const tbody = $("#reportTbody");
+        tbody.empty();
+
+        students.forEach((student) => {
+          const detectedStatus = student.detected
+            ? '<span style="color: #10b981;"><i class="fa-solid fa-check"></i> Present</span>'
+            : '<span style="color: #ef4444;"><i class="fa-solid fa-xmark"></i> Absent</span>';
+
+          const presentActive = student.detected ? 'active' : '';
+          const absentActive = student.detected ? '' : 'active';
+
+          const tr = `
+            <tr id="row-${student.id}" style="${(student.lateMinutes || 0) > 0 ? 'background-color: rgba(239, 68, 68, 0.15);' : ''}">
+              <td>${student.id}</td>
+              <td><strong>${student.name}</strong></td>
+              <td>${detectedStatus}</td>
+              <td>
+                <input type="number" min="0" value="${student.lateMinutes || 0}" class="late-minutes-input" 
+                       style="width: 60px; padding: 4px; border-radius: 6px; border: 1px solid var(--glass-border); background: rgba(15, 23, 42, 0.6); color: white; text-align: center;"
+                       onchange="updateLateMinutes('${student.id}', this.value)">
+              </td>
+              <td>
+                <div class="status-toggle">
+                  <button class="toggle-btn present ${presentActive}" onclick="overrideStatus(this, 'present')">Present</button>
+                  <button class="toggle-btn absent ${absentActive}" onclick="overrideStatus(this, 'absent')">Absent</button>
+                </div>
+              </td>
+            </tr>
+          `;
+          tbody.append(tr);
+        });
+
+        // Update the donut chart after every render
+        updateAttendanceChart();
+      }
+
+      // ── 📊 ATTENDANCE DONUT CHART ──────────────────────────────────────────
+      let attendanceChartInstance = null;
+
+      function updateAttendanceChart() {
+        const presentCount = students.filter(s => s.detected).length;
+        const absentCount = students.filter(s => !s.detected).length;
+
+        const ctx = document.getElementById('attendanceChart');
+        if (!ctx) return;
+
+        // Destroy previous chart instance before creating a new one
+        if (attendanceChartInstance) attendanceChartInstance.destroy();
+
+        attendanceChartInstance = new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+            labels: ['Present', 'Absent'],
+            datasets: [{
+              data: [presentCount, absentCount],
+              backgroundColor: ['#10b981', '#ef4444'],
+              borderWidth: 0,
+              hoverOffset: 6
+            }]
+          },
+          options: {
+            cutout: '70%',
+            plugins: { legend: { display: false }, tooltip: { enabled: true } },
+            animation: { duration: 600 }
+          }
+        });
+
+        // Update legend
+        const legend = document.getElementById('chartLegend');
+        if (legend) {
+          legend.innerHTML = `
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:12px;height:12px;border-radius:50%;background:#10b981;"></div>
+              <span style="color:#f8fafc;font-size:15px;"><strong>${presentCount}</strong> Present</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:12px;height:12px;border-radius:50%;background:#ef4444;"></div>
+              <span style="color:#f8fafc;font-size:15px;"><strong>${absentCount}</strong> Absent</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
+              <div style="width:12px;height:12px;border-radius:50%;background:#3b82f6;"></div>
+              <span style="color:#94a3b8;font-size:13px;">Total: ${students.length}</span>
+            </div>`;
+        }
+      }
+
+      // Setup the IP Camera Feed and toggle
+      $("#camera_btn").click(function () {
+        const btn = $(this);
+        const cameraImg = document.getElementById('camera');
+        const canvas = document.getElementById('faceCanvas');
+
+        if (!isScanning) {
+          if (!modelsLoaded) {
+            showGlobalAlert('AI models are still loading. Please wait.');
+            return;
+          }
+
+          // Start Scan
+          isScanning = true;
+          btn.html('<i class="fa-solid fa-stop"></i> Stop Face Scan');
+          btn.css('background', 'linear-gradient(135deg, #ef4444, #dc2626)'); // Red stop button
+          btn.css('border-color', 'rgba(239, 68, 68, 0.4)');
+
+          // Reset all students to absent on new scan
+          students.forEach(s => s.detected = false);
+          populateReport(); // Instantly update the UI table to show everyone as Absent
+
+          // Hide placeholder and show the image stream
+          $(".feed-placeholder").hide();
+          const storedUrl = localStorage.getItem('ipCameraUrl') || '';
+          // Validate: must start with http and be longer than 10 chars to be a real URL
+          const cameraUrl = (storedUrl.startsWith('http') && storedUrl.length > 10)
+            ? storedUrl
+            : "http://100.80.76.38:8080/video";
+          // Update badge to show the URL actually being used
+          $("#ipCameraText").text(cameraUrl);
+          localStorage.setItem('ipCameraUrl', cameraUrl); // fix any bad stored value
+          // Add cache-buster to force the browser to open a fresh connection to the MJPEG stream
+          const freshUrl = cameraUrl + (cameraUrl.includes('?') ? '&' : '?') + 't=' + new Date().getTime();
+          $("#camera").attr("src", freshUrl).show();
+          $("#scanOverlay").fadeIn();
+
+          // Clear canvas
+          const ctx = canvas.getContext('2d');
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          // Keep report visible
+          $("#attendanceReport").show();
+
+          let isProcessingFrame = false;
+
+          // Start Detection Loop
+          detectionInterval = setInterval(async () => {
+            if (!cameraImg.complete || cameraImg.naturalWidth === 0) return;
+            if (isProcessingFrame) return; // Prevent lag by skipping frame if previous is still computing
+
+            try {
+              isProcessingFrame = true;
+              const displaySize = { width: cameraImg.width, height: cameraImg.height };
+              faceapi.matchDimensions(canvas, displaySize);
+
+              // MAXIMUM OPTIMIZATION: Reduced inputSize to 128 (absolute minimum) and added score threshold 
+              // to reject background noise before heavy descriptor calculation.
+              const detections = await faceapi.detectAllFaces(cameraImg, new faceapi.TinyFaceDetectorOptions({ inputSize: 128, scoreThreshold: 0.6 }))
+                .withFaceLandmarks()
+                .withFaceDescriptors()
+                .withAgeAndGender();
+
+              const resizedDetections = faceapi.resizeResults(detections, displaySize);
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+              let newDetection = false;
+
+              resizedDetections.forEach(detection => {
+                let boxText = "Unknown";
+                let boxColor = "rgba(239, 68, 68, 1)"; // Red
+
+                const { gender } = detection;
+                const genderIcon = gender === 'male' ? '[M]' : '[F]';
+
+                if (faceMatcher) {
+                  const bestMatch = faceMatcher.findBestMatch(detection.descriptor);
+
+                  if (bestMatch.label !== 'unknown') {
+                    const student = students.find(s => s.id === bestMatch.label);
+
+                    if (student) {
+                      boxText = `${genderIcon} ${student.name}`;
+                      boxColor = "rgba(16, 185, 129, 1)"; // Green
+
+                      if (!student.detected) {
+                        student.detected = true;
+                        newDetection = true;
+                      }
+                    }
+                  } else {
+                    boxText = "Unknown Face";
+                  }
+                } else {
+                  boxText = "Unverified";
+                }
+
+                // Draw Box
+                const box = detection.detection.box;
+                const drawBox = new faceapi.draw.DrawBox(box, {
+                  label: boxText,
+                  boxColor: boxColor,
+                  drawLabelOptions: { fontColor: '#fff', backgroundColor: boxColor }
+                });
+                drawBox.draw(canvas);
+              });
+
+              if (newDetection) {
+                populateReport(); // Update table dynamically if visible
+              }
+
+            } catch (e) {
+              console.log("Detection error (might be waiting for frame):", e);
+            } finally {
+              isProcessingFrame = false;
+            }
+          }, 50); // Set to 50ms so it goes exactly as fast as your CPU can handle!
+
+        } else {
+          // Stop Scan
+          isScanning = false;
+          clearInterval(detectionInterval);
+          btn.html('<i class="fa-solid fa-expand"></i> Start Face Scan');
+          btn.css('background', '');
+          btn.css('border-color', '');
+
+          // Stop stream visually
+          $("#camera").attr("src", "").hide();
+          const ctx = canvas.getContext('2d');
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          $(".feed-placeholder").show();
+          $("#scanOverlay").fadeOut();
+
+          // Trigger Alert
+          showGlobalAlert('Scan done');
+
+          // Populate report
+          populateReport();
+          $("#attendanceReport").show();
+        }
+      });
+    });
+
+    // Global function for manual override toggle
+    window.overrideStatus = function (btn, status) {
+      const row = $(btn).closest('tr');
+      const studentId = row.find('td:first').text().trim();
+      const student = students.find(s => String(s.id).trim() === studentId);
+
+      if (student) {
+        student.detected = (status === 'present');
+
+        // Update the status column visually
+        const statusCol = row.find('td:nth-child(3)');
+        if (status === 'present') {
+          statusCol.html('<span style="color: #10b981;"><i class="fa-solid fa-check"></i> Present</span>');
+        } else {
+          statusCol.html('<span style="color: #ef4444;"><i class="fa-solid fa-xmark"></i> Absent</span>');
+        }
+
+        // Update button active states
+        const parent = $(btn).closest('.status-toggle');
+        parent.find('.toggle-btn').removeClass('active');
+        $(btn).addClass('active');
+
+        // Update chart and counts
+        updateAttendanceChart();
+      }
+    };
+
+    window.updateLateMinutes = function (studentId, value) {
+      const student = students.find(s => String(s.id).trim() === String(studentId).trim());
+      if (student) {
+        let mins = parseInt(value) || 0;
+        if (mins < 0) mins = 0; // No negative values
+        student.lateMinutes = mins;
+        
+        // Highlight row if > 0
+        const row = document.getElementById(`row-${student.id}`);
+        if (row) {
+          if (mins > 0) {
+            row.style.backgroundColor = 'rgba(239, 68, 68, 0.15)'; // Highlight late
+          } else {
+            row.style.backgroundColor = '';
+          }
+        }
+      }
+    };
+
+
+    async function triggerSaveAlert() {
+      const btn = document.querySelector('button[onclick="triggerSaveAlert()"]');
+      const originalText = btn.innerHTML;
+      
+      if (!students || students.length === 0) {
+        showGlobalAlert('No student data to save.');
+        return;
+      }
+
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+      btn.disabled = true;
+
+      const payload = {
+        sheet: 'student',
+        action: 'save_session',
+        professorEmail: sessionStorage.getItem('userEmail'),
+        classInfo: {
+          subject: localStorage.getItem('activeClassSub') || 'General',
+          dept: localStorage.getItem('activeClassDept') || 'General',
+          sem: localStorage.getItem('activeClassSem') || 'General',
+          date: new Date().toLocaleDateString('en-CA')
+        },
+        students: students.map(s => {
+          let late = s.lateMinutes || 0;
+          const row = document.getElementById(`row-${s.id}`);
+          if (row) {
+            const input = row.querySelector('.late-minutes-input');
+            if (input) {
+              late = parseInt(input.value) || 0;
+            }
+          }
+          return {
+            id: s.id,
+            name: s.name,
+            status: s.detected ? 'Present' : 'Absent',
+            lateMinutes: late
+          };
+        })
+      };
+
+      try {
+        const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
+        const response = await fetch(SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        });
+        
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+          let msg = `Attendance saved successfully.`;
+          if (result.lateCount !== undefined) {
+             msg = `Saved! Emails sent: ${result.lateCount}. Debug received: ${result.receivedLate}`;
+          } else {
+             msg = `Attendance for ${result.updated} students saved successfully! ✅`;
+          }
+          showGlobalAlert(msg);
+          // Optionally hide the report after saving
+          setTimeout(() => $("#attendanceReport").slideUp(), 2000);
+        } else {
+          showGlobalAlert('Error: ' + (result.message || 'Failed to save data.'));
+        }
+      } catch (e) {
+        console.error(e);
+        showGlobalAlert('Network error while saving attendance.');
+      } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+      }
+    }
+
+    async function handleLateAlerts() {
+      const btn = document.getElementById('alertLateBtn');
+      const originalHTML = btn.innerHTML;
+
+      if (!students || students.length === 0) {
+        showGlobalAlert('No student data found.');
+        return;
+      }
+
+      // Collect late students directly from the DOM just like save_session
+      const lateStudents = [];
+      students.forEach(s => {
+        let late = s.lateMinutes || 0;
+        const row = document.getElementById(`row-${s.id}`);
+        if (row) {
+          const input = row.querySelector('.late-minutes-input');
+          if (input) {
+            late = parseInt(input.value) || 0;
+          }
+        }
+        if (late > 0) {
+          lateStudents.push({
+            id: String(s.id).trim().replace(/\.0$/, ''),
+            name: s.name,
+            lateMinutes: late
+          });
+        }
+      });
+
+      if (lateStudents.length === 0) {
+        showGlobalAlert('No students have been marked as late. Enter late minutes first.');
+        return;
+      }
+
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending...';
+      btn.disabled = true;
+
+      const payload = {
+        sheet: 'student',
+        action: 'email_late_students',
+        classInfo: {
+          subject: localStorage.getItem('activeClassSub') || 'Unknown Subject',
+          date: new Date().toLocaleDateString('en-IN')
+        },
+        students: lateStudents
+      };
+
+      try {
+        const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
+        const response = await fetch(`${SCRIPT_URL}?action=email_late_students`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+
+        if (result.status === 'success') {
+          showGlobalAlert(`Late alert emails sent to ${result.sent} student(s) and parents ✅`);
+        } else {
+          showGlobalAlert('Error: ' + (result.message || 'Failed to send late alerts.'));
+        }
+      } catch (e) {
+        console.error(e);
+        showGlobalAlert('Network error while sending late alerts.');
+      } finally {
+        btn.innerHTML = originalHTML;
+        btn.disabled = false;
+      }
+    }
+    // ==========================================
+    // ALERT STUDENTS (EMAIL)
+    // ==========================================
+    async function handleStudentAlerts() {
+      const btn = document.getElementById('alertStudentsBtn');
+      const originalHTML = btn.innerHTML;
+
+      if (!students || students.length === 0) {
+        showGlobalAlert('No student data found. Please run a scan first.');
+        return;
+      }
+
+      const absentStudents = students.filter(s => !s.detected);
+      if (absentStudents.length === 0) {
+        showGlobalAlert('No absent students to alert!');
+        return;
+      }
+
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending Emails...';
+      btn.disabled = true;
+
+      const payload = {
+        sheet: 'student',
+        action: 'email_students',
+        classInfo: {
+          subject: localStorage.getItem('activeClassSub') || 'Unknown Subject',
+          date: new Date().toLocaleDateString('en-IN')
+        },
+      students: absentStudents.map(s => ({
+          id: String(s.id).trim().replace(/\.0$/, ''),  // normalize: strip trailing .0
+          name: s.name,
+          status: 'Absent'
+        }))
+      };
+
+      try {
+        const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
+        // Clean URL without ?sheet=student to avoid GET routing collisions
+        const fetchUrl = `${SCRIPT_URL}?action=email_students`;
+        
+        const response = await fetch(fetchUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+
+        if (result.status === 'success') {
+          showGlobalAlert(`Alert emails sent to ${result.sent} absent student(s) and parents ✅`);
+        } else {
+          throw new Error(result.message || result.error || 'Server returned an unexpected response format.');
+        }
+      } catch (err) {
+        console.error('Email alert process failed:', err);
+        showGlobalAlert('Alert Failed: ' + err.message);
+      } finally {
+        btn.innerHTML = originalHTML;
+        btn.disabled = false;
+      }
+    }
+
+    async function handleEmailReport() {
+      const btn = document.getElementById('emailReportBtn');
+      const professorEmail = sessionStorage.getItem('userEmail');
+
+      if (!professorEmail) {
+        showGlobalAlert('Professor email not found. Please log in again.');
+        return;
+      }
+
+      if (!students || students.length === 0) {
+        showGlobalAlert('No student data to send. Please run a scan first.');
+        return;
+      }
+
+      // Button loading state
+      const originalHTML = btn.innerHTML;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending...';
+      btn.disabled = true;
+
+      // Count present/absent
+      const presentCount = students.filter(s => s.detected).length;
+      const absentCount = students.length - presentCount;
+
+      // Build payload
+      const payload = {
+        sheet: 'student',
+        action: 'email_report',
+        email: professorEmail,
+        subject: localStorage.getItem('activeClassSub') || 'General',
+        stats: {
+          present: presentCount,
+          absent: absentCount,
+          total: students.length
+        },
+        students: students.map(s => ({
+          id: s.id,
+          name: s.name,
+          status: s.detected ? 'Present' : 'Absent'
+        }))
+      };
+
+      try {
+        const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
+        const fetchUrl = `${SCRIPT_URL}?sheet=student&action=email_report`;
+        const response = await fetch(fetchUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (result.status === 'success') {
+          showGlobalAlert('Report sent to ' + professorEmail + ' ✅');
+        } else {
+          throw new Error('Server error');
+        }
+      } catch (err) {
+        console.error('Email report failed:', err);
+        showGlobalAlert('Failed to send email. Please try again.');
+      } finally {
+        btn.innerHTML = originalHTML;
+        btn.disabled = false;
+      }
+    }
+
+    function showGlobalAlert(message) {
+      const alertBox = document.getElementById('globalAlert');
+      document.getElementById('globalAlertText').innerText = message;
+      alertBox.classList.add('show');
+      setTimeout(() => alertBox.classList.remove('show'), 3500);
+    }
+
+    // Inject dynamic user data globally
+    document.addEventListener('DOMContentLoaded', () => {
+      const name = sessionStorage.getItem('userName') || 'Professor';
+      const email = sessionStorage.getItem('userEmail') || '';
+
+      const topbarName = document.getElementById('topbarName');
+      if (topbarName) topbarName.innerText = name;
+
+      const topbarEmail = document.getElementById('topbarEmail');
+      if (topbarEmail) topbarEmail.innerText = email;
+
+      const topbarAvatar = document.getElementById('topbarAvatar');
+      if (topbarAvatar && name) topbarAvatar.innerText = name.charAt(0).toUpperCase();
+    });
+
+    // AI Assistant Logic (Simulated NLP Engine)
+    function toggleAI() {
+      const chatWindow = document.getElementById('aiChatWindow');
+      chatWindow.classList.toggle('active');
+      if (chatWindow.classList.contains('active')) {
+        document.getElementById('aiInput').focus();
+      }
+    }
+
+    function handleAIEnter(event) {
+      if (event.key === 'Enter') {
+        sendAIQuery();
+      }
+    }
+
+    function sendAIQuery() {
+      const input = document.getElementById('aiInput');
+      const text = input.value.trim();
+      if (!text) return;
+
+      appendMessage(text, 'user');
+      input.value = '';
+
+      // Simulate network delay for AI thinking
+      setTimeout(() => {
+        processAIIntent(text.toLowerCase());
+      }, 600);
+    }
+
+    function appendMessage(text, sender) {
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `message ${sender === 'user' ? 'msg-user' : 'msg-ai'}`;
+      msgDiv.innerText = text;
+      const container = document.getElementById('aiMessages');
+      container.appendChild(msgDiv);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    async function listModels() {
+      const apiKey = "AIzaSyDwLkBBI2vlqJbiKdGZ7X1t1JT5PblTjso";
+      const url = `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`;
+      
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+        if (data.models) {
+          return "Available models: " + data.models.map(m => m.name.replace("models/", "")).join(", ");
+        } else {
+          return "No models found or error: " + JSON.stringify(data);
+        }
+      } catch (error) {
+        return "Error listing models: " + error.message;
+      }
+    }
+
+    async function askGemini(prompt) {
+      const apiKey = "AIzaSyBY60belKbg2wHUq_HsC1ODrZRYb7afbxc";
+      const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+      
+      const systemInstruction = `You are a helpful assistant for the SmartAttend2 system, used only in the Professor Panel. 
+You can answer questions about the system usage and general knowledge questions.
+CURRENT DATE AND TIME: ${new Date().toLocaleString()}
+
+SYSTEM OVERVIEW:
+SmartAttend2 is an automated attendance management system. 
+In the Professor Panel, professors can:
+1. View Dashboard with live camera feed.
+2. Start Attendance using facial recognition or manual toggles.
+3. View Student Records.
+4. View Attendance History.
+5. Manage Profile.
+6. View Proxy & Invigilation assignments.
+7. Handle Leave Requests.
+8. Configure Settings like IP Camera URL.
+9. Send alert emails to absent students and parents.
+
+RULES:
+1. Do not reveal any technical details about the system (e.g., API keys, database passwords, specific technologies used like Firebase, Node.js, etc.).
+2. If asked about these sensitive details, politely refuse to answer.
+3. Be concise and professional.
+4. Keep answers brief and avoid overly detailed responses unless asked.`;
+
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: "user",
+                parts: [{ text: systemInstruction }]
+              },
+              {
+                role: "model",
+                parts: [{ text: "Understood. I will act as the SmartAttend2 assistant following these rules." }]
+              },
+              {
+                role: "user",
+                parts: [{ text: prompt }]
+              }
+            ]
+          })
+        });
+        
+        const data = await response.json();
+        if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts[0].text) {
+          return data.candidates[0].content.parts[0].text;
+        } else {
+          if (data.error) {
+            return `API Error: ${data.error.message} (Code: ${data.error.code})`;
+          }
+          return "I'm sorry, I couldn't generate a response right now. Debug Info: " + JSON.stringify(data);
+        }
+      } catch (error) {
+        console.error("Gemini API error:", error);
+        return `Error connecting to AI: ${error.message}`;
+      }
+    }
+
+    async function processAIIntent(rawQuery) {
+      const q = rawQuery.toLowerCase().trim();
+      let response = "I'm not sure about that. Try asking: 'Who is absent?', 'What is my email?', 'How to update password?', or 'Log out'.";
+      let matched = true;
+
+      // ── GREETINGS ──────────────────────────────────────────────────────────
+      const name = sessionStorage.getItem('userName') || 'Professor';
+      if (q === 'hi' || q === 'hello' || q === 'hey' || q.startsWith('hi ') || q.startsWith('hello ') || q.startsWith('hey ')) {
+        response = `Hello ${name}! 👋 I'm SmartAssist, your AI assistant. Ask me about attendance, your profile, how to navigate the system, or just say 'log out' to sign out!`;
+      }
+
+      // ── GOODBYE ────────────────────────────────────────────────────────────
+      else if (q.includes('bye') || q.includes('goodbye') || q.includes('see you') || q.includes('take care') || q.includes('later')) {
+        response = `Goodbye, ${name}! 👋 Have a great class. Come back anytime you need help!`;
+      }
+
+      // ── LOGOUT ─────────────────────────────────────────────────────────────
+      else if (q.includes('log out') || q.includes('logout') || q.includes('sign out') || q.includes('signout') || q === 'exit') {
+        appendMessage("Logging you out now. Goodbye! 👋", 'ai');
+        setTimeout(() => logoutUser(), 1500);
+        return;
+      }
+
+      // ── CAMERA CONTROLS ────────────────────────────────────────────────────
+      else if ((q.includes('start') || q.includes('open') || q.includes('turn on') || q.includes('begin') || q.includes('launch')) && (q.includes('camera') || q.includes('scan') || q.includes('video') || q.includes('face'))) {
+        if (document.getElementById('camera_btn').innerText.includes('Start')) {
+          $("#camera_btn").click();
+          response = "📷 Starting the facial recognition scanner now!";
+        } else {
+          response = "The camera scanner is already running.";
+        }
+      }
+      else if ((q.includes('stop') || q.includes('close') || q.includes('turn off') || q.includes('end') || q.includes('halt') || q.includes('pause')) && (q.includes('camera') || q.includes('scan') || q.includes('video') || q.includes('face'))) {
+        if (document.getElementById('camera_btn').innerText.includes('Stop')) {
+          $("#camera_btn").click();
+          response = "🛑 Stopping the facial recognition scanner.";
+        } else {
+          response = "The camera is not currently running.";
+        }
+      }
+
+      // ── ABSENT STUDENTS ────────────────────────────────────────────────────
+      else if (q.includes('absent') || q.includes('missing') || q.includes('not here') || q.includes('not present') || q.includes('who didn') || q.includes("didn't come")) {
+        if (!Array.isArray(students) || students.length === 0) {
+          response = "The student list hasn't loaded yet. Please wait a moment.";
+        } else {
+          const absent = students.filter(s => !s.detected);
+          if (absent.length === 0) {
+            response = "✅ Great news! All students are currently marked present.";
+          } else {
+            const names = absent.map(s => s.name).join(', ');
+            response = `❌ ${absent.length} student(s) absent today: ${names}.`;
+          }
+        }
+      }
+
+      // ── PRESENT STUDENTS ───────────────────────────────────────────────────
+      else if ((q.includes('present') || q.includes('attended') || q.includes('who came') || q.includes('who is here')) && !q.includes('not')) {
+        if (!Array.isArray(students) || students.length === 0) {
+          response = "The student list hasn't loaded yet.";
+        } else {
+          const present = students.filter(s => s.detected);
+          const names = present.map(s => s.name).join(', ');
+          response = present.length > 0
+            ? `✅ ${present.length} student(s) present: ${names}.`
+            : "No students have been marked present yet.";
+        }
+      }
+
+      // ── TOTAL / COUNT ──────────────────────────────────────────────────────
+      else if (q.includes('total') || q.includes('how many student') || q.includes('count student') || (q.includes('how many') && q.includes('student'))) {
+        if (!Array.isArray(students)) {
+          response = "The student list hasn't loaded yet.";
+        } else {
+          const present = students.filter(s => s.detected).length;
+          const absent = students.filter(s => !s.detected).length;
+          response = `📊 Class Summary:\n• Total: ${students.length} students\n• Present: ${present}\n• Absent: ${absent}`;
+        }
+      }
+
+      // ── SAVE ATTENDANCE ────────────────────────────────────────────────────
+      else if (q.includes('save') || q.includes('submit attendance') || q.includes('upload attendance') || q.includes('record attendance')) {
+        triggerSaveAlert();
+        response = "💾 Saving the attendance record to the database now!";
+      }
+
+      // ── PERSONAL INFO: EMAIL ───────────────────────────────────────────────
+      else if ((q.includes('my email') || q.includes('email id') || q.includes('email address') || q.includes('what is my email') || q.includes('give me my email') || q.includes('show my email'))) {
+        const email = sessionStorage.getItem('userEmail') || 'Not available';
+        response = `📧 Your registered email is: ${email}`;
+      }
+
+      // ── PERSONAL INFO: FIRST NAME ──────────────────────────────────────────
+      else if (q.includes('first name') || q.includes('my first name') || q.includes('what is my first name') || q.includes('give me my first name')) {
+        const firstName = (sessionStorage.getItem('userName') || '').split(' ')[0] || 'Not available';
+        response = `👤 Your first name is: ${firstName}`;
+      }
+
+      // ── PERSONAL INFO: LAST NAME ───────────────────────────────────────────
+      else if (q.includes('last name') || q.includes('my last name') || q.includes('what is my last name') || q.includes('give me my last name') || q.includes('surname')) {
+        const parts = (sessionStorage.getItem('userName') || '').split(' ');
+        const lastName = parts.length > 1 ? parts.slice(1).join(' ') : 'Not available';
+        response = `👤 Your last name is: ${lastName}`;
+      }
+
+      // ── PERSONAL INFO: FULL NAME ───────────────────────────────────────────
+      else if (q.includes('my name') || q.includes('what is my name') || q.includes('give me my name') || q.includes('who am i') || q.includes('full name')) {
+        response = `👤 You are logged in as: ${name}`;
+      }
+
+      // ── HOW TO: UPDATE EMAIL ───────────────────────────────────────────────
+      else if ((q.includes('update') || q.includes('change') || q.includes('how to')) && q.includes('email')) {
+        response = `📧 To update your email:\n1. Go to 'Profile' in the sidebar\n2. Find the Personal Information section\n3. Change the Email Address field\n4. Click 'Save Changes'`;
+      }
+
+      // ── HOW TO: UPDATE PASSWORD ────────────────────────────────────────────
+      else if ((q.includes('update') || q.includes('change') || q.includes('how to') || q.includes('reset')) && q.includes('password')) {
+        response = `🔑 To update your password:\n1. Go to 'Profile' in the sidebar\n2. Find the Security section\n3. Enter your Current Password\n4. Enter your New Password\n5. Click 'Update Password'`;
+      }
+
+      // ── HOW TO: UPDATE PROFILE / NAME ──────────────────────────────────────
+      else if ((q.includes('update') || q.includes('change') || q.includes('edit')) && (q.includes('profile') || q.includes('name') || q.includes('info'))) {
+        response = `✏️ To update your profile:\n1. Click 'Profile' in the sidebar\n2. Update your First Name, Last Name, or Email\n3. Click 'Save Changes'`;
+      }
+
+      // ── NAVIGATE: DASHBOARD ────────────────────────────────────────────────
+      else if (q.includes('dashboard') || q.includes('go to dashboard') || q.includes('home')) {
+        response = `🏠 You are on the Dashboard! It shows the live camera feed and attendance scan results.`;
+      }
+
+      // ── NAVIGATE: HISTORY ──────────────────────────────────────────────────
+      else if (q.includes('history') || q.includes('past attendance') || q.includes('previous session')) {
+        response = `🕐 To view past attendance:\nClick 'Attendance History' in the sidebar. It shows all previous session records.`;
+      }
+
+      // ── NAVIGATE: RECORDS ──────────────────────────────────────────────────
+      else if (q.includes('record') || q.includes('student list') || q.includes('student data')) {
+        response = `👥 To view/edit student records:\nClick 'Student Records' in the sidebar. You can add, edit, delete students and export PDF reports there.`;
+      }
+
+      // ── NAVIGATE: SETTINGS ────────────────────────────────────────────────
+      else if (q.includes('setting') || q.includes('ip camera') || q.includes('camera url') || q.includes('configure')) {
+        response = `⚙️ To change settings:\nClick 'Settings' in the sidebar. You can configure the IP Camera URL and other preferences.`;
+      }
+
+      // ── NAVIGATE: START ATTENDANCE ────────────────────────────────────────
+      else if ((q.includes('start') || q.includes('begin') || q.includes('new')) && q.includes('attendance')) {
+        response = `▶️ To start a new attendance session:\nClick 'Start Attendance' in the sidebar, select the Department, Semester, Subject and Date, then click 'Initialize Session'.`;
+      }
+
+      // ── LIST MODELS ───────────────────────────────────────────────────────
+      else if (q === 'list models' || q === 'show models' || q.includes('what models do you have')) {
+        response = await listModels();
+      }
+
+      // ── HELP ──────────────────────────────────────────────────────────────
+      else if (q.includes('help') || q.includes('what can you do') || q.includes('commands') || q.includes('options')) {
+        response = `🤖 I can help you with:\n• "Who is absent today?"\n• "How many students are present?"\n• "Start / Stop camera"\n• "What is my email?"\n• "What is my name?"\n• "How to update my password?"\n• "How to update my email?"\n• "Go to history / records / settings"\n• "Save attendance"\n• "Log out"`;
+      }
+      else {
+        matched = false;
+      }
+
+      if (!matched) {
+        // Show thinking message
+        const container = document.getElementById('aiMessages');
+        const thinkingDiv = document.createElement('div');
+        thinkingDiv.className = 'message msg-ai';
+        thinkingDiv.innerText = 'Thinking...';
+        container.appendChild(thinkingDiv);
+        container.scrollTop = container.scrollHeight;
+        
+        response = await askGemini(rawQuery);
+        
+        // Remove thinking message
+        thinkingDiv.remove();
+      }
+
+      appendMessage(response, 'ai');
+    }
+  </script>
+</body>
+
+</html>

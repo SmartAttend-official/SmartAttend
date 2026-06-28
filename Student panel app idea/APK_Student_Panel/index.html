@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta http-equiv="Content-Security-Policy" content="frame-ancestors 'none';">
+	  <title>Student Login — SmartAttend</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#3b82f6">
+	<script>
+		if (sessionStorage.getItem('isStudentAuthenticated') === 'true') {
+			window.location.replace('student_dashboard.html');
+		}
+	</script>
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+	<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+	<style>
+		:root {
+			--bg-dark: #0b1120;
+			--glass-bg: rgba(30, 41, 59, 0.7);
+			--glass-border: rgba(255, 255, 255, 0.1);
+			--accent-color: #10b981;
+			/* Green for students */
+			--accent-hover: #34d399;
+			--text-main: #f8fafc;
+			--text-muted: #94a3b8;
+		}
+
+		body {
+			margin: 0;
+			padding: 0;
+			font-family: 'Outfit', sans-serif;
+			background-color: var(--bg-dark);
+			background-image:
+				radial-gradient(circle at 15% 50%, rgba(16, 185, 129, 0.15), transparent 25%),
+				radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.15), transparent 25%);
+			color: var(--text-main);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			height: 100vh;
+			overflow: hidden;
+			position: relative;
+		}
+
+		/* Subtle decorative elements */
+		.glow-circle {
+			position: absolute;
+			border-radius: 50%;
+			filter: blur(80px);
+			z-index: 0;
+			pointer-events: none;
+		}
+
+		.circle-1 {
+			width: 400px;
+			height: 400px;
+			background: rgba(16, 185, 129, 0.2);
+			top: -10%;
+			right: -5%;
+		}
+
+		.circle-2 {
+			width: 350px;
+			height: 350px;
+			background: rgba(59, 130, 246, 0.2);
+			bottom: -10%;
+			left: -5%;
+		}
+
+		/* Login Container */
+		.login-container {
+			display: flex;
+			width: 100%;
+			max-width: 900px;
+			height: 600px;
+			background: var(--glass-bg);
+			border: 1px solid var(--glass-border);
+			border-radius: 24px;
+			box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+			backdrop-filter: blur(20px);
+			z-index: 10;
+			overflow: hidden;
+			position: relative;
+			margin: 20px;
+		}
+
+		/* Left Branding Side */
+		.branding-side {
+			flex: 1;
+			background: linear-gradient(135deg, rgba(15, 23, 42, 0.8), rgba(11, 17, 32, 0.9));
+			padding: 40px;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			border-right: 1px solid var(--glass-border);
+			text-align: center;
+			position: relative;
+		}
+
+		.branding-side::before {
+			content: '';
+			position: absolute;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 4px;
+			background: linear-gradient(90deg, #10b981, #3b82f6);
+		}
+
+		.branding-side img {
+			width: 180px;
+			height: auto;
+			margin-bottom: 24px;
+			filter: drop-shadow(0 0 15px rgba(16, 185, 129, 0.4));
+		}
+
+		.branding-side h2 {
+			font-size: 32px;
+			font-weight: 700;
+			margin: 0 0 16px 0;
+			background: linear-gradient(135deg, #34d399, #3b82f6);
+			-webkit-background-clip: text;
+			-webkit-text-fill-color: transparent;
+		}
+
+		.branding-side p {
+			color: var(--text-muted);
+			font-size: 16px;
+			line-height: 1.6;
+			margin: 0;
+		}
+
+		/* Right Form Side */
+		.form-side {
+			flex: 1;
+			padding: 50px;
+			display: flex;
+			flex-direction: column;
+			justify-content: center;
+		}
+
+		.form-header {
+			margin-bottom: 32px;
+		}
+
+		.form-header h3 {
+			margin: 0 0 8px 0;
+			font-size: 28px;
+			font-weight: 600;
+		}
+
+		.form-header p {
+			margin: 0;
+			color: var(--text-muted);
+			font-size: 15px;
+		}
+
+		/* Role Tabs Feature */
+		.role-tabs {
+			display: flex;
+			background: rgba(15, 23, 42, 0.6);
+			border-radius: 12px;
+			padding: 6px;
+			margin-bottom: 32px;
+			border: 1px solid var(--glass-border);
+		}
+
+		.role-tab {
+			flex: 1;
+			padding: 10px;
+			text-align: center;
+			color: var(--text-muted);
+			font-weight: 500;
+			font-size: 14px;
+			border-radius: 8px;
+			cursor: pointer;
+			transition: all 0.3s;
+		}
+
+		.role-tab.active {
+			background: var(--accent-color);
+			color: white;
+			box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3);
+		}
+
+		.role-tab:nth-child(3).active {
+			background: #f59e0b; /* Amber for Admin */
+			box-shadow: 0 4px 10px rgba(245, 158, 11, 0.3);
+		}
+
+		/* Form Fields */
+		.form-group {
+			margin-bottom: 24px;
+			position: relative;
+		}
+
+		.form-group label {
+			display: block;
+			margin-bottom: 8px;
+			color: var(--text-muted);
+			font-weight: 500;
+			font-size: 14px;
+		}
+
+		.form-group i {
+			position: absolute;
+			bottom: 14px;
+			left: 16px;
+			color: var(--text-muted);
+			font-size: 16px;
+		}
+
+		.toggle-password {
+			left: auto !important;
+			right: 16px;
+			cursor: pointer;
+			transition: color 0.3s;
+			z-index: 2;
+		}
+
+		.toggle-password:hover {
+			color: var(--text-main);
+		}
+
+		.form-control {
+			width: 100%;
+			padding: 14px 44px 14px 44px;
+			background: rgba(15, 23, 42, 0.6);
+			border: 1px solid var(--glass-border);
+			border-radius: 12px;
+			color: white;
+			font-family: inherit;
+			font-size: 15px;
+			transition: all 0.3s ease;
+			box-sizing: border-box;
+		}
+
+		.form-control:focus {
+			outline: none;
+			border-color: var(--accent-color);
+			box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+			background: rgba(15, 23, 42, 0.8);
+		}
+
+		.form-control::placeholder {
+			color: rgba(148, 163, 184, 0.5);
+		}
+
+		.form-options {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			margin-bottom: 32px;
+		}
+
+		.remember-me {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			color: var(--text-muted);
+			font-size: 14px;
+			cursor: pointer;
+		}
+
+		.remember-me input {
+			accent-color: var(--accent-color);
+			width: 16px;
+			height: 16px;
+			cursor: pointer;
+		}
+
+		.forgot-pass {
+			color: var(--accent-color);
+			text-decoration: none;
+			font-size: 14px;
+			font-weight: 500;
+			transition: color 0.2s;
+		}
+
+		.forgot-pass:hover {
+			color: var(--accent-hover);
+		}
+
+		.login-btn {
+			width: 100%;
+			background: linear-gradient(135deg, var(--accent-color), #059669);
+			color: white;
+			border: none;
+			padding: 16px;
+			border-radius: 12px;
+			font-size: 16px;
+			font-weight: 600;
+			font-family: inherit;
+			cursor: pointer;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 12px;
+			transition: all 0.3s ease;
+			box-shadow: 0 10px 20px rgba(16, 185, 129, 0.3);
+		}
+
+		.login-btn:hover {
+			transform: translateY(-2px);
+			box-shadow: 0 15px 30px rgba(16, 185, 129, 0.4);
+			background: linear-gradient(135deg, var(--accent-hover), #10b981);
+		}
+
+		.login-btn:active {
+			transform: translateY(1px);
+		}
+
+		/* Responsive */
+		@media (max-width: 768px) {
+			.login-container {
+				flex-direction: column;
+				height: auto;
+				width: 100%;
+				max-width: 400px;
+			}
+
+			.form-side {
+				padding: 30px;
+			}
+
+			.branding-side {
+				padding: 30px;
+				border-right: none;
+				border-bottom: 1px solid var(--glass-border);
+			}
+
+			.branding-side h2 {
+				font-size: 24px;
+				margin-bottom: 8px;
+			}
+			
+			.branding-side p {
+				font-size: 14px;
+			}
+
+			.branding-side img {
+				width: 80px;
+				margin-bottom: 16px;
+			}
+		}
+
+		/* Custom Alert */
+		.custom-alert {
+			position: fixed;
+			top: 20px;
+			right: -400px;
+			background: #10b981;
+			color: white;
+			padding: 16px 24px;
+			border-radius: 12px;
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			box-shadow: 0 10px 25px rgba(16, 185, 129, 0.4);
+			transition: right 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+			z-index: 1000;
+			font-weight: 500;
+			font-size: 15px;
+		}
+
+		.custom-alert.show {
+			right: 20px;
+		}
+	</style>
+</head>
+
+<body>
+
+	<!-- Custom Alert Box -->
+	<div class="custom-alert" id="forgotPassAlert">
+		<i class="fa-solid fa-circle-info"></i>
+		<span>Please contact admin to reset password.</span>
+	</div>
+
+	<div class="glow-circle circle-1"></div>
+	<div class="glow-circle circle-2"></div>
+
+	<div class="login-container">
+
+		<!-- Branding Section -->
+		<div class="branding-side">
+			<img src="images/bg1.1.png" alt="SmartAttend Logo"
+				onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjM2I4MmY2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDJhMTAgMTAgMCAxIDAgMTAgMTAgMTAgMTAgMCAwIDAtMTAgMTB6Ii8+PC9zdmc+'">
+			<h2>Student Portal</h2>
+			<p>Check your attendance records, monitor your status, and request leaves.</p>
+		</div>
+
+		<!-- Login Form Section -->
+		<div class="form-side">
+
+			<div class="form-header">
+				<h3>Student Login</h3>
+				<p>Please enter your Enrollment Number to access your portal.</p>
+			</div>
+
+			<!-- Feature: Role Selection -->
+			<div class="role-tabs">
+				<div class="role-tab" onclick="window.location.href='Login.html'">Professor</div>
+				<div class="role-tab active">Student</div>
+				<div class="role-tab" onclick="window.location.href='admin_login.html'">Admin</div>
+			</div>
+
+			<form action="student_dashboard.html" id="studentLoginForm">
+
+				<div class="form-group">
+					<label>University Email Address</label>
+					<i class="fa-solid fa-envelope"></i>
+					<input type="email" id="emailInput" class="form-control" placeholder="student@gmail.com" required>
+				</div>
+
+				<div class="form-group">
+					<label>Enrollment Number (Password)</label>
+					<i class="fa-solid fa-id-card"></i>
+					<input type="password" id="studentPasswordInput" class="form-control" placeholder="e.g., BAPP000"
+						required autocomplete="off">
+					<i class="fa-solid fa-eye toggle-password" onclick="const p=document.getElementById('studentPasswordInput'); if(p.type==='password'){p.type='text';this.classList.remove('fa-eye');this.classList.add('fa-eye-slash');}else{p.type='password';this.classList.remove('fa-eye-slash');this.classList.add('fa-eye');}"></i>
+				</div>
+
+				<div class="form-options">
+					<label class="remember-me">
+						<input type="checkbox" checked>
+						<span>Remember me</span>
+					</label>
+					<a href="student_forget.html" class="forgot-pass">Forgot Password?</a>
+				</div>
+
+				<div id="loginError"
+					style="color: #ef4444; margin-bottom: 16px; font-size: 14px; text-align: center; display: none;">
+				</div>
+
+				<button type="submit" id="loginBtn" class="login-btn">
+					<span id="btnText">Access Portal</span> <i id="btnIcon"
+						class="fa-solid fa-arrow-right-to-bracket"></i>
+				</button>
+
+			</form>
+
+		</div>
+	</div>
+
+	<script src="backend/config.js"></script>
+	<script src="backend/student_login.js"></script>
+
+	<script>
+		// Cleaned up unused showForgotAlert function
+	</script>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js')
+          .then(reg => console.log('SmartAttend App Registered!'))
+          .catch(err => console.log('Registration failed:', err));
+      });
+    }
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Student Dashboard - SmartAttend</title>
+  <script>
+    if (sessionStorage.getItem('isStudentAuthenticated') !== 'true') {
+      window.location.replace('student_login.html');
+    }
+    function logout() {
+      sessionStorage.clear();
+      window.location.replace('student_login.html');
+    }
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg-dark: #0b1120;
+      --glass-bg: rgba(30, 41, 59, 0.7);
+      --glass-border: rgba(255, 255, 255, 0.1);
+      --accent-color: #10b981; /* Primary student color: Emerald Green */
+      --accent-hover: #34d399;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Outfit', sans-serif;
+      background-color: var(--bg-dark);
+      background-image:
+        radial-gradient(circle at 15% 50%, rgba(16, 185, 129, 0.15), transparent 25%),
+        radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.15), transparent 25%);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Topbar */
+    .topbar {
+      height: 80px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 40px;
+      background: rgba(11, 17, 32, 0.5);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--glass-border);
+      z-index: 10;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand img {
+      height: 40px;
+      width: auto;
+      filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.5));
+    }
+
+    .brand h2 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #34d399, #3b82f6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .user-info h3 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 500;
+    }
+
+    .logout-btn {
+      background: rgba(239, 68, 68, 0.1);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-family: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .logout-btn:hover {
+      background: #ef4444;
+      color: white;
+    }
+
+    /* Main Content */
+    .dashboard-container {
+      flex: 1;
+      padding: 40px;
+      overflow-y: auto;
+    }
+
+    .page-header {
+      margin-bottom: 40px;
+      text-align: center;
+    }
+
+    .page-header h1 {
+      margin: 0;
+      font-size: 36px;
+      font-weight: 700;
+    }
+
+    .page-header p {
+      color: var(--text-muted);
+      margin-top: 8px;
+      font-size: 18px;
+    }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 30px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    @media (max-width: 900px) {
+      .main-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Cards */
+    .card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      padding: 32px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(16px);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: linear-gradient(90deg, #10b981, #3b82f6);
+    }
+
+    .card h3 {
+      margin: 0 0 24px 0;
+      font-size: 20px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .card h3 i {
+      color: var(--accent-color);
+    }
+
+    /* Circular Progress Ring */
+    .health-ring-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px 0;
+    }
+
+    .progress-circle {
+      position: relative;
+      width: 200px;
+      height: 200px;
+      border-radius: 50%;
+      background: conic-gradient(var(--accent-color) calc(var(--percentage) * 1%), rgba(255,255,255,0.1) 0);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 30px rgba(16, 185, 129, 0.2);
+    }
+
+    .progress-circle::before {
+      content: "";
+      position: absolute;
+      width: 160px;
+      height: 160px;
+      background-color: var(--bg-dark);
+      border-radius: 50%;
+    }
+
+    .progress-text {
+      position: relative;
+      font-size: 48px;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .progress-status {
+      margin-top: 20px;
+      font-size: 18px;
+      font-weight: 600;
+      padding: 6px 16px;
+      border-radius: 20px;
+      background: rgba(16, 185, 129, 0.2);
+      color: #10b981;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    /* Timeline & Stats */
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 16px;
+      background: rgba(15, 23, 42, 0.4);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      margin-bottom: 12px;
+    }
+    
+    .stat-label {
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .stat-value {
+      font-weight: 600;
+      font-size: 16px;
+    }
+
+    /* Leave Form */
+    .form-group {
+      margin-bottom: 12px;
+    }
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+    .form-control {
+      width: 100%;
+      padding: 8px 12px;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      color: white;
+      font-family: inherit;
+      box-sizing: border-box;
+    }
+    .btn-submit {
+      width: 100%;
+      background: linear-gradient(135deg, var(--accent-color), #059669);
+      color: white;
+      border: none;
+      padding: 14px;
+      border-radius: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .btn-submit:hover {
+      box-shadow: 0 10px 20px rgba(16, 185, 129, 0.3);
+    }
+
+    /* Custom File Uploads */
+    .file-upload-wrapper {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+    @media (max-width: 600px) {
+      .file-upload-wrapper { flex-direction: column; }
+    }
+    .file-upload-box {
+      flex: 1;
+      border: 1px dashed var(--glass-border);
+      border-radius: 12px;
+      padding: 12px;
+      text-align: center;
+      background: rgba(15, 23, 42, 0.4);
+      transition: all 0.3s;
+      position: relative;
+      cursor: pointer;
+    }
+    .file-upload-box:hover {
+      border-color: var(--accent-color);
+      background: rgba(16, 185, 129, 0.05);
+    }
+    .file-upload-box input[type="file"] {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      opacity: 0;
+      cursor: pointer;
+    }
+    .file-upload-box i {
+      font-size: 24px;
+      color: var(--accent-color);
+      margin-bottom: 8px;
+    }
+    .file-upload-box span {
+      display: block;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .file-upload-box .file-name {
+      margin-top: 6px;
+      font-size: 12px;
+      color: #f8fafc;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .timeline-item {
+      display: flex;
+      gap: 16px;
+      padding-bottom: 24px;
+      border-left: 2px solid var(--glass-border);
+      margin-left: 10px;
+      padding-left: 20px;
+      position: relative;
+    }
+    .timeline-item::before {
+      content: '';
+      position: absolute;
+      left: -9px;
+      top: 0;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent-color);
+      box-shadow: 0 0 10px var(--accent-color);
+    }
+    .timeline-item.absent::before {
+      background: var(--danger);
+      box-shadow: 0 0 10px var(--danger);
+    }
+    .timeline-date { color: var(--text-muted); font-size: 13px; margin-bottom: 4px; }
+    .timeline-title { font-weight: 600; font-size: 15px; }
+
+    /* Buttons */
+    .btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-family: inherit;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.3s;
+      border: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent-color), #059669);
+      color: white;
+      box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 15px rgba(16, 185, 129, 0.4);
+    }
+
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--glass-border);
+      color: white;
+    }
+
+    .btn-outline:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    /* Subject Table & Recovery Cards */
+    .subject-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+    .subject-table th {
+      text-align: left;
+      font-size: 12px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding: 10px;
+      border-bottom: 1px solid var(--glass-border);
+    }
+    .subject-table td {
+      padding: 12px 10px;
+      font-size: 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .recovery-card {
+      background: rgba(16, 185, 129, 0.05);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      border-radius: 12px;
+      padding: 15px;
+      margin-top: 15px;
+    }
+    .recovery-card.warning {
+      background: rgba(239, 68, 68, 0.05);
+      border-color: rgba(239, 68, 68, 0.2);
+    }
+    .recovery-title {
+      font-weight: 600;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .recovery-text {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* =========================================
+       MOBILE-FIRST RESPONSIVENESS OVERRIDES
+       ========================================= */
+    @media (max-width: 768px) {
+      .topbar {
+        height: 60px;
+        padding: 0 16px;
+      }
+      .brand img {
+        height: 30px;
+      }
+      .brand h2 {
+        font-size: 20px;
+      }
+      .user-info h3 {
+        display: none; /* Hide "Hello Student" to save space */
+      }
+      .logout-btn {
+        padding: 6px 12px;
+        font-size: 13px;
+      }
+      
+      .dashboard-container {
+        padding: 16px;
+      }
+      .page-header {
+        margin-bottom: 24px;
+      }
+      .page-header h1 {
+        font-size: 26px;
+      }
+      .page-header p {
+        font-size: 14px;
+      }
+      
+      .card {
+        padding: 20px;
+      }
+      .main-grid {
+        gap: 16px;
+      }
+      
+      /* Scale down the circular progress bar slightly to fit narrow screens */
+      .progress-circle {
+        width: 160px;
+        height: 160px;
+      }
+      .progress-circle::before {
+        width: 120px;
+        height: 120px;
+      }
+      .progress-text {
+        font-size: 36px;
+      }
+      
+      /* Make inputs larger for thumbs */
+      .form-control {
+        font-size: 16px; /* Prevents iOS auto-zoom */
+        padding: 12px;
+      }
+      .btn-submit {
+        padding: 16px; /* Larger touch target */
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Topbar -->
+  <header class="topbar">
+    <div class="brand">
+      <img src="images/bg1.1.png" alt="Logo" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjM2I4MmY2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDJhMTAgMTAgMCAxIDAgMTAgMTAgMTAgMTAgMCAwIDAtMTAgMTB6Ii8+PC9zdmc+'">
+      <h2>Student Portal</h2>
+    </div>
+    <div class="user-info">
+      <h3>Hello, <span id="studentNameDisplay">Student</span></h3>
+      <button class="logout-btn" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <div class="dashboard-container">
+    <div class="page-header">
+      <h1 id="welcomeText">Welcome back, Student!</h1>
+      <p>Here is your real-time attendance overview.</p>
+    </div>
+
+    <!-- Lab Attendance Code Entry (NEW) -->
+    <div class="card" style="margin-bottom: 30px; border: 2px solid rgba(59, 130, 246, 0.5); background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.9));">
+      <h3 style="color: #60a5fa; margin-bottom: 10px;"><i class="fa-solid fa-laptop-code"></i> Live Lab Attendance</h3>
+      <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px;">
+        If your professor has generated a live access code for a Lab session, enter it below. 
+        <br><span style="color: #ef4444; font-weight: 600;"><i class="fa-solid fa-shield-halved"></i> Anti-Proxy active:</span> Your device fingerprint will be securely logged to prevent duplicate submissions.
+      </p>
+      
+      <div style="display: flex; gap: 15px; max-width: 500px; flex-wrap: wrap;">
+        <input type="text" id="labCodeInput" class="form-control" placeholder="Enter 6-Digit Code" maxlength="6" style="flex: 1; font-size: 20px; font-weight: 700; text-align: center; letter-spacing: 5px; text-transform: uppercase;">
+        <button id="submitLabCodeBtn" class="btn-submit" onclick="submitLabCode()" style="background: linear-gradient(135deg, #3b82f6, #2563eb); white-space: nowrap; width: auto; padding: 0 30px;">
+          <i class="fa-solid fa-check"></i> Mark Present
+        </button>
+      </div>
+      <div id="labCodeMessage" style="margin-top: 15px; font-weight: 600; display: none;"></div>
+    </div>
+
+    <div class="main-grid">
+
+      <!-- Overall Attendance Card -->
+      <div class="card">
+        <h3><i class="fa-solid fa-chart-pie"></i> Overall Attendance</h3>
+        <div class="health-ring-container" style="height: 250px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+          <canvas id="attendanceChart"></canvas>
+          <div id="progressStatus" class="progress-status" style="margin-top: 15px;">Calculating...</div>
+        </div>
+
+        <div style="margin-top: 24px;">
+          <div class="stat-row">
+            <span class="stat-label">Total Classes Scheduled</span>
+            <span class="stat-value" id="statTotal">0</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Classes Attended</span>
+            <span class="stat-value" id="statAttended" style="color: var(--accent-hover);">0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Smart Recovery & Subject Breakdown -->
+      <div class="card">
+        <h3><i class="fa-solid fa-brain"></i> Smart Recovery Insights</h3>
+        
+        <div id="recoveryPlanContainer">
+          <!-- Populated by JS -->
+          <div style="text-align: center; color: var(--text-muted); padding: 20px;">
+            <i class="fa-solid fa-spinner fa-spin"></i> Analyzing patterns...
+          </div>
+        </div>
+
+        <h3 style="margin-top: 30px;"><i class="fa-solid fa-book"></i> Subject Breakdown</h3>
+        <div style="max-height: 200px; overflow-y: auto;">
+          <table class="subject-table">
+            <thead>
+              <tr>
+                <th>Subject Details</th>
+                <th>Attended / Total</th>
+                <th style="text-align: right;">Percentage</th>
+              </tr>
+            </thead>
+            <tbody id="subjectBreakdownBody">
+              <!-- Populated by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Recent Activity removed by user request -->
+
+      <!-- Leave Request Status History -->
+      <div class="card" style="display: flex; flex-direction: column;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+          <h3 style="margin: 0; display: flex; align-items: center; gap: 12px;">
+            <i class="fa-solid fa-clock-rotate-left"></i>
+            My Leave Request Status
+          </h3>
+          <div style="position: relative;">
+            <i class="fa-solid fa-calendar-days" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--accent-color); font-size: 14px;"></i>
+            <input type="date" id="studentLeaveDateFilter" onchange="renderLeaveHistory()" style="padding: 8px 12px 8px 35px; background: rgba(30, 41, 59, 0.7); border: 1px solid var(--glass-border); border-radius: 8px; color: white; font-family: inherit; font-size: 13px; outline: none; width:130px;">
+          </div>
+        </div>
+        <div id="leaveRequestHistory" style="max-height: 450px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding-right: 8px;">
+          <div style="text-align: center; color: var(--text-muted); padding: 20px;">
+            <i class="fa-solid fa-spinner fa-spin"></i> Loading request history...
+          </div>
+        </div>
+      </div>
+
+      <!-- Leave Request Form -->
+      <div class="card" style="align-self: start;">
+        <h3><i class="fa-solid fa-envelope-open-text"></i> Medical / Leave Request</h3>
+        <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 12px;">
+          Submit a dispute or upload medical documents if you were marked absent incorrectly.
+        </p>
+        <form id="leaveForm">
+          <div class="form-group">
+            <label>Select Professor</label>
+            <select id="targetProfessor" class="form-control">
+              <option value="" disabled selected>Loading professors...</option>
+            </select>
+            <!-- Fallback: manual email entry -->
+            <input type="email" id="targetProfessorManual" class="form-control" placeholder="Or type professor email manually (e.g. aman70dz@gmail.com)" style="margin-top: 8px;">
+            <small style="color: var(--text-muted); display: block; margin-top: 4px;">If dropdown is empty, type the professor's email directly above.</small>
+          </div>
+          <div class="form-group">
+            <label>Requested Date</label>
+            <input type="date" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label>Reason for Leave</label>
+            <textarea class="form-control" rows="2" placeholder="Explain your absence..." required></textarea>
+          </div>
+          
+          <div class="file-upload-wrapper">
+            <!-- Image Upload Box -->
+            <div class="file-upload-box">
+              <i class="fa-regular fa-image"></i>
+              <span>Upload Leave Request (Image)</span>
+              <div class="file-name" id="leaveFileName">No file selected</div>
+              <input type="file" id="leaveImageInput" accept="image/*" onchange="document.getElementById('leaveFileName').innerText = this.files[0] ? this.files[0].name : 'No file selected'">
+            </div>
+            
+            <!-- PDF Upload Box -->
+            <div class="file-upload-box">
+              <i class="fa-regular fa-file-pdf" style="color: #ef4444;"></i>
+              <span>Upload Medical Report (PDF)</span>
+              <div class="file-name" id="medicalFileName">No file selected</div>
+              <input type="file" id="medicalPdfInput" accept=".pdf" onchange="document.getElementById('medicalFileName').innerText = this.files[0] ? this.files[0].name : 'No file selected'">
+            </div>
+          </div>
+          <button type="submit" class="btn-submit"><i class="fa-solid fa-paper-plane"></i> Submit Request to Professor</button>
+        </form>
+      </div>
+
+      <!-- My Timetable Card -->
+      <div class="card" style="grid-column: 1 / -1; margin-top: 8px;">
+        <h3 style="margin: 0 0 8px 0;"><i class="fa-solid fa-calendar-days"></i> My Class Timetable</h3>
+        <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px;">
+          Automatically fetched based on your registered Department and Semester.
+        </p>
+        <div id="studentTimetableContainer" style="padding:20px; border-radius:12px; background:rgba(0,0,0,0.2); border:1px solid rgba(255,255,255,0.05); text-align:center; max-width: 600px; margin: 0 auto;">
+            <i class="fa-solid fa-circle-notch fa-spin" style="font-size:32px; color:var(--primary-color); margin-bottom:12px;"></i>
+            <p style="color:var(--text-muted); margin:0;">Loading your timetable...</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="backend/config.js"></script>
+  <script src="backend/student_dashboard.js"></script>
+</body>
+
+</html>
+

@@ -1,0 +1,26 @@
+SmartAttend Deployment & PWA Installation Guide (Netlify)
+==========================================================
+Date Created: May 22, 2026
+
+To turn SmartAttend into a mobile app that students and professors can download (PWA - Progressive Web App), the project must be hosted online. 
+
+Why Netlify?
+------------
+Mobile browsers (Android Chrome / iOS Safari) have strict security rules:
+1. The "Install App" feature (triggered by `manifest.json` and `sw.js`) will ONLY work on a secure HTTPS connection.
+2. The Face Recognition webcam will ONLY turn on over a secure HTTPS connection.
+Local WiFi networks use insecure HTTP, which is why the app cannot be installed directly from your computer to your phone. Netlify provides the free, mandatory HTTPS connection.
+
+How to Deploy to Netlify (Drag and Drop Method):
+------------------------------------------------
+1. Go to the website: https://drop.netlify.com/
+2. Drag and drop your entire `SmartAttend2@` folder into the upload box on the page.
+3. Within 10 seconds, Netlify will generate a live, secure HTTPS link (e.g., https://yoursite.netlify.app).
+4. Share this link with your students and professors.
+
+How Users Install the App:
+--------------------------
+1. A user opens the Netlify link on their phone's browser.
+2. Because Netlify provides a secure HTTPS connection, the browser allows `sw.js` to run.
+3. The browser reads `manifest.json` and automatically triggers a pop-up: "Add SmartAttend to Home Screen".
+4. The user clicks "Add", and SmartAttend installs natively onto their phone, functioning like a regular app with camera permissions enabled!

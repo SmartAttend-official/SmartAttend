@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard — SmartAttend</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        // Role-based protection
+        if (sessionStorage.getItem('isAdminAuthenticated') !== 'true') {
+            window.location.replace('admin_login.html');
+        }
+    </script>
+    <style>
+        :root {
+            --bg-body: #0b1120;
+            --sidebar-bg: #0f172a;
+            --card-bg: #1e293b;
+            --accent-color: #f59e0b; /* Amber/Gold */
+            --primary-color: #6366f1; /* Indigo */
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border-color: rgba(255, 255, 255, 0.05);
+            --transition: all 0.3s ease;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Sidebar Styling */
+        .sidebar {
+            width: 280px;
+            background-color: var(--sidebar-bg);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            z-index: 100;
+            transition: var(--transition);
+        }
+
+        .sidebar-header {
+            padding: 30px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .sidebar-header img {
+            width: 40px;
+            height: auto;
+        }
+
+        .sidebar-header h2 {
+            font-size: 20px;
+            font-weight: 700;
+            margin: 0;
+            background: linear-gradient(135deg, #fcd34d, #6366f1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .nav-menu {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .nav-section {
+            margin-bottom: 25px;
+        }
+
+        .action-btns .action-btn i {
+            font-size: 14px;
+        }
+
+        /* Custom Select Styling */
+        .form-control {
+            background-color: rgba(255, 255, 255, 0.03);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 10px 15px;
+            cursor: pointer;
+            transition: var(--transition);
+            font-family: inherit;
+        }
+
+        select.form-control {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23f59e0b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 15px center;
+            background-size: 16px;
+        }
+
+        input[type="date"].form-control::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+            opacity: 0.5;
+            cursor: pointer;
+        }
+
+        .form-control:hover {
+            border-color: var(--accent-color);
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.1);
+        }
+
+        select.form-control option {
+            background-color: #0f172a;
+            color: var(--text-main);
+            padding: 12px;
+        }
+
+        /* MGMT Filters Area */
+        .mgmt-filters {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 25px;
+            background: rgba(255, 255, 255, 0.02);
+            padding: 18px;
+            border-radius: 15px;
+            border: 1px solid var(--border-color);
+            align-items: center;
+        }
+
+        .filter-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-right: 5px;
+        }
+
+        .nav-section-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--text-muted);
+            margin-bottom: 15px;
+            padding-left: 10px;
+            font-weight: 600;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 15px;
+            color: var(--text-muted);
+            text-decoration: none;
+            border-radius: 12px;
+            margin-bottom: 5px;
+            transition: var(--transition);
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .nav-item i {
+            width: 20px;
+            text-align: center;
+            font-size: 18px;
+        }
+
+        .nav-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-main);
+        }
+
+        .nav-item.active {
+            background: linear-gradient(90deg, rgba(99, 102, 241, 0.1), transparent);
+            color: var(--primary-color);
+            border-left: 3px solid var(--primary-color);
+        }
+
+        .nav-item.admin-only {
+            border-left: 3px solid var(--accent-color);
+            color: var(--accent-color);
+            background: rgba(245, 158, 11, 0.05);
+        }
+
+        .sidebar-footer {
+            padding: 20px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .logout-btn {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 15px;
+            color: #f87171;
+            text-decoration: none;
+            border-radius: 12px;
+            transition: var(--transition);
+            width: 100%;
+            border: none;
+            background: transparent;
+            font-family: inherit;
+            font-size: 15px;
+            cursor: pointer;
+        }
+
+        .logout-btn:hover {
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        /* Main Content Styling */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .top-header {
+            height: 80px;
+            background: var(--sidebar-bg);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 40px;
+        }
+
+        .search-bar {
+            display: flex;
+            align-items: center;
+            background: var(--bg-body);
+            padding: 10px 20px;
+            border-radius: 100px;
+            border: 1px solid var(--border-color);
+            width: 400px;
+        }
+
+        .search-bar input {
+            background: transparent;
+            border: none;
+            color: white;
+            margin-left: 10px;
+            width: 100%;
+            outline: none;
+            font-family: inherit;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .notification-bell {
+            position: relative;
+            cursor: pointer;
+            color: var(--text-muted);
+            font-size: 20px;
+        }
+
+        .notification-dot {
+            position: absolute;
+            top: -2px;
+            right: -2px;
+            width: 8px;
+            height: 8px;
+            background: var(--accent-color);
+            border-radius: 50%;
+            border: 2px solid var(--sidebar-bg);
+        }
+
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            padding: 5px 15px;
+            border-radius: 12px;
+            transition: var(--transition);
+        }
+
+        .user-profile:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .user-info {
+            text-align: right;
+        }
+
+        .user-name {
+            font-weight: 600;
+            font-size: 14px;
+            display: block;
+        }
+
+        .user-role {
+            font-size: 12px;
+            color: var(--accent-color);
+            font-weight: 500;
+        }
+
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: white;
+        }
+
+        .content-area {
+            flex: 1;
+            padding: 40px;
+            overflow-y: auto;
+            background-color: var(--bg-body);
+        }
+
+        /* Dashboard Overview Components */
+        .welcome-box {
+            margin-bottom: 40px;
+        }
+
+        .welcome-box h1 {
+            font-size: 32px;
+            margin: 0 0 10px 0;
+            font-weight: 700;
+        }
+
+        .welcome-box p {
+            color: var(--text-muted);
+            margin: 0;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+
+        .stat-card {
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(99, 102, 241, 0.3);
+        }
+
+        .stat-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+
+        .icon-blue { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
+        .icon-amber { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
+        .icon-emerald { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+        .icon-rose { background: rgba(244, 63, 94, 0.1); color: #f43f5e; }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            color: var(--text-muted);
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .stat-trend {
+            position: absolute;
+            top: 25px;
+            right: 25px;
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .trend-up { color: #10b981; }
+        .trend-down { color: #f43f5e; }
+
+        /* Recent Activity Table */
+        .dashboard-row {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 25px;
+        }
+
+        .data-card {
+            background: var(--card-bg);
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+
+        .card-header {
+            padding: 20px 30px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .card-header h3 {
+            margin: 0;
+            font-size: 18px;
+        }
+
+        .view-all {
+            color: var(--primary-color);
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .activity-list {
+            padding: 0;
+            margin: 0;
+            list-style: none;
+        }
+
+        .activity-item {
+            padding: 20px 30px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            transition: var(--transition);
+        }
+
+        .activity-item:last-child { border-bottom: none; }
+
+        .activity-item:hover { background: rgba(255, 255, 255, 0.02); }
+
+        .activity-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+        .activity-details p {
+            margin: 0 0 5px 0;
+            font-size: 14px;
+        }
+
+        .activity-details span {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        /* Management Modules Styling */
+        .mgmt-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .mgmt-title h2 { margin: 0; font-size: 28px; }
+        .mgmt-title p { margin: 5px 0 0 0; color: var(--text-muted); font-size: 14px; }
+
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: var(--transition);
+        }
+
+        .btn-primary:hover { background: #4f46e5; transform: translateY(-2px); }
+
+        .mgmt-table-card {
+            background: var(--card-bg);
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+            overflow-x: auto;
+            position: relative;
+        }
+
+        /* Custom Scrollbar for Table */
+        .mgmt-table-card::-webkit-scrollbar {
+            height: 8px;
+        }
+        .mgmt-table-card::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+        }
+        .mgmt-table-card::-webkit-scrollbar-thumb {
+            background: rgba(99, 102, 241, 0.3);
+            border-radius: 10px;
+        }
+        .mgmt-table-card::-webkit-scrollbar-thumb:hover {
+            background: var(--primary-color);
+        }
+
+        .mgmt-table {
+            width: 100%;
+            min-width: 1000px;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        .mgmt-table th {
+            padding: 15px 25px;
+            background: rgba(255, 255, 255, 0.02);
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .mgmt-table td {
+            padding: 18px 25px;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 14px;
+        }
+
+        .mgmt-table tr:hover { background: rgba(255, 255, 255, 0.01); }
+
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 100px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-active { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+        .status-inactive { background: rgba(244, 63, 94, 0.1); color: #f43f5e; }
+
+        .action-btns { display: flex; gap: 10px; }
+        .action-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--border-color);
+            background: transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .btn-edit:hover { color: var(--primary-color); border-color: var(--primary-color); }
+        .btn-delete:hover { color: #f43f5e; border-color: #f43f5e; }
+
+        /* Modal Styling */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(5px);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: var(--card-bg);
+            width: 500px;
+            max-width: 95%;
+            max-height: 90vh;
+            overflow-y: auto;
+            border-radius: 24px;
+            border: 1px solid var(--glass-border);
+            padding: 35px;
+            position: relative;
+            scrollbar-width: thin;
+        }
+
+        .modal-header { margin-bottom: 25px; }
+        .modal-header h3 { margin: 0; font-size: 24px; }
+
+        .modal-form .form-group { margin-bottom: 20px; }
+        .modal-form label { display: block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px; }
+        .modal-form .form-control {
+            width: 100%;
+            padding: 12px 15px;
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            color: white;
+            font-family: inherit;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 15px;
+            margin-top: 30px;
+        }
+
+        .btn-cancel {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 10px 20px;
+            border-radius: 10px;
+            cursor: pointer;
+        }
+
+        /* Overlay/Modal Loader */
+        #loader-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg-body);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.5s;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(99, 102, 241, 0.1);
+            border-top: 5px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Skeleton Loader Styles */
+        .skeleton {
+            background: linear-gradient(90deg, #1e293b 25%, rgba(255, 255, 255, 0.05) 50%, #1e293b 75%);
+            background-size: 200% 100%;
+            animation: skeleton-loading 1.5s infinite;
+            border-radius: 8px;
+            color: transparent !important;
+            border-color: rgba(255, 255, 255, 0.05) !important;
+        }
+
+        .skeleton * {
+            visibility: hidden;
+        }
+
+        @keyframes skeleton-loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        .skeleton-text { height: 16px; margin-bottom: 10px; width: 80%; border-radius: 4px; }
+        .skeleton-value { height: 32px; width: 60%; margin-bottom: 10px; border-radius: 4px; }
+        .skeleton-icon { width: 50px; height: 50px; border-radius: 12px; margin-bottom: 20px; }
+
+        .fade-in {
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+
+        /* Custom Toast Notifications */
+        .toast-container {
+            position: fixed;
+            top: 24px;
+            right: 24px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            pointer-events: none;
+        }
+
+        .toast {
+            background: white;
+            padding: 16px 24px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            min-width: 320px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.2);
+            transform: translateX(150%);
+            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            pointer-events: auto;
+        }
+
+        .toast.show { transform: translateX(0); }
+
+        .toast-success {
+            border: 2px solid #10b981;
+            color: #10b981;
+        }
+
+        .toast-error {
+            border: 2px solid #ef4444;
+            color: #ef4444;
+        }
+
+        .toast-icon { font-size: 20px; }
+        .toast-message { font-weight: 600; font-size: 14px; }
+
+        /* Profile Dropdown Styling */
+        .user-profile-wrapper {
+            position: relative;
+            z-index: 1001;
+        }
+
+        .profile-dropdown {
+            position: absolute;
+            top: 60px;
+            right: 0;
+            width: 260px;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+            opacity: 0;
+            transform: translateY(-10px);
+            transition: all 0.3s ease;
+        }
+
+        .profile-dropdown.show {
+            display: flex;
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .dropdown-header {
+            padding: 10px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 5px;
+        }
+
+        .dropdown-header span {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .dropdown-header small {
+            color: var(--text-muted);
+            font-size: 11px;
+        }
+
+        .dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 15px;
+            color: var(--text-muted);
+            text-decoration: none;
+            border-radius: 12px;
+            transition: var(--transition);
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .dropdown-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-main);
+        }
+
+        .dropdown-item i {
+            font-size: 16px;
+            width: 20px;
+            text-align: center;
+        }
+
+        .dropdown-divider {
+            height: 1px;
+            background: var(--border-color);
+            margin: 5px 0;
+        }
+
+        .dropdown-item.logout-item {
+            color: #f87171;
+        }
+
+        .dropdown-item.logout-item:hover {
+            background: rgba(239, 68, 68, 0.1);
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Page Loader -->
+    <div id="loader-overlay">
+        <div class="spinner"></div>
+        <p style="letter-spacing: 2px; font-weight: 500; font-size: 14px;">SECURITY CHECK...</p>
+    </div>
+
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <img src="../images/bg1.1.png" alt="Logo" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZjU5ZTBiIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDJhMTAgMTAgMCAxIDAgMTAgMTAgMTAgMTAgMCAwIDAtMTAgMTB6Ii8+PC9zdmc+'">
+            <h2>SmartAttend</h2>
+        </div>
+
+        <nav class="nav-menu">
+            <div class="nav-section">
+                <div class="nav-section-title">Overview</div>
+                <a href="#" class="nav-item" data-view="dashboard">
+                    <i class="fa-solid fa-chart-line"></i>
+                    System Dashboard
+                </a>
+                <a href="#" class="nav-item" data-view="profile">
+                    <i class="fa-solid fa-user-gear"></i>
+                    My Profile
+                </a>
+                <a href="#" class="nav-item" data-view="logs">
+                    <i class="fa-solid fa-list-check"></i>
+                    Audit Logs
+                </a>
+            </div>
+
+            <div class="nav-section">
+                <div class="nav-section-title">Account Management</div>
+                <a href="#" class="nav-item" data-view="professors">
+                    <i class="fa-solid fa-user-tie"></i>
+                    Professor Mgmt
+                </a>
+                <a href="#" class="nav-item" data-view="students">
+                    <i class="fa-solid fa-user-graduate"></i>
+                    Student Mgmt
+                </a>
+            </div>
+
+            <div class="nav-section">
+                <div class="nav-section-title">Academic Structure</div>
+                <a href="#" class="nav-item" data-view="departments">
+                    <i class="fa-solid fa-building-columns"></i>
+                    Departments
+                </a>
+                <a href="#" class="nav-item" data-view="classes">
+                    <i class="fa-solid fa-chalkboard-user"></i>
+                    Classes & Subjects
+                </a>
+                <a href="#" class="nav-item" data-view="timetables">
+                    <i class="fa-solid fa-calendar-days"></i>
+                    Timetables
+                </a>
+                <a href="#" class="nav-item" data-view="proxy">
+                    <i class="fa-solid fa-user-shield"></i>
+                    Proxy Management
+                </a>
+            </div>
+
+            <div class="nav-section">
+                <div class="nav-section-title">Security & DB</div>
+                <a href="#" class="nav-item" data-view="database">
+                    <i class="fa-solid fa-database"></i>
+                    Database Control
+                </a>
+                <a href="#" class="nav-item" data-view="face-data">
+                    <i class="fa-solid fa-id-badge"></i>
+                    Face Data
+                </a>
+                <a href="#" class="nav-item" data-view="camera-ip">
+                    <i class="fa-solid fa-video"></i>
+                    Camera IPs
+                </a>
+                <a href="#" class="nav-item" data-view="recovery">
+                    <i class="fa-solid fa-key"></i>
+                    Recovery System
+                </a>
+            </div>
+        </nav>
+
+        <div class="sidebar-footer">
+            <button class="logout-btn" onclick="logout()">
+                <i class="fa-solid fa-right-from-bracket"></i>
+                Sign Out
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <header class="top-header">
+            <div class="search-bar">
+                <i class="fa-solid fa-magnifying-glass" style="color: var(--text-muted);"></i>
+                <input type="text" placeholder="Search system records...">
+            </div>
+
+            <div class="header-actions">
+                <div class="notification-bell">
+                    <i class="fa-regular fa-bell"></i>
+                    <div class="notification-dot"></div>
+                </div>
+
+                <div class="user-profile-wrapper">
+                    <div class="user-profile" onclick="toggleAdminProfile()">
+                        <div class="user-info">
+                            <span class="user-name" id="adminNameDisplay">Administrator</span>
+                            <span class="user-role">Super Admin</span>
+                        </div>
+                        <div class="user-avatar" id="adminInitials">AD</div>
+                    </div>
+
+                    <!-- Admin Dropdown Menu -->
+                    <div class="profile-dropdown" id="adminDropdown">
+                        <div class="dropdown-header">
+                            <span id="dropdownAdminName">Admin User</span>
+                            <small id="dropdownAdminEmail">admin@smartattend.com</small>
+                        </div>
+                        <a href="#" class="dropdown-item" onclick="loadView('profile'); toggleAdminProfile();">
+                            <i class="fa-solid fa-user-gear"></i>
+                            My Account Settings
+                        </a>
+                        <a href="#" class="dropdown-item" onclick="loadView('logs'); toggleAdminProfile();">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                            Security Logs
+                        </a>
+                        <div class="dropdown-divider"></div>
+                        <div class="dropdown-item logout-item" onclick="logout()">
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                            Sign Out Securely
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div class="content-area" id="mainView">
+            <div class="welcome-box">
+                <h1>Welcome Back, <span id="adminNameWelcome" class="skeleton" style="display:inline-block; width:200px;">Administrator</span></h1>
+                <p>System status is nominal. Here is your overview for today.</p>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card skeleton-container">
+                    <div class="stat-icon icon-blue skeleton">
+                        <i class="fa-solid fa-user-tie"></i>
+                    </div>
+                    <div class="stat-value skeleton" id="totalProfessors">00</div>
+                    <div class="stat-label skeleton">Total Professors</div>
+                    <div class="stat-trend trend-up skeleton">
+                        <i class="fa-solid fa-arrow-up"></i> 2.4%
+                    </div>
+                </div>
+
+                <div class="stat-card skeleton-container">
+                    <div class="stat-icon icon-amber skeleton">
+                        <i class="fa-solid fa-user-graduate"></i>
+                    </div>
+                    <div class="stat-value skeleton" id="totalStudents">000</div>
+                    <div class="stat-label skeleton">Total Students</div>
+                    <div class="stat-trend trend-up skeleton">
+                        <i class="fa-solid fa-arrow-up"></i> 1.2%
+                    </div>
+                </div>
+
+                <div class="stat-card skeleton-container">
+                    <div class="stat-icon icon-rose skeleton">
+                        <i class="fa-solid fa-building-columns"></i>
+                    </div>
+                    <div class="stat-value skeleton" id="totalDepartments">0</div>
+                    <div class="stat-label skeleton">Total Departments</div>
+                </div>
+            </div>
+
+            <div class="dashboard-row">
+                <div class="data-card">
+                    <div class="card-header">
+                        <h3>Recent Activity Logs</h3>
+                        <a href="#" class="view-all" onclick="loadView('logs')">View Full Audit</a>
+                    </div>
+                    <div class="activity-list" id="activityList">
+                        <div class="activity-item skeleton-container">
+                            <div class="activity-icon skeleton"></div>
+                            <div class="activity-details">
+                                <div class="skeleton" style="width:200px; height:14px; margin-bottom:8px;"></div>
+                                <div class="skeleton" style="width:120px; height:10px;"></div>
+                            </div>
+                        </div>
+                        <div class="activity-item skeleton-container">
+                            <div class="activity-icon skeleton"></div>
+                            <div class="activity-details">
+                                <div class="skeleton" style="width:180px; height:14px; margin-bottom:8px;"></div>
+                                <div class="skeleton" style="width:100px; height:10px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                        <div class="activity-item">
+                            <div class="activity-icon" style="background: rgba(244, 63, 94, 0.1); color: #f43f5e;">
+                                <i class="fa-solid fa-user-minus"></i>
+                            </div>
+                            <div class="activity-details">
+                                <p><strong>Student Removed</strong>: ID APP-2023-089</p>
+                                <span>5 hours ago</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="../backend/config.js"></script>
+    <script src="../backend/admin_dashboard.js"></script>
+    <script>
+        // Set name
+        document.getElementById('adminNameDisplay').innerText = sessionStorage.getItem('adminName') || 'Administrator';
+        const name = sessionStorage.getItem('adminName') || 'Admin';
+        document.getElementById('adminInitials').innerText = name.substring(0, 2).toUpperCase();
+
+        // Greeting
+        const hour = new Date().getHours();
+        let greet = "Good Night";
+        if(hour < 12) greet = "Good Morning";
+        else if(hour < 17) greet = "Good Afternoon";
+        else greet = "Good Evening";
+        const greetingEl = document.getElementById('greetingText');
+        if (greetingEl) {
+            greetingEl.innerText = `${greet}, ${name.split(' ')[0]}`;
+        }
+
+        // Loader fallback
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                const loader = document.getElementById('loader-overlay');
+                if(loader) {
+                    loader.style.opacity = '0';
+                    setTimeout(() => loader.style.display = 'none', 500);
+                }
+            }, 800);
+        });
+    </script>
+</body>
+
+</html>

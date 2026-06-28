@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta http-equiv="Content-Security-Policy" content="frame-ancestors 'none';">
+	<title>Admin Panel — SmartAttend</title>
+	<link rel="manifest" href="manifest.json">
+	<script>
+		if (sessionStorage.getItem('isAdminAuthenticated') === 'true') {
+			window.location.replace('admin_dashboard.html');
+		}
+	</script>
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+	<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+	<link rel="manifest" href="manifest.json">
+	<meta name="theme-color" content="#f59e0b">
+	<style>
+		:root {
+			--bg-dark: #0f172a;
+			--glass-bg: rgba(15, 23, 42, 0.8);
+			--glass-border: rgba(255, 255, 255, 0.05);
+			--accent-color: #f59e0b; /* Amber/Gold for Admin */
+			--accent-hover: #d97706;
+			--primary-color: #6366f1; /* Indigo */
+			--text-main: #f8fafc;
+			--text-muted: #94a3b8;
+		}
+
+		body {
+			margin: 0;
+			padding: 0;
+			font-family: 'Outfit', sans-serif;
+			background-color: var(--bg-dark);
+			background-image:
+				radial-gradient(circle at 15% 50%, rgba(245, 158, 11, 0.1), transparent 25%),
+				radial-gradient(circle at 85% 30%, rgba(99, 102, 241, 0.1), transparent 25%);
+			color: var(--text-main);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			height: 100vh;
+			overflow: hidden;
+			position: relative;
+		}
+
+		/* Decorative elements */
+		.glow-circle {
+			position: absolute;
+			border-radius: 50%;
+			filter: blur(80px);
+			z-index: 0;
+			pointer-events: none;
+		}
+
+		.circle-1 {
+			width: 400px;
+			height: 400px;
+			background: rgba(245, 158, 11, 0.15);
+			top: -10%;
+			right: -5%;
+		}
+
+		.circle-2 {
+			width: 350px;
+			height: 350px;
+			background: rgba(99, 102, 241, 0.15);
+			bottom: -10%;
+			left: -5%;
+		}
+
+		/* Login Container */
+		.login-container {
+			display: flex;
+			width: 950px;
+			max-width: 95%;
+			height: 620px;
+			background: var(--glass-bg);
+			border: 1px solid var(--glass-border);
+			border-radius: 28px;
+			box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+			backdrop-filter: blur(25px);
+			z-index: 10;
+			overflow: hidden;
+			position: relative;
+		}
+
+		/* Left Branding Side */
+		.branding-side {
+			flex: 1.2;
+			background: linear-gradient(135deg, #1e1b4b, #0f172a);
+			padding: 50px;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			border-right: 1px solid var(--glass-border);
+			text-align: center;
+			position: relative;
+		}
+
+		.branding-side::before {
+			content: '';
+			position: absolute;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 5px;
+			background: linear-gradient(90deg, var(--accent-color), var(--primary-color));
+		}
+
+		.branding-side img {
+			width: 160px;
+			height: auto;
+			margin-bottom: 30px;
+			filter: drop-shadow(0 0 20px rgba(245, 158, 11, 0.3));
+		}
+
+		.branding-side h2 {
+			font-size: 36px;
+			font-weight: 800;
+			margin: 0 0 16px 0;
+			background: linear-gradient(135deg, #fcd34d, #6366f1);
+			-webkit-background-clip: text;
+			-webkit-text-fill-color: transparent;
+			letter-spacing: -0.5px;
+		}
+
+		.branding-side p {
+			color: var(--text-muted);
+			font-size: 17px;
+			line-height: 1.6;
+			margin: 0;
+			max-width: 320px;
+		}
+
+		.admin-badge {
+			display: inline-flex;
+			align-items: center;
+			gap: 8px;
+			background: rgba(245, 158, 11, 0.1);
+			color: var(--accent-color);
+			padding: 6px 16px;
+			border-radius: 100px;
+			font-size: 13px;
+			font-weight: 600;
+			margin-bottom: 24px;
+			border: 1px solid rgba(245, 158, 11, 0.2);
+			text-transform: uppercase;
+			letter-spacing: 1px;
+		}
+
+		/* Right Form Side */
+		.form-side {
+			flex: 1;
+			padding: 50px;
+			display: flex;
+			flex-direction: column;
+			justify-content: center;
+		}
+
+		.form-header {
+			margin-bottom: 35px;
+		}
+
+		.form-header h3 {
+			margin: 0 0 8px 0;
+			font-size: 30px;
+			font-weight: 700;
+		}
+
+		.form-header p {
+			margin: 0;
+			color: var(--text-muted);
+			font-size: 15px;
+		}
+
+		/* Form Fields */
+		.form-group {
+			margin-bottom: 24px;
+			position: relative;
+		}
+
+		.form-group label {
+			display: block;
+			margin-bottom: 10px;
+			color: var(--text-muted);
+			font-weight: 500;
+			font-size: 14px;
+		}
+
+		.form-group i {
+			position: absolute;
+			bottom: 14px;
+			left: 18px;
+			color: var(--text-muted);
+			font-size: 18px;
+		}
+
+		.toggle-password {
+			left: auto !important;
+			right: 18px;
+			cursor: pointer;
+			transition: color 0.3s;
+			z-index: 2;
+		}
+
+		.toggle-password:hover {
+			color: var(--text-main);
+		}
+
+		.form-control {
+			width: 100%;
+			padding: 15px 48px 15px 48px;
+			background: rgba(30, 41, 59, 0.5);
+			border: 1px solid var(--glass-border);
+			border-radius: 14px;
+			color: white;
+			font-family: inherit;
+			font-size: 15px;
+			transition: all 0.3s ease;
+			box-sizing: border-box;
+		}
+
+		.form-control:focus {
+			outline: none;
+			border-color: var(--accent-color);
+			box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.1);
+			background: rgba(30, 41, 59, 0.8);
+		}
+
+		/* Login Button */
+		.login-btn {
+			width: 100%;
+			background: linear-gradient(135deg, var(--accent-color), #d97706);
+			color: #0f172a;
+			border: none;
+			padding: 18px;
+			border-radius: 14px;
+			font-size: 16px;
+			font-weight: 700;
+			font-family: inherit;
+			cursor: pointer;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 12px;
+			transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+			box-shadow: 0 10px 25px rgba(245, 158, 11, 0.2);
+			margin-top: 10px;
+		}
+
+		.login-btn:hover {
+			transform: translateY(-3px);
+			box-shadow: 0 15px 35px rgba(245, 158, 11, 0.3);
+			filter: brightness(1.1);
+		}
+
+		.login-btn:active {
+			transform: translateY(0);
+		}
+
+		.error-msg {
+			background: rgba(239, 68, 68, 0.1);
+			border: 1px solid rgba(239, 68, 68, 0.2);
+			color: #f87171;
+			padding: 12px;
+			border-radius: 10px;
+			font-size: 14px;
+			margin-bottom: 20px;
+			text-align: center;
+			display: none;
+		}
+
+		.security-note {
+			margin-top: 30px;
+			text-align: center;
+			font-size: 13px;
+			color: var(--text-muted);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 8px;
+		}
+
+		.security-note i {
+			color: #10b981;
+		}
+
+		/* Responsive */
+		@media (max-width: 850px) {
+			.login-container {
+				flex-direction: column;
+				height: auto;
+				width: 450px;
+			}
+			.branding-side {
+				padding: 40px;
+				border-right: none;
+				border-bottom: 1px solid var(--glass-border);
+			}
+			.form-side {
+				padding: 40px;
+			}
+		}
+	</style>
+</head>
+
+<body>
+	<div class="glow-circle circle-1"></div>
+	<div class="glow-circle circle-2"></div>
+
+	<div class="login-container">
+		<!-- Left Branding Side -->
+		<div class="branding-side">
+			<div class="admin-badge">
+				<i class="fa-solid fa-shield-halved"></i>
+				System Administrator
+			</div>
+			<img src="../images/bg1.1.png" alt="SmartAttend Logo" 
+				onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZjU5ZTBiIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDJhMTAgMTAgMCAxIDAgMTAgMTAgMTAgMTAgMCAwIDAtMTAgMTB6Ii8+PC9zdmc+'">
+			<h2>Management Console</h2>
+			<p>Secure portal for system configuration, user auditing, and data management.</p>
+		</div>
+
+		<!-- Right Form Side -->
+		<div class="form-side">
+			<div class="form-header">
+				<h3>Admin Login</h3>
+				<p>Please authorize yourself to access management tools.</p>
+			</div>
+
+			<div id="loginError" class="error-msg"></div>
+
+			<form id="adminLoginForm">
+				<div class="form-group">
+					<label>Administrator Email</label>
+					<i class="fa-solid fa-user-shield"></i>
+					<input type="email" id="emailInput" class="form-control" placeholder="admin@university.edu" required>
+				</div>
+
+				<div class="form-group">
+					<label>Security Key (Password)</label>
+					<i class="fa-solid fa-key"></i>
+					<input type="password" id="passwordInput" class="form-control" placeholder="••••••••" required autocomplete="current-password">
+					<i class="fa-solid fa-eye toggle-password" onclick="const p=document.getElementById('passwordInput'); if(p.type==='password'){p.type='text';this.classList.remove('fa-eye');this.classList.add('fa-eye-slash');}else{p.type='password';this.classList.remove('fa-eye-slash');this.classList.add('fa-eye');}"></i>
+				</div>
+
+				<button type="submit" id="loginBtn" class="login-btn">
+					<span id="btnText">Verify & Enter</span>
+					<i id="btnIcon" class="fa-solid fa-unlock-keyhole"></i>
+				</button>
+			</form>
+
+			<div class="security-note">
+				<i class="fa-solid fa-circle-check"></i>
+				256-bit Encrypted Session
+			</div>
+		</div>
+	</div>
+
+	<script src="../backend/config.js"></script>
+	<script src="../backend/admin_login.js"></script>
+	<script>
+		if ('serviceWorker' in navigator) {
+			window.addEventListener('load', () => {
+				navigator.serviceWorker.register('sw.js')
+					.then(reg => console.log('SmartAttend App Registered!'))
+					.catch(err => console.log('Registration failed:', err));
+			});
+		}
+	</script>
+</body>
+
+</html>

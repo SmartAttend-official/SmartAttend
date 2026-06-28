@@ -1,0 +1,511 @@
+# SmartAttend — Advanced Attendance Management System
+
+SmartAttend is a professional, full-stack attendance management solution designed for universities. It features real-time facial recognition, automated email reporting, and a robust Google Sheets backend.
+
+## 🚀 Recent Major Updates & Change Log
+
+### 1. Full Backend Migration to Google Cloud
+**Objective**: Transition from unstable `localStorage` to a unified Google Apps Script API.
+
+*   **Centralized Configuration (`backend/config.js`)**: Created a single source of truth for the `SCRIPT_URL`. All pages now reference this central file.
+*   **HTML Portals Modernization**: Updated the following files to include `config.js` and use dynamic backend routing:
+    - `Login.html` & `student_login.html`
+    - `dashboard1.html` (Main Professor Dashboard)
+    - `Record.html` (Student Records Management)
+    - `Leave_Requests.html` & `History.html`
+    - `professorProfile.html` & `register.html`
+*   **JavaScript Logic Refactoring**: Updated all `.js` files in the `backend/` folder to utilize `window.SMART_ATTEND_CONFIG.SCRIPT_URL` for all `fetch` operations.
+
+### 2. Enhanced Leave Request & Notification System
+**Objective**: Enable cross-device synchronization and automated communication.
+
+*   **Cloud Persistence**: All leave requests are now sent to and fetched from the `LeaveRequests` tab in the Google Sheet.
+*   **Automated Email Notifications**: 
+    - **Student**: Notified via email for both **Approved** (✅) and **Rejected** (❌) statuses.
+    - **Parent**: Notified via email ONLY when a request is **Approved**.
+    - Included the **Reason for Leave** and the **Attached Image** (as an inline attachment) in the relevant notification emails.
+*   **Server-Side Timestamping**: The backend now generates an accurate IST timestamp (`submittedAt`) for every new request.
+
+### 3. Data Integrity & Search Optimization
+**Objective**: Fix broken date filters and ensure data consistency.
+
+*   **Date Filter Fix**: Updated the Apps Script to use `getDisplayValues()`. This ensures dates like `2026-05-08` don't get converted into complex ISO timestamps, allowing the frontend filters to match them perfectly.
+*   **Live UI Listeners**: Added `change` event listeners to date filters in `student_dashboard.js` and `professor_profile.js` to trigger instant UI refreshes when a date is selected.
+*   **Session Management**: Improved the session token verification script in all headers to use the centralized Cloud URL.
+*   **Mobile App Experience (PWA)**: Added `manifest.json` and `sw.js` to enable "Install as App" functionality on Android and iOS devices.
+
+## 📂 Project Access & Backups
+
+The latest stable project folder and code repositories have been uploaded and shared with:
+*   **Email Access / Owner**: `aman7474ak@gmail.com`
+
+## 🛠 Technical Architecture
+
+- **Frontend**: HTML5, CSS3 (Glassmorphism), JavaScript (ES6), JQuery.
+- **Face AI**: `face-api.js` (weights loaded via CDN).
+- **Backend**: Google Apps Script (REST API).
+- **Database**: Google Sheets (Multi-tab architecture).
+- **Communication**: Google MailApp for OTP, Absence Alerts, and Parent Notifications.
+
+## 📋 How to Sync New Changes
+
+1.  **Script Update**: Copy code from `SmartAttend_AppScript_FINAL.gs` to your Google Script Editor and click **"New Deployment"**.
+2.  **Config Update**: Update the `SCRIPT_URL` in `backend/config.js` with your latest deployment link.
+3.  **Sheet Setup**: Ensure your Student Sheet has a column named `Parent_Email`.
+
+---
+*Documented on May 8, 2026*
+
+## 🌟 Major Updates (May 9 — May 12, 2026)
+
+### 4. Institutional Standardization & Global Refactoring
+**Objective**: Ensure system-wide data consistency and professional branding.
+
+*   **Standardized Department Naming**: Unified all departmental references (formerly BCA/CS) to **"Bachelor of computer application"** across all frontend filters and backend logic to prevent data mismatch.
+*   **Project File Cleanup**: Reorganized the root directory and archived legacy code to `SmartAttend_AppScript_ORIGINAL.gs`.
+
+### 5. Self-Service Onboarding & OTP Automation
+**Objective**: Remove administrative friction and enhance security during user creation.
+
+*   **OTP-Based Activation**: Transitioned user creation (Professor/Student) to a self-service model. The system now generates a **6-digit Registration OTP** instead of a random password.
+*   **Professional Email Templates**: Implemented high-end HTML email templates for:
+    - **Professor Welcome**: Includes login credentials and security warnings.
+    - **Student Welcome**: Features a prominent 6-digit OTP for initial password setup.
+*   **Password Recovery Fix**: Standardized the `verify_otp` logic to be case-insensitive and robust against whitespace errors in student emails.
+
+### 6. Security Hardening & Performance Optimization (Today)
+**Objective**: Transition to a professional, backend-verified security model.
+
+*   **Server-Side Data Filtering**: Optimized login performance for large spreadsheets. The system now filters records by **Email** on the Google Cloud server before sending data to the client, significantly reducing load times.
+*   **Premium UI Login Sequence**: Implemented a unified, high-end feedback loop across all 3 portals (Admin, Professor, Student):
+    - **Step 1**: "Authorizing..." (Initial fetch)
+    - **Step 2**: "Securing Session..." (Server-side validation)
+    - **Step 3**: **"Access Granted"** (Green button animation with glow effects)
+*   **Unified Redirection Delay**: Standardized a **2-second "Success Hold"** across all portals to provide a smooth, premium transition into the dashboards.
+*   **Case-Insensitive Login**: Improved matching logic to handle varying spreadsheet column names (e.g., `Email`, `email`, `password`, `Password`) automatically.
+
+---
+*Updated on May 13, 2026 (Date Logic Patch)*
+
+### 7. Timezone Synchronization & Local Date Logic
+**Objective**: Eliminate "Off-by-One" date errors during late-night or early-morning attendance sessions.
+
+*   **Local Date Capture**: Replaced UTC-based `toISOString()` with `toLocaleDateString('en-CA')` (YYYY-MM-DD) across all frontend portals. This ensures that attendance taken at 12:30 AM IST is recorded as the correct local day, not the previous day in UTC.
+*   **IST Backend Logging**: Updated `SmartAttend_AppScript_FINAL.gs` to use explicit **GMT+5:30** formatting for all audit logs.
+
+
+## 📚 Research & Methodology
+
+During development, a significant discussion was held regarding the academic and research potential of SmartAttend. The system is a prime candidate for a research paper due to its unique architecture and development process.
+
+### 1. The "Vibe Coding" Paradigm
+SmartAttend was developed using a **Human-AI Collaborative Engineering** model (often called "Vibe Coding"). 
+- **Human Role**: Architect & Logic Designer (Defining complex workflows like proxy assignments and parental notification triggers).
+- **AI Role**: Technical Implementation & Refactoring (Translating high-level logic into optimized Google Apps Script and JavaScript).
+- **Research Angle**: Evaluating how AI-assisted development accelerates the software life cycle for domain experts.
+
+### 2. Technical Research Pillars
+- **Zero-Cost Scalability**: Utilizing Google Apps Script and Google Sheets as a serverless, relational database replacement for institutional ERPs.
+- **Edge-AI for Privacy**: Implementing `face-api.js` for client-side facial recognition, reducing server load and ensuring biometric data privacy.
+- **PWA Integration**: Bridging the gap between web and native applications in an educational context.
+
+### 3. Potential Paper Titles
+- *Developing Cost-Effective Institutional ERPs via Serverless Cloud Architectures.*
+- *The Efficacy of AI-Human Collaboration in Rapid Prototyping: A Case Study on SmartAttend.*
+- *Edge-Computing and Computer Vision: Real-Time Attendance Tracking in the Browser.*
+
+---
+*Updated on May 14, 2026 (Premium UI & Automation Patch)*
+
+## 🌟 Major Updates (May 14, 2026)
+
+### 8. Premium UI/UX & Micro-Interactions
+**Objective**: Elevate the platform's visual excellence and perceived performance.
+
+*   **Skeleton Loading Architecture**: Implemented shimmering skeleton placeholders on the Admin Dashboard. This prevents jarring layout shifts and provides immediate visual feedback while background data fetches from Google Sheets.
+*   **Fluid Motion & Transitions**: Added subtle CSS `fade-in` and `slide-up` animations for all module transitions (Professors, Students, Settings), creating a premium, native-app feel.
+*   **Optimized Boot Sequence**: Refined the "SECURITY CHECK" overlay logic to disappear instantly as the JS engine initializes, bridging the gap between login and data visualization with active skeletons.
+
+### 9. Smart Database Automation
+**Objective**: Ensure long-term system stability and focus on high-level administrative metrics.
+
+*   **Auto-Cleanup for Audit Logs**: Implemented a throttled background task in `SmartAttend_AppScript_FINAL.gs` that automatically deletes audit logs older than 30 days. To maintain high performance, this cleanup runs only once every 24 hours.
+*   **Department-Centric Dashboard**: Refactored the Admin Stats Grid to focus on core institutional totals. Removed "Pending Leaves" and "Today's Attendance" (metrics better suited for professor views) and replaced them with a **"Total Departments"** counter linked to the academic registry.
+*   **Duplicate ID Resolution**: Performed a global audit of the `admin_dashboard.html` to resolve duplicate HTML IDs, ensuring 100% JS stability and eliminating potential UI hangs.
+
+---
+*Updated on May 17, 2026 (Department Routing Patch)*
+
+## 🌟 Major Updates (May 17, 2026)
+
+### 10. Department-Specific Professor Routing & Advanced Filtering
+**Objective**: Organize professor data by department and enable cross-sheet data aggregation in the admin panel.
+
+*   **Department Routing Logic**: Implemented exclusive routing for professors when added via the admin panel.
+    - Professors are routed to specific sheets (`MCA`, `BBA`, `MBA`) based on their department.
+    - `Sheet1` is reserved primarily for **Bachelor of Computer Application (BCA)** professors or as a fallback.
+*   **Unified Professor Fetching**: Updated the backend API to aggregate professor data from all department sheets (`Sheet1`, `MCA`, `BBA`, `MBA`) when displaying the list in the Admin Panel's Professor Management section. This ensures the filter option works across all departments.
+*   **Standardized Department Naming**: Enforced full department names (e.g., "Master of Computer Application", "Bachelor of Business Administration") in the stored data, regardless of whether short codes (like "MCA") or full names are used during input.
+*   **MBA Pluralization Fix**: Specifically updated the storage name for MBA to **'Masters of Business Administration'** to match institutional standards.
+
+---
+*Updated on May 18, 2026 (Architecture & Scale Documentation)*
+
+## 🌟 Major Updates (May 18, 2026)
+
+### 11. System Analysis & Architecture Documentation
+**Objective**: Document the scale of the project and create professional architecture blueprints.
+
+*   **System Scale Analysis**: Conducted a line-of-code audit revealing the system has grown to approximately **14,000 lines** of full-stack code (HTML, JS, and Apps Script).
+*   **Detailed Architecture Specification**: Created a dedicated `architecture_description.txt` file containing:
+    *   **Mermaid.js Code**: For generating precise flowcharts of the system layers (Frontend, API, Storage).
+    *   **AI Prompt**: A hyper-detailed prompt for generating 3D isometric infographics of the system.
+    *   **Component Breakdown**: A structured text description of the Frontend, Backend, and Database files and workflows.
+*   **Visual Architecture Diagram**: Generated a high-tech 3D visual diagram of the system architecture.
+*   **Academic Data Completion**: Completed the addition of all subjects for **BCA** and **MCA** departments into the system's academic registry.
+
+---
+*Updated on May 19, 2026 (History Dashboard Patch)*
+
+## 🌟 Major Updates (May 19, 2026)
+
+### 12. Attendance History Filtering & Data Synchronization Fix
+**Objective**: Resolve the mismatch between saved attendance session parameters and history filter queries to restore history log functionality for professors.
+
+*   **Parameter String Mapping**: Fixed an issue in `history.js` where the dropdown values for Department (Codes vs Names), Semester (case sensitivity), and Subject were mismatched with the exact strings saved during a live session.
+*   **Case-Insensitive Semester Matching**: Standardized the semester query mapping to automatically force lowercase conversion (e.g. `1st Sem` -> `1st sem`) before dispatching to the Google Cloud backend.
+*   **Exact Text Extractor**: Replaced `.value` lookups with `.options[.selectedIndex].text` logic in the frontend filter script to dynamically match human-readable tags stored by `start_attendance.js`.
+
+---
+*Updated on May 20, 2026 (Live AI Scanner & Cloud Storage Patch)*
+
+## 🌟 Major Updates (May 20, 2026)
+
+### 13. Fully-Integrated Live AI Web Scanner & Cloud Encodings
+**Objective**: Eliminate manual Python scripts and seamlessly integrate real-time face matching into the web dashboard using Cloud-synced data.
+
+*   **Cloud-Synced Face Encodings**: Migrated facial encoding storage from fragile local browser cache (`localStorage`) directly to the Student Google Sheet (`Face_Encoding` column). This ensures student face data is permanently backed up and accessible across any device or browser.
+*   **Persistent Live Scanning UI**: Redesigned the "Start Face Scan" logic in `dashboard1.html`. The attendance table now remains persistently visible during active scanning, instantly flashing from Absent (Red) to Present (Green) the millisecond a face is successfully authenticated by the `face-api.js` engine.
+*   **Automated Desktop Launcher**: Created `Start_SmartAttend.bat`, a one-click Windows executable that seamlessly boots necessary background bridges and launches the Web Dashboard without touching the terminal.
+*   **One-Click Start/Stop Feed**: Re-engineered the camera interface so it continuously processes the live stream, evaluating every passing face, until explicitly terminated by the professor via the stop button.
+
+---
+*Updated on **May 22, 2026** (PWA Deployment Documentation)*
+
+## 🌟 Major Updates (**May 22, 2026**)
+
+### 14. Mobile App Deployment via **Netlify**
+**Objective**: Document the official method for deploying SmartAttend as an installable Progressive Web App (PWA).
+
+*   **PWA Security Requirements**: Mobile browsers block the "Install App" functionality (`manifest.json` & `sw.js`) and the Face Recognition webcam unless the application is hosted on a secure **HTTPS** server. Local HTTP networks are insufficient.
+*   **Official Hosting Solution**: **Netlify** has been selected as the optimal deployment platform. It instantly wraps the HTML/JS frontend in a secure HTTPS connection.
+*   **Deployment Workflow**: 
+    1. Drag and drop the project folder into `drop.netlify.com`.
+    2. Share the generated HTTPS link.
+    3. When users visit the link on mobile, the secure connection allows the browser to read `manifest.json` and prompt the **"Add to Home Screen"** installation.
+*   **Reference Document**: Created `netlify_deployment_guide.txt` for detailed, step-by-step instructions on triggering the mobile app download.
+
+### 15. Live Lab Attendance (Access Code System)
+**Objective**: Enable secure, device-fingerprinted self-service attendance for computer lab sessions without requiring face scans.
+
+*   **Professor Access Generator**: Added `Lab_Attendance.html` with a clean, scrollable interface. Professors select the session details and generate a secure 6-digit access code that displays in a high-visibility container with a 5-minute countdown timer.
+*   **Live Roster Grid**: Mimicking the Face Scan UX, a live student grid instantly appears below the generated code. It dynamically fetches all students and automatically updates their status from Absent (Red) to Present (Green) in real-time as they submit the code from their devices.
+*   **Anti-Proxy Device Fingerprinting**: Deployed advanced browser fingerprinting (`student_dashboard.js`) that captures the user agent, screen dimensions, color depth, and language. This strictly prevents a single device from submitting multiple attendance requests for different student IDs.
+*   **"Session Type" History Filtering**: Updated `History.html` to separate Theory Classes from Lab Sessions. The backend securely appends `(Lab)` to the subject name so professors can independently query Lab vs. Theory logs without data collision.
+
+---
+*Updated on **May 29, 2026** (Late Attendance System Patch)*
+
+## 🌟 Major Updates (**May 29, 2026**)
+
+### 16. Automated Late Attendance Alert System
+**Objective**: Allow professors to dynamically track late students and automatically notify both students and parents with customized email alerts before saving the session.
+
+*   **Professor Dashboard UI Enhancement**: Updated `dashboard1.html` to include a manual `Late Minutes` input field next to every scanned student. Added a dedicated **"Send Late Alerts"** button alongside the absentee alerts.
+*   **Targeted Email Routing Logic**: Implemented an advanced Google Apps Script backend (`email_late_students`) that dynamically extracts `Email` for the student alert and `Parent_Email` for the parent alert, ensuring strict separation of communication channels.
+*   **Customized HTML Email Templates**: 
+    - **Student Template**: Designed an aesthetic amber-themed warning template that alerts the student of exactly how many minutes late they were to the specific subject.
+    - **Parent Template**: Designed a formal, professional white-card notification template sent exclusively to the parents, detailing their ward's late arrival.
+*   **Data Integrity Fixes**: Overhauled the `getBestSheet` Google Apps Script fetching logic to prioritize live, newly created `student` tabs over legacy `Sheet2` backup tabs, instantly resolving stale data conflicts and email routing bugs.
+
+---
+*Updated on **May 30, 2026** (Lab Notifications & Date Security Patch)*
+
+## 🌟 Major Updates (**May 30, 2026**)
+
+### 17. Integrated Lab Attendance Notifications
+**Objective**: Mirror the robust email notification system from Face Scan into the live Lab Attendance module.
+
+*   **Dedicated Lab Notification Triggers**: Upgraded the Lab Attendance interface to fully support the manual dispatch of both **Absentee Alerts** and **Late Attendance Alerts**.
+*   **Real-time Late Minutes Tracking**: Added a dynamic "Late (Mins)" input column directly into the live lab roster, allowing professors to specify exact tardiness duration before sending alerts.
+*   **Unified Email Routing**: Connected the Lab interface to the main Google Apps Script architecture, guaranteeing that parents and students receive identically formatted HTML alerts regardless of whether attendance was taken via Face Scan or Lab Access Code.
+
+### 18. Calendar Validation & Security Checkpoints
+**Objective**: Prevent professors from generating sessions for past dates or weekends.
+
+*   **Strict Weekend Restrictions**: Implemented dual-layer (Frontend & Backend) validation logic that explicitly blocks the generation of Lab Access Codes if the selected date falls on a Saturday or Sunday, ensuring alignment with official academic schedules.
+*   **Forward-Only Calendar Guard**: Updated both `Start Attendance` (Face Scan) and `Lab_Attendance` portals. The HTML5 date picker `min` attribute is now dynamically bound to the current local date (`YYYY-MM-DD`), physically preventing the selection of any backward/past dates in the calendar UI.
+
+### 19. On-Demand Analytic Reports (Settings Panel)
+**Objective**: Empower professors with a real-time analytics generator to track their classes' attendance health directly from the Settings menu.
+
+*   **Granular Report Targeting**: Added an aesthetic UI card to `Setting.html` with dynamic cascading dropdowns allowing the professor to specifically target reports by **Department**, **Semester**, and **Subject**.
+*   **Holistic 'All Subjects' Mode**: Integrated a powerful "All Subjects" option within the dropdown, enabling professors to generate a holistic attendance report encompassing all subjects for a specific department and semester in a single email.
+*   **Dynamic Timeframes**: Integrated four core analytic timeframes: **Weekly** (Last 7 Days), **Monthly** (Last 30 Days), **Half-Yearly** (Last 182 Days), and **Yearly** (Last 365 Days).
+*   **Automated Email Dispatch Engine**: Built a robust backend script (`generateAnalyticReport`) that instantly cross-references the `AttendanceHistory` logs with the active `Student` database, aggregates total classes vs. attended classes per student, and calculates precise percentage health.
+*   **Professional HTML Delivery**: The engine dynamically constructs and securely emails a branded, color-coded HTML table straight to the Professor's inbox, highlighting low-attendance students (below 75%) in red for immediate intervention.
+
+### 20. Progressive Web App (PWA) Deployment
+**Objective**: Transform the main SmartAttend web portal into an installable mobile application via Netlify.
+
+*   **Unified PWA Architecture**: Integrated the `manifest.json` and Service Worker (`sw.js`) caching logic directly into the core `SmartAttend2@` web files.
+*   **Universal Installation**: Whether you are logging in as a **Professor**, **Admin**, or **Student**, navigating to the login portals on a mobile device will trigger an OS-level prompt to "Add to Home Screen", downloading SmartAttend as a native, offline-capable application.
+*   **Live Production Environment**: The entire platform has been successfully compiled and deployed to the live server. You can access and install the app globally via this URL:
+    👉 **[https://extraordinary-baklava-246d96.netlify.app](https://extraordinary-baklava-246d96.netlify.app)**
+
+---
+*Updated on **May 31, 2026** (Dashboard UI/UX & Timetable Sync Optimization)*
+
+## 🌟 Major Updates (**May 31, 2026**)
+
+### 21. Student Dashboard Architectural Rebuild
+**Objective**: Enhance the visual balance, spacing, and scroll behaviors within the student portal for a highly polished, aesthetic user experience.
+
+*   **Responsive Side-by-Side Layouts**: Restructured the Student Dashboard CSS Grid. The **My Leave Request Status** card and the **Medical / Leave Request** form are now perfectly aligned horizontally, dynamically matching heights.
+*   **Targeted Layout Condensation**: Aggressively optimized the internal padding, margins, and text-area dimensions of the Leave Request form, drastically reducing its physical footprint on the screen to prevent awkward vertical stretching.
+*   **Custom Scrollbar Syncing**: Imported the exact `overflow-y: auto` scrollbar logic into the Leave Request History. This ensures the history tracks perfectly to the bottom of the card without generating vast empty dead space, matching the Medical form's height.
+*   **Timetable Repositioning**: Anchored the **My Class Timetable** exclusively to the bottom row, spanning the full viewport width (`grid-column: 1 / -1;`) for a grounded, structured UI conclusion.
+
+### 22. Robust Cross-Panel Timetable Synchronization
+**Objective**: Resolve strict string-matching conflicts between how Admin uploads are logged and how Professors/Students query the database.
+
+*   **Fuzzy Department Matching**: Overhauled the Google Apps Script backend (`SmartAttend_AppScript_FINAL.gs`). Replaced strict equality checks with advanced matching logic (`isDeptMatch`) that seamlessly reconciles abbreviated codes (e.g., "BCA") uploaded by Admins with the full-text names (e.g., "Bachelor of computer application") queried by users.
+*   **Semester Normalization**: Added Regex sanitization (`/[^0-9]/g`) during timetable lookup that automatically extracts the numeric root (e.g., "2") from varied semester formats like "2nd sem" or "2nd Semester", ensuring bulletproof data retrieval.
+*   **Case & Whitespace Insensitivity**: Implemented universal `.trim().toLowerCase()` standardization across all timetable upload, delete, and retrieval endpoints.
+
+### 23. Live Lab Attendance UI Compaction
+**Objective**: Optimize the footprint of the Live Session Access Code generator to prevent it from visually dominating the dashboard.
+
+*   **Code Display Normalization**: Significantly reduced the Live Session code box `font-size` down to 42px and tightened `letter-spacing` to 8px, creating a sleek, highly legible black-on-white high-contrast display.
+*   **Card Throttling**: Restrained the Live Lab Attendance card's `max-width` down to 350px, forcing it into a compact, perfectly proportioned aesthetic that integrates smoothly with the interface.
+
+---
+*Updated on **May 31, 2026** (Project Documentation)*
+
+## 🌟 Major Updates (**May 31, 2026**)
+
+### 24. Academic & Technical Documentation Suite
+**Objective**: Provide high-level architectural blueprints and rigorous AI-focused academic preparation materials for project evaluation.
+
+*   **Project Architecture Guide**: Generated `SmartAttend_Project_Architecture.md` outlining the serverless topology, PWA integration, and ML-ready data structuring. 
+*   **Professor Viva Preparation Guide**: Generated `SmartAttend_Professor_Viva_Guide.md`, a highly curated list of 21 rigorous, reasoning-based interview questions tailored to an AI/ML Professor's perspective (covering edge computing, collision rates, fuzzy matching logic, and database concurrency).
+*   **File Organization**: Both documentation files have been relocated into the `/pdf` directory for streamlined exporting and academic submission.
+
+---
+*Updated on **May 31, 2026** (Analytic Reports Filter Enhancement)*
+
+## 🌟 Major Updates (**May 31, 2026**)
+
+### 25. Enhanced Analytic Reports Filtering
+**Objective**: Allow professors to generate distinct, precise analytical reports by separating Theory and Lab sessions.
+
+*   **Granular Session Type Selection**: Added a dedicated `Session Type` dropdown to the "Generate Analytic Reports" settings panel (`Setting.html`). Professors can now explicitly choose between generating reports for **Theory**, **Lab**, or **All** sessions.
+*   **Dynamic Data Filtering**: Upgraded the Google Apps Script backend to dynamically parse the selected session type. It accurately distinguishes between lab and theory attendance records on the fly, preventing data collision.
+*   **Comprehensive Timeframes**: Reports can still be generated across multiple critical timeframes: **Weekly** (Last 7 Days), **Monthly** (Last 30 Days), **Half-Yearly** (Last 182 Days), and **Yearly** (Last 365 Days).
+
+---
+*Updated on **June 1, 2026** (Security: OTP Expiration & Pre-Verification)*
+
+## 🌟 Major Updates (**June 1, 2026**)
+
+### 26. Forgot Password Security Hardening
+**Objective**: Prevent the use of stale OTPs and ensure users are only permitted to access the password reset screen after successful server-side OTP validation.
+
+*   **Pre-Verification Layer (Step 2)**: Overhauled the "Forgot Password" flow for both **Professors** (`forget.js`) and **Students** (`student_forget.js`). Users must now pass a live API check (`verify_otp_only`) upon entering their OTP. If the OTP is incorrect, progression is instantly blocked.
+*   **Strict 10-Minute Expiration**: The Google Apps Script backend now records an exact `OTP_Timestamp` whenever a password recovery OTP is generated (either by the user or the admin). The system enforces a strict 10-minute validity window.
+*   **Dual-Stage Security Check**: If an OTP expires while a user is sitting on the "Set New Password" page, the final submission will securely reject the request and force the user back to Step 1 to generate a fresh OTP.
+
+---
+*Updated on **June 1, 2026** (Camera IP Management)*
+
+## 🌟 Major Updates (**June 1, 2026**)
+
+### 27. Camera IP Management System (Admin Panel)
+**Objective**: Build a robust, scalable backend management system for assigning and tracking fixed Camera IPs to specific classrooms.
+
+*   **Cascading Dropdown Architecture**: Integrated an enterprise-grade double dropdown filter in the "Add Camera IP" modal. Admins must first select a **Department**, which instantly filters the **Classroom** dropdown to only show non-duplicate rooms assigned to that specific department, eliminating scroll fatigue.
+*   **Duplicate Entry Protection**: Built backend validation (`SmartAttend_AppScript_FINAL.gs`) that automatically intercepts and blocks any attempts to assign multiple IP addresses to the exact same classroom, ensuring a strict 1-to-1 database mapping.
+*   **Full CRUD Interface**: The Admin Dashboard now supports full Create, Read, Update, and Delete operations for Camera IPs. Admins can seamlessly update existing IP entries using a pre-filled edit modal without needing to delete and recreate the record.
+
+---
+*Updated on **June 4, 2026** (Admin Dashboard Patch)*
+
+## 🌟 Major Updates (**June 4, 2026**)
+
+### 28. Student Mobile Number Sync Fix
+**Objective**: Resolve backend parsing errors when adding new students via the Admin Panel.
+
+*   **Dynamic Column Mapping**: Updated the "Add Student" logic in `admin_dashboard.js` to securely capture the student's mobile number. The system now uses multi-key fallback mapping (`Mobile Number`, `Mobile`, `Mobile No`, `Phone`) to ensure the Google Apps Script backend processes the data correctly, regardless of minor discrepancies in the Google Sheet column headers.
+
+### 29. Professor Dashboard UI/UX Standardization
+**Objective**: Ensure 100% visual consistency and fix component clipping across all professor-facing pages.
+
+*   **Unified Avatar Profile Menu**: Standardized the top navigation bar across all 9 Professor Panel pages. The dropdown menu now universally displays the Professor's Name, Email, Mobile Number, and Log Out button with identical HTML structure and spacing.
+*   **Z-Index Glassmorphism Fix**: Corrected a critical CSS stacking context bug where the glass-effect `topbar` caused the profile dropdown to render *behind* page cards. Applied `position: relative` and `z-index: 1000` system-wide.
+*   **Custom Alert Layering**: Adjusted all `custom-alert` success notifications to `z-index: 9999` to ensure system messages always float securely above the top navigation bar and avatar dropdowns.
+
+**Files & Line Numbers Updated:**
+*   `dashboard1.html`: `.topbar` CSS (Line 168), `.custom-alert` CSS (Line 384), and profile dropdown HTML (Lines 745-760).
+*   `Start Attendance.html`: `.topbar` CSS (Line 135) and profile dropdown HTML (Lines 419-433).
+*   `History.html`: `.topbar` CSS (Line 156) and profile dropdown HTML (Lines 437-449).
+*   `Record.html`: `.topbar` CSS (Line 155) and profile dropdown HTML (Lines 680-700).
+*   `Lab_Attendance.html`: `.topbar` CSS (Line 150) and profile dropdown HTML (Lines 429-440).
+*   `professorProfile.html`: `.topbar` CSS (Line 207), `.custom-alert` CSS (Line 604), and profile HTML (Lines 649-675).
+*   `Proxy_Assignments.html`: `.topbar` CSS (Line 140) and profile HTML (Lines 396-410).
+*   `Leave_Requests.html`: `.topbar` CSS (Line 74) and profile HTML (Lines 144-159).
+*   `Setting.html`: `.topbar` CSS (Line 147), `.custom-alert` CSS (Line 474), and profile HTML (Lines 520-545).
+
+### 30. Admin Management CRUD Standardization
+**Objective**: Modernize the administrative panel by standardizing the "Update-via-Modal" pattern across all remaining management modules, ensuring a seamless and uniform data-entry experience.
+
+*   **Global Modal Pattern**: Replaced generic edit operations with dedicated Update Modals that dynamically pre-fill existing data arrays (`window.CURRENT_DEPTS`, `ALL_CLASSES_DATA`, etc.).
+*   **Modules Upgraded**:
+    - **Departments**: Added `showUpdateDeptModal` and dynamically mapped code, name, year, and status.
+    - **Classes & Subjects**: Added `showUpdateClassModal` and `showUpdateSubjectModal`.
+    - **Timetable Management**: Added `showUpdateTimetable` to automatically pre-fill Department and Semester constraints in the upload interface.
+    - **Proxy Assignments**: Added `showUpdateProxyModal` with complex dropdown parsing for task types (Proxy vs Invigilation).
+*   **Backend Support**: Augmented the Google Apps Script `doPost` to handle the generic `update_academic` action for all subSheets using the highly efficient `updateRowByColumn` function.
+
+**Files & Key Line Numbers Updated:**
+*   `backend/admin_dashboard.js`:
+    *   **Departments**: UI Changes & Modal Logic (Lines 1975 - 2005).
+    *   **Classes & Subjects**: UI Changes & Modal Logic (Lines 2328 - 2355, 2431 - 2456).
+    *   **Proxy Management**: UI Changes & Modal Logic (Lines 2561 - 2610).
+    *   **Timetable**: UI Changes & Logic (Lines 3009, 3068 - 3074).
+*   `Google script code/SmartAttend_AppScript_FINAL.gs`:
+    *   **Central API Handler**: Added `update_academic` logic to `doPost` (Lines 1686 - 1696).
+
+### 31. Robust Data Fetching & Live Polling Stabilization
+**Objective**: Guarantee that data queries for fetching students and polling live lab attendance updates reliably match backend Google Sheet records, regardless of formatting inconsistencies or naming abbreviations.
+
+*   **Fuzzy Department Resolution**: Overhauled the `student` and `attendance_history` GET endpoints. Replaced strict equality with the custom `isDeptMatch` logic to seamlessly match shorthand strings (e.g., "MCA") with full text (e.g., "Master of Computer Application").
+*   **Fuzzy Semester Matching**: Upgraded semester filters across the system. It now automatically extracts numeric values (e.g., stripping "st sem" from "1st sem" to match "1") preventing load failures when sheet data is minimally formatted.
+*   **Intelligent Date Normalization**: Fixed a critical live-polling bug where Google Sheets' internal `Date` objects failed strict string comparisons against the frontend's `YYYY-MM-DD` query. Implemented Timestamp-based comparison for bulletproof polling.
+*   **Case-Insensitive Subject Trim**: Hardened the subject matching logic during live grid updates to ignore case inconsistencies and trailing whitespaces.
+
+**Files Updated:**
+*   `Google script code/SmartAttend_AppScript_FINAL.gs`:
+    *   **Student Fetch Filter**: Replaced strict matches (Lines 475 - 490).
+    *   **Live Polling Filter**: Completely rewrote the `attendance_history` array filter logic (Lines 579 - 601).
+
+---
+*Updated on **June 5, 2026** (Lab Attendance Logic Patch)*
+
+## 🌟 Major Updates (**June 5, 2026**)
+
+### 32. Lab Attendance Live Grid & Double Counting Fixes
+**Objective**: Guarantee that the professor's live polling dashboard instantly tracks student scans and prevent database duplication upon submission.
+
+*   **Real-time Grid Authentication**: Overhauled the `active_code_scans` polling endpoint. Instead of querying a deprecated column, it now directly fetches live arrays from the `Lab_Access_Logs` sheet. This ensures the Professor dashboard instantly turns "Absent" to "Present" the millisecond a student verifies their access code.
+*   **Intelligent Date Normalization**: Fixed a major bug where Google Sheets' internal JavaScript `Date` objects failed strict string comparisons against the frontend's `YYYY-MM-DD` query during session submission. Implemented instance checking and strict formatting to ensure bulletproof comparison and permanently resolve duplicate attendance rows.
+*   **Subject Statistics Automation**: Built and integrated `syncSubjectAttendance()` to auto-aggregate subject-wise history rows directly into a persistent `SubjectAttendance` ledger, fully normalizing student dashboard breakdown metrics.
+
+**Files Updated:**
+*   `Google script code/SmartAttend_AppScript_FINAL.gs`:
+    *   **Live Grid Polling**: Updated `active_code_scans` endpoint.
+    *   **Session Submission**: Hardened date comparisons in `save_session`.
+    *   **Subject Sync**: Added `syncSubjectAttendance()` logic.
+
+### 33. Anti-Proxy UUID Verification (**June 7, 2026**)
+**Objective**: Prevent proxy attendance while completely solving the "identical phone false positive" bug where innocent students were incorrectly blocked or flagged because their devices shared the same hardware footprint.
+
+*   **LocalStorage UUID implementation**: The frontend `student_dashboard.js` generates a random, permanent `DeviceID` UUID stored in the browser's `localStorage`. This acts as the sole anti-proxy system. If two attendances use the exact same `DeviceID`, the second attempt is immediately blocked as a proxy.
+*   **Hardware Fingerprint Removal**: We completely removed the Hardware Fingerprint collection and Flagging system. This ensures 100% zero interference for innocent students with identical phone models, prioritizing user experience over over-engineered backend tracking.
+*   **Manual Verification**: For the small edge case of students clearing their browser cache to circumvent the UUID block, the professor relies on a quick visual headcount in the lab. This keeps the codebase lightweight and perfectly balances security with student convenience.
+
+---
+*Updated on **June 7, 2026** (Future Architecture & APK Strategy)*
+
+## 🌟 Major Updates (**June 7, 2026**)
+
+### 34. Database Migration Blueprint (Supabase Architecture)
+**Objective**: Transition from Google Apps Script and Google Sheets to a professional, scalable backend architecture (Supabase) to support university-wide concurrency.
+
+*   **Concurrency & Real-Time Sync**: Planning migration to Supabase (PostgreSQL) to handle millisecond responses and WebSocket support, allowing live attendance updates without page refreshes.
+*   **Built-in Security & Reliability**: Utilizing Row Level Security (RLS) and native Authentication to prevent data tampering and handle hundreds of concurrent attendance submissions flawlessly.
+*   **Seamless Transition Strategy**: The planned migration involves swapping the `SCRIPT_URL` to a Node.js server connecting to Supabase, leaving the frontend UI completely intact.
+
+### 35. Student Mobile App (APK) Distribution Strategy
+**Objective**: Convert the Student Web Portal into an installable Android APK and provide a seamless distribution mechanism via the Admin Panel.
+
+*   **Cloud Compilation**: Established a strategy to use cloud builders (VoltBuilder/WebIntoApp) or Capacitor CLI to seamlessly wrap the web portal into an APK without requiring Android Studio.
+*   **Direct Hosting**: The resulting APK will be hosted securely on platforms like Netlify or GitHub Pages for instant, accessible downloading.
+*   **Admin Distribution UI**: Planned a bulk-action feature for the Admin Panel, allowing administrators to email the direct download link directly to selected students with a single click.
+
+---
+*Updated on **June 8, 2026** (Production Readiness, Limitations Analysis & Deployment)*
+
+## 🌟 Major Updates (**June 8, 2026**)
+
+### 36. Production Readiness Security & Performance Roadmap
+**Objective**: Hardening the Google Sheets stack for security, speed, and reliability.
+
+*   **API Obfuscation & Verification**: Formulated plans to obfuscate the `SCRIPT_URL` in `config.js` and implement request signatures in Apps Script to prevent students from sending raw API requests to mark attendance.
+*   **Hiding API Keys**: Plan to route all external API integrations (like Gemini AI) through backend Apps Script functions, removing keys from public frontend HTML.
+*   **Server-Side Caching**: Outlined the integration of Google Apps Script's `CacheService` to cache the student roster and timetable, reducing dashboard loading times to under 0.5 seconds.
+*   **Targeted Face Encodings**: Plan to filter facial encoding requests by department/semester, reducing bandwidth during webcam scanning.
+*   **PWA Offline Queueing**: Designed a client-side database queue (IndexedDB) to buffer scanned attendance locally during network drops and automatically sync when connection returns.
+
+### 37. Legacy Code Limitations & Architectural Solutions
+**Objective**: Transitioning the 14,000+ LOC system to production-grade TypeScript and React.
+
+*   **TypeScript Migration**: Upgrading the codebase to TypeScript to enforce static types and resolve silent errors caused by data-type differences (e.g. date formats or department names).
+*   **React Modularization**: Splitting monolithic JS files (like `admin_dashboard.js`) into clean, reusable components (like `<Navbar />` or `<RosterGrid />`) to simplify layouts and component routing.
+*   **NPM Dependency Bundling**: Bundling dependencies like `face-api.js` via NPM, removing fragile external CDNs to ensure offline functionality.
+
+### 38. Campus Deployment Strategy & Budget
+**Objective**: Scaling the PWA and hardware components across the university.
+
+*   **Google Workspace Upgrade**: Upgrading to a Workspace Business account to increase Apps Script daily email limits from 100 to 1,500.
+*   **Custom Domain Routing**: Connecting institutional domains (e.g. `smartattend.yourcollege.edu`) to Netlify hosting.
+*   **Operational Budgeting**: Projected ongoing operational software costs to be minimal, ranging from ~$10.00 to $15.00/month.
+
+---
+*Updated on **June 9, 2026** (Project Location & Backup)*
+
+## 🌟 Major Updates (**June 9, 2026**)
+
+### 39. SmartAttend Billing System & Backup Location
+**Objective**: Document the official location and backup access for the Billing System (Multi-Tenant SaaS system) files.
+
+*   **Google Drive Backup**: The complete, stable version of the **SmartAttend Billing System** has been successfully uploaded and is hosted securely on the Google Drive associated with the account **`aman7474ak@gmail.com`**.
+
+---
+*Updated on **June 10, 2026** (Standalone Assignments Management & Dynamic Filtering)*
+
+## 🌟 Major Updates (**June 10, 2026**)
+
+### 40. Standalone Academic Assignments System & Dynamic Filtering
+**Objective**: Enable professors to broadcast learning resources and assignments via email and student portal dashboards with robust multi-criteria filters.
+
+*   **Assignments Management Panel (`Assignments.html`)**: Created a dedicated, single-column page for professors featuring a drag-and-drop file uploader (supporting PDF/images), Title/Instructions fields, Department, Semester, and Subject selections, and a high-contrast Due Date picker.
+*   **Automated Email Broadcasting**: Integrated an App Script backend trigger that automatically emails the assignment details and download links directly to all students enrolled in the target Department, Semester, and Subject immediately upon submission.
+*   **Assignment History & Retraction**: Added a scrollable Assignment History list displaying past broadcasts. Professors can click "Delete" to recall assignments, removing records from Google Sheets/Drive and emailing retraction notifications to students.
+*   **Student Dashboard Integration (`student_dashboard.html`)**: Deployed a scrollable Class Assignments card below the timetable. It displays assignments issued for the student's department, rendering the due dates in high-contrast red warning boxes and providing direct attachment download links.
+*   **Dynamic Dependent Filtering (Semester & Subject)**: Overhauled the filter system in `student_dashboard.js`. Instead of only showing subjects with existing assignments, the student's Subject filter dropdown dynamically fetches and shows all institutional subjects matching their department and currently selected semester, resetting automatically when the semester changes.
+
+---
+*Updated on **June 12, 2026** (Student Face Registration Filter Optimization)*
+
+## 🌟 Major Updates (**June 12, 2026**)
+
+### 41. Department & Semester Filtering for Face Registration
+**Objective**: Enable professors to easily locate and register faces for individual students in large rosters (100 to 200+ students) by implementing multi-criteria filtering.
+
+*   **Responsive Multi-Selector UI (`register.html`)**: Added Department and Semester filter dropdowns placed side-by-side inside a `.filter-row` container with a mobile-responsive vertical layout fallback.
+*   **Dynamic Department & Semester Population (`register.js`)**: 
+    - The portal now fetches all active departments from the Google Sheet backend (`?sheet=departments`) in parallel. If the query fails, it automatically extracts unique departments from the loaded students roster.
+    - Pre-populates the Semester filter dropdown with a static list of all semesters (**1st Sem** to **8th Sem**).
+*   **Fuzzy and Natural String Matching**: Added `isDeptMatch` and `isSemMatch` helper functions in JavaScript to handle variations in spelling/shorthand (e.g. matching `"MCA"` with `"Master of Computer Application"`, and matching `"2nd sem"` with `"2"`).
+*   **Safety Cleanups**: If a selected student is filtered out from the active dropdown, the system automatically resets the student selection and safely stops the camera stream if active to prevent erroneous face registration.
+

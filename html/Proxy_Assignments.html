@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proxy & Invigilation Assignments - SmartAttend</title>
+    <script src="../backend/config.js"></script>
+    <script>
+        if (sessionStorage.getItem('isAuthenticated') !== 'true') {
+            window.location.replace('Login.html');
+        } else {
+            const userEmail = sessionStorage.getItem('userEmail');
+            const localToken = sessionStorage.getItem('sessionToken');
+            const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
+            if (userEmail && localToken) {
+                fetch(`${SCRIPT_URL}?sheet=professor&email=${encodeURIComponent(userEmail)}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data && data.length > 0) {
+                            if (data[0].SessionToken && data[0].SessionToken !== localToken) {
+                                alert("Session expired: You logged in from another device.");
+                                logoutUser();
+                            } else {
+                                const fn = data[0]['Professor  first_name'] || data[0]['Professor first_name'] || '';
+                                const ln = data[0]['Professor  last_name'] || data[0]['Professor last_name'] || '';
+                                const fullName = (fn + ' ' + ln).trim() || sessionStorage.getItem('userName') || 'Professor';
+
+                                if (document.getElementById('topbarName')) document.getElementById('topbarName').innerText = fullName;
+                                if (document.getElementById('topbarAvatar')) document.getElementById('topbarAvatar').innerText = fullName.charAt(0).toUpperCase();
+                                if (document.getElementById('topbarEmail')) document.getElementById('topbarEmail').innerText = userEmail;
+                            }
+                        }
+                    })
+                    .catch(err => console.error("Session verification failed", err));
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0b1120;
+            --glass-bg: rgba(30, 41, 59, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --accent-color: #3b82f6;
+            --accent-hover: #60a5fa;
+            --success-color: #10b981;
+            --error-color: #ef4444;
+            --warning-color: #f59e0b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
+        body {
+            margin: 0;
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+            background-image:
+                radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.1), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.1), transparent 25%);
+        }
+
+        .sidebar {
+            width: 280px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            border-right: 1px solid var(--glass-border);
+            display: flex;
+            flex-direction: column;
+            padding: 20px 0;
+            z-index: 10;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            padding: 0 24px;
+            margin-bottom: 40px;
+            gap: 12px;
+        }
+
+        .brand img {
+            height: 40px;
+            width: auto;
+            filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.5));
+        }
+
+        .brand h2 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #60a5fa, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .nav-links {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 0 16px;
+            overflow-y: auto;
+            flex: 1;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+
+        .nav-links::-webkit-scrollbar {
+            display: none;
+        }
+
+        .nav-links a {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 14px 20px;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 16px;
+            font-weight: 500;
+            border-radius: 12px;
+            transition: all 0.3s;
+        }
+
+        .nav-links a:hover,
+        .nav-links a.active {
+            background: rgba(59, 130, 246, 0.1);
+            color: var(--text-main);
+            box-shadow: inset 2px 0 0 var(--accent-color);
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .topbar {
+            height: 80px;
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            padding: 0 40px;
+            background: rgba(11, 17, 32, 0.5);
+            backdrop-filter: blur(8px);
+            border-bottom: 1px solid var(--glass-border);
+            position: relative;
+            z-index: 1000;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .user-info h3 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 500;
+        }
+
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-color), #8b5cf6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
+        }
+
+        .user-profile-wrapper {
+            position: relative;
+            cursor: pointer;
+        }
+
+        .profile-dropdown {
+            position: absolute;
+            top: 50px;
+            right: 0;
+            width: 220px;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(16px);
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+            z-index: 100;
+            opacity: 0;
+            transform: translateY(-10px);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+
+        .profile-dropdown.show {
+            display: flex;
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .profile-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 14px;
+            color: var(--text-main);
+        }
+
+        .profile-item i {
+            color: var(--accent-color);
+            width: 16px;
+            text-align: center;
+        }
+
+        .dashboard-container {
+            flex: 1;
+            padding: 40px;
+            overflow-y: auto;
+        }
+
+        .page-header {
+            margin-bottom: 40px;
+        }
+
+        .page-header h1 {
+            font-size: 32px;
+            margin: 0;
+            font-weight: 600;
+        }
+
+        .page-header p {
+            color: var(--text-muted);
+            margin-top: 10px;
+            font-size: 16px;
+        }
+
+        .assignment-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 25px;
+        }
+
+        .assignment-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 25px;
+            backdrop-filter: blur(16px);
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.3s;
+        }
+
+        .assignment-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .assignment-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+        }
+
+        .card-pending::before {
+            background: var(--warning-color);
+        }
+
+        .card-accepted::before {
+            background: var(--success-color);
+        }
+
+        .card-rejected::before {
+            background: var(--error-color);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 20px;
+        }
+
+        .type-badge {
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .type-invigilation {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--error-color);
+        }
+
+        .type-proxy {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--success-color);
+        }
+
+        .assignment-details {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .detail-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: var(--text-muted);
+        }
+
+        .detail-item i {
+            width: 20px;
+            text-align: center;
+            color: var(--accent-color);
+        }
+
+        .detail-item strong {
+            color: var(--text-main);
+        }
+
+        .card-actions {
+            margin-top: 25px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 12px;
+            border-radius: 10px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-accept {
+            background: var(--success-color);
+            color: white;
+        }
+
+        .btn-reject {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--error-color);
+            border: 1px solid var(--error-color);
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+            transform: scale(1.02);
+        }
+
+        .status-stamp {
+            margin-top: 20px;
+            text-align: center;
+            font-weight: 700;
+            font-size: 14px;
+            padding: 10px;
+            border-radius: 8px;
+        }
+
+        .stamp-accepted {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success-color);
+        }
+
+        .stamp-rejected {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--error-color);
+        }
+
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg-dark);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="loading">
+        <i class="fa-solid fa-circle-notch fa-spin" style="font-size: 40px; color: var(--accent-color);"></i>
+        <p style="margin-top: 20px; color: var(--text-muted);">Syncing assignments...</p>
+    </div>
+
+    <aside class="sidebar">
+        <div class="brand">
+            <img src="../images/bg1.1.png" alt="Logo"
+                onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjM2I4MmY2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDJhMTAgMTAgMCAxIDAgMTAgMTAgMTAgMTAgMCAwIDAtMTAgMTB6Ii8+PC9zdmc+'">
+            <h2>SmartAttend</h2>
+        </div>
+        <nav class="nav-links">
+            <a href="dashboard1.html"><i class="fa-solid fa-house"></i> Dashboard</a>
+            <a href="Start Attendance.html"><i class="fa-solid fa-user-check"></i> Start Attendance</a>
+            <a href="Lab_Attendance.html"><i class="fa-solid fa-laptop-code"></i> Lab Attendance</a>
+            <a href="Record.html"><i class="fa-solid fa-users"></i> Student Records</a>
+            <a href="History.html"><i class="fa-solid fa-clock-rotate-left"></i> Attendance History</a>
+            <a href="Assignments.html"><i class="fa-solid fa-book-open"></i> Assignments</a>
+            <a href="Proxy_Assignments.html" class="active"><i class="fa-solid fa-user-shield"></i> Proxy & Invigilation</a>
+            <a href="Leave_Requests.html"><i class="fa-solid fa-envelope-open-text"></i> Leave Requests</a>
+            <a href="Setting.html"><i class="fa-solid fa-gear"></i> Settings</a>
+            <a href="professorProfile.html"><i class="fa-solid fa-user-tie"></i> Profile</a>
+        </nav>
+    </aside>
+
+    <main class="main-content">
+        <!-- Topbar -->
+        <header class="topbar">
+            <div class="user-info">
+                <h3>Welcome, Professor</h3>
+                <div class="user-profile-wrapper" onclick="toggleProfile()">
+                    <div class="avatar" id="topbarAvatar">P</div>
+                    <div class="profile-dropdown" id="profileDropdown">
+                        <div class="profile-item"><i class="fa-solid fa-user"></i><span id="topbarName">Professor</span>
+                        </div>
+                        <div class="profile-item"><i class="fa-solid fa-envelope"></i><span
+                                id="topbarEmail">email@example.com</span></div>
+                        <div class="profile-item"
+                            style="border-top: 1px solid var(--glass-border); padding-top: 12px; margin-top: 4px; color: #ef4444; cursor: pointer;"
+                            onclick="logoutUser()">
+                            <i class="fa-solid fa-right-from-bracket" style="color: #ef4444;"></i><span>Log Out</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div class="dashboard-container">
+            <header class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div>
+                    <h1> Proxy and Invigilation</h1>
+                    <p>Review and respond to temporary teaching duties or exam invigilation tasks.</p>
+                </div>
+                <div style="display: flex; gap: 15px; align-items: center;">
+                    <div
+                        style="display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.05); padding: 8px 15px; border-radius: 12px; border: 1px solid var(--glass-border);">
+                        <i class="fa-solid fa-calendar-day" style="color: var(--accent-color);"></i>
+                        <input type="date" id="assignmentDateFilter"
+                            style="background: transparent; border: none; color: white; outline: none; font-family: inherit; font-size: 14px;"
+                            onchange="filterAssignments()">
+                    </div>
+                    <button class="btn btn-accept" onclick="loadAssignments()"
+                        style="width: auto; padding: 10px 20px; background: rgba(59, 130, 246, 0.1); border: 1px solid var(--accent-color); color: var(--accent-color);">
+                        <i class="fa-solid fa-arrows-rotate"></i> Refresh
+                    </button>
+                </div>
+            </header>
+
+            <div id="assignmentGrid" class="assignment-grid">
+                <!-- Cards will be injected here -->
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
+        const profEmail = sessionStorage.getItem('userEmail');
+
+        function toggleProfile() {
+            document.getElementById('profileDropdown').classList.toggle('show');
+        }
+
+        function logoutUser() {
+            sessionStorage.clear();
+            window.location.replace('Login.html');
+        }
+
+        window.onclick = function (event) {
+            if (!event.target.closest('.user-profile-wrapper')) {
+                const dropdown = document.getElementById('profileDropdown');
+                if (dropdown && dropdown.classList.contains('show')) {
+                    dropdown.classList.remove('show');
+                }
+            }
+        }
+
+        let allAssignments = [];
+
+        async function loadAssignments() {
+            try {
+                const res = await fetch(`${SCRIPT_URL}?sheet=proxies&profEmail=${encodeURIComponent(profEmail)}`);
+                const data = await res.json();
+                allAssignments = Array.isArray(data) ? data : [];
+                filterAssignments(); // Initial render
+            } catch (err) {
+                console.error(err);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        function filterAssignments() {
+            const filterVal = document.getElementById('assignmentDateFilter').value;
+            if (!filterVal) {
+                renderAssignments(allAssignments);
+                return;
+            }
+
+            const filtered = allAssignments.filter(a => {
+                const aDate = a.Date || a.date || '';
+                if (aDate.includes('-')) return aDate === filterVal;
+
+                const parts = filterVal.split('-'); // [YYYY, MM, DD]
+                const formatted = `${parts[2]}/${parts[1]}/${parts[0]}`;
+                const formatted2 = `${parseInt(parts[2])}/${parseInt(parts[1])}/${parts[0]}`;
+                return aDate === formatted || aDate === formatted2;
+            });
+
+            renderAssignments(filtered);
+        }
+
+        function renderAssignments(list) {
+            const grid = document.getElementById('assignmentGrid');
+            if (!list || list.length === 0) {
+                grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding:50px; color:var(--text-muted);">No assignments found.</div>`;
+                return;
+            }
+
+            grid.innerHTML = list.map(a => {
+                const typeClass = (a.Type || a.type) === 'Invigilation' ? 'type-invigilation' : 'type-proxy';
+                const date = a.Date || a.date || 'N/A';
+                const fromTime = a.Time_From || a.FromTime || a.fromTime || 'N/A';
+                const toTime = a.Time_To || a.ToTime || a.toTime || 'N/A';
+                const subject = a.Subject || a.subject || 'N/A';
+                const classroom = a.Classroom || a.classroom || 'N/A';
+                const id = a.ID || a.id || 'N/A';
+
+                return `
+                    <div class="assignment-card card-accepted" style="border-left: 4px solid var(--accent-color);">
+                        <div class="card-header">
+                            <span class="type-badge ${typeClass}">${a.Type || a.type}</span>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <span style="font-size:12px; color:var(--text-muted);">ID: ${id}</span>
+                                <button class="btn btn-reject" onclick="deleteProxy('${id}')" style="padding: 5px 8px; font-size: 10px; width: auto; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.3);">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="assignment-details">
+                            <div class="detail-item"><i class="fa-solid fa-book"></i> <span>Subject: <strong>${subject}</strong></span></div>
+                            <div class="detail-item"><i class="fa-solid fa-location-dot"></i> <span>Classroom: <strong>${classroom}</strong></span></div>
+                            <div class="detail-item"><i class="fa-solid fa-calendar-day"></i> <span>Date: <strong>${date}</strong></span></div>
+                            <div class="detail-item"><i class="fa-solid fa-clock"></i> <span>Time: <strong>${fromTime} - ${toTime}</strong></span></div>
+                        </div>
+                        <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--glass-border); font-size: 13px; color: var(--success-color); font-weight: 600;">
+                            <i class="fa-solid fa-circle-check"></i> Confirmed Assignment
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function deleteProxy(id) {
+            if (!id || id === 'N/A') {
+                alert('This assignment is currently syncing. Please refresh and try again.');
+                return;
+            }
+            if (!confirm('Are you sure you want to remove this assignment from your list?')) return;
+
+            // Optimistic UI: Hide the card immediately
+            const btn = event.target.closest('button');
+            const card = btn ? btn.closest('.assignment-card') : null;
+            if (card) card.style.opacity = '0.3';
+
+            try {
+                // Send delete request
+                await fetch(SCRIPT_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    body: JSON.stringify({
+                        action: 'delete_academic',
+                        subSheet: 'Proxies',
+                        key: 'ID',
+                        val: id
+                    })
+                });
+
+                // Hide completely after a short delay
+                if (card) {
+                    card.style.transform = 'scale(0.9)';
+                    card.style.opacity = '0';
+                    setTimeout(() => card.remove(), 300);
+                }
+            } catch (err) {
+                console.error('Delete Error:', err);
+                alert('Failed to connect to server. Please check your internet.');
+                if (card) card.style.opacity = '1';
+            }
+        }
+
+        loadAssignments();
+    </script>
+</body>
+
+</html>

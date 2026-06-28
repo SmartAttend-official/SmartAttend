@@ -1,0 +1,26 @@
+# Node.js dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment files containing secrets
+.env
+.env.local
+.env.production
+.env.development
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# IDE / System folders
+.agents/
+.gemini/
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

@@ -1,0 +1,72 @@
+================================================================================
+SMARTATTEND (GOOGLE SHEETS STACK) - UNIVERSITY DEPLOYMENT STRATEGY & COSTS
+================================================================================
+
+This document outlines the operational roadmap, cost estimates, and timeline 
+required to scale and deploy the current Google Sheets + Google Apps Script + 
+Netlify PWA system across a university campus.
+
+--------------------------------------------------------------------------------
+1. TECHNICAL DEPLOYMENT STEPS
+--------------------------------------------------------------------------------
+
+*   STEP 1: UPGRADE TO GOOGLE WORKSPACE (CRITICAL FOR EMAILS)
+    - Current State: Personal @gmail.com accounts are capped at sending a maximum 
+      of 100 emails per day. In a standard class size, this limit will block the 
+      parent and student notifications immediately.
+    - Solution: Upgrade to a Google Workspace Business account (Starter or Standard). 
+      This increases the Google Apps Script email sending limit (MailApp/GmailApp) 
+      to 1,500 emails per day.
+
+*   STEP 2: CONNECT A CUSTOM DOMAIN
+    - Current State: The app is deployed under a random Netlify subdomain.
+    - Solution: Map a professional domain or university subdomain (for example, 
+      smartattend.yourcollege.edu) to Vercel or Netlify to make it institutional.
+
+*   STEP 3: SETUP ACADEMIC SHEETS & BULK IMPORT
+    - Current State: Hand-entered mock data lists.
+    - Solution: Standardize spreadsheet formats for departments and classes. Create 
+      CSV/Excel templates allowing administrators to upload entire student registries 
+      and teacher timetables in bulk to Google Sheets.
+
+*   STEP 4: CLASSROOM HARDWARE SETUP (OPTIONAL)
+    - Current State: Relies on student/teacher personal devices.
+    - Solution: Mount budget tablets or static cameras at classroom entrance doors 
+      assigned with fixed IP addresses to match the IP Management System validation.
+
+--------------------------------------------------------------------------------
+2. COST ESTIMATION & BUDGET BREAKDOWN
+--------------------------------------------------------------------------------
+
+Because the application leverages Google's free serverless infrastructure (Sheets 
+and Apps Script) and free static web hosting, the ongoing running costs are extremely low.
+
+| Expense Item               | Billing Type | Estimated Cost        | Description |
+|----------------------------|--------------|-----------------------|-------------|
+| Google Workspace Account   | Monthly      | $6.00 - $12.00 / mo   | Required for 1,500 daily email capacity. Only 1 administrator account is needed. |
+| Custom Domain Name         | Yearly       | $10.00 - $15.00 / yr  | Institutional branding (e.g., .edu or .com domain). |
+| Netlify/Vercel Hosting     | Monthly      | $0.00 (Free Tier)     | Free hosting plan easily handles static web assets for high traffic. |
+| Classroom Tablets & Mounts | One-time     | $100.00 - $150.00 / rm| Optional hardware mounted at classroom doorways. |
+
+*   TOTAL SOFTWARE OPERATIONAL COST: ~$10.00 to $15.00 per month.
+
+--------------------------------------------------------------------------------
+3. DEPLOYMENT TIMELINE & ROLLOUT SCHEDULE (2-3 WEEKS)
+--------------------------------------------------------------------------------
+
+*   WEEK 1: INITIAL SYSTEM SETUP & DOMAIN ROUTING (3 - 5 DAYS)
+    - Register and configure the new Google Workspace administrator account.
+    - Migrate all Apps Script code to the Workspace account and redeploy the API.
+    - Purchase and map the custom domain to the Netlify platform.
+    - Format and upload all course databases, student directories, and teacher schedules.
+
+*   WEEK 2: DEPARTMENTAL PILOT RUN (7 DAYS)
+    - Deploy and test the live application in a single class (30-50 students).
+    - Monitor camera scanning angles, classroom lighting variations, and check 
+      cellular connectivity speeds within target campus locations.
+
+*   WEEK 3: GENERAL CAMPUS ROLLOUT (2 - 3 DAYS)
+    - Distribute the PWA/APK download links to all students in bulk.
+    - Brief and onboard the remaining department professors.
+    - Formally initiate live attendance logging and automated parent email alerts.
+================================================================================
