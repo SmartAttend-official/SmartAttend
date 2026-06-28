@@ -355,6 +355,11 @@ app.get('/', async (req, res) => {
   try {
     const { action, sheet, email, studentId, department, semester, dept, sem, token, newPassword } = req.query;
 
+    // Health Check Ping for Render
+    if (!action && !sheet && Object.keys(req.query).length === 0) {
+      return res.json({ status: 'ok', message: 'SmartAttend Server is running.' });
+    }
+
     // ── ACTIVE CODE SCANS FOR LIVE GRID ──
     if (sheet === 'active_code_scans') {
       const code = req.query.code;
