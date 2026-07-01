@@ -44,3 +44,5 @@ SCENARIO 3: The Clever Cheater (Incognito/Cleared Cache)
 - The browser generates a new DeviceID.
 - Student B's attendance is submitted. (DeviceID: jkl)
 - System Action: ALLOWED. The professor handles this edge case by doing a quick 30-second visual headcount in the lab. If the headcount is 39 but the app says 40, the professor knows someone cheated.
+
+[done checkup 01/07/2026]

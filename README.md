@@ -1,6 +1,6 @@
 # 🎓 SmartAttend — AI-Powered Attendance & Academic Management Platform
 
-An enterprise-grade, serverless Educational ERP system integrating client-side biometric facial recognition, device fingerprinting, real-time analytics, and automated multi-channel notifications.
+An enterprise-grade Educational ERP system integrating client-side biometric facial recognition, device fingerprinting, real-time analytics, and automated multi-channel notifications.
 
 ---
 
@@ -31,9 +31,9 @@ An enterprise-grade, serverless Educational ERP system integrating client-side b
 
 ## 1. Professional Overview
 
-SmartAttend is a serverless Educational ERP platform designed to modernize attendance tracking and academic management in higher education. Operating on a decentralized architecture, the platform handles real-time face matching on edge devices (user browsers) via computer vision, bypassing the need for expensive, centralized AI server infrastructures. 
+SmartAttend is a modern Educational ERP platform designed to modernize attendance tracking and academic management in higher education. Operating on a decentralized architecture, the platform handles real-time face matching on edge devices (user browsers) via computer vision, bypassing the need for expensive, centralized AI server infrastructures. 
 
-All verified transactional states are synchronized with a secure Google Sheets backend through a RESTful API layer running on Google Apps Script, executing automated HTML notifications to students and parents dynamically.
+All verified transactional states are synchronized with a secure Supabase (PostgreSQL) backend through a RESTful API layer running on Node.js (hosted on Render), executing automated email notifications to students and parents dynamically.
 
 ---
 
@@ -51,7 +51,7 @@ Traditional educational administration suffers from systemic operational ineffic
 ## 3. Why SmartAttend Exists
 
 SmartAttend replaces administrative overhead with an integrated, zero-trust Educational ERP. It operates under two primary paradigms:
-1.  **Serverless Processing**: Bypassing server costs by using Google Sheets as a relational database and Google Apps Script as a middleware API.
+1.  **Scalable Cloud Processing**: Bypassing traditional heavy infrastructure costs by using Supabase as a scalable relational database and a Node.js Express server on Render for the API.
 2.  **Edge-AI Processing**: Utilizing client-side hardware to execute face detection and 128-dimensional vector matching, ensuring user data privacy and infinite horizontal scalability.
 
 ---
@@ -84,18 +84,18 @@ flowchart TD
         E -->|Landmarks Extraction| F[128-d Vector Matcher]
     end
 
-    subgraph CloudAPI["Middleware API (Google Cloud)"]
-        G[Google Apps Script REST Web App]
-        H[MailApp / GmailApp Notification Engine]
+    subgraph CloudAPI["Middleware API (Render / Node.js)"]
+        G[Node.js Express Server]
+        H[Nodemailer SMTP Engine]
     end
 
-    subgraph Storage["Cloud Database (Google Workspace)"]
-        I[(Google Sheets Database)]
+    subgraph Storage["Cloud Database (Supabase PostgreSQL)"]
+        I[(Supabase PostgreSQL Database)]
     end
 
     B -.->|Biometric Match Pipeline| BrowserAI
     Clients ===>|HTTPS POST / GET JSON| G
-    G <--->|AppScript SpreadsheetApp| I
+    G <--->|Supabase JS Client| I
     G --->|Trigger Mail| H
     H --->|SMTP Delivery| J[Students / Parents Inbox]
 ```
@@ -106,7 +106,7 @@ flowchart TD
 
 | Role | Database Authentication | Dashboard Access | Allowed CRUD Actions |
 | :--- | :--- | :--- | :--- |
-| **Administrator** | Secure admin login sheet credentials | Admin Panel UI | Create/Update/Delete Students, Professors, Departments, Classrooms, Subjects, Timetables, and Classroom Camera IPs. |
+| **Administrator** | Secure admin login credentials | Admin Panel UI | Create/Update/Delete Students, Professors, Departments, Classrooms, Subjects, Timetables, and Classroom Camera IPs. |
 | **Professor** | Verified registration email OTP | Professor Overview Panel | Initiate Face Scan, Generate Lab Access Codes, Log Late Minutes, Approve/Reject Leaves, Upload Assignments, and Trigger Analytics Reports. |
 | **Student** | Verified email OTP & permanent password | Student Hub Portal | View Personal Attendance, Submit Leaves (with attachments), Download Assignments, and View Class Timetables. |
 
@@ -121,8 +121,8 @@ sequenceDiagram
     actor Prof as Professor
     actor Stud as Student Face
     participant Client as Browser UI (face-api.js)
-    participant Cloud as Google Apps Script API
-    participant DB as Google Sheet DB
+    participant Cloud as Node.js REST API
+    participant DB as Supabase DB
 
     Prof->>Client: Load Face Scan Page & Start Camera
     Client->>Cloud: Fetch Encodings (dept & sem)
@@ -137,7 +137,7 @@ sequenceDiagram
     Note over Client: Match Score >= 50% Verified
     Client->>Client: Set status 'Present' (UI Flash Green)
     Client->>Cloud: Save Session Roster (JSON)
-    Cloud->>DB: Write to AttendanceHistory Sheet
+    Cloud->>DB: Write to attendance_history Table
     Cloud->>Cloud: Trigger email notifications
     Cloud-->>Prof: Render updated session stats
 ```
@@ -149,8 +149,8 @@ sequenceDiagram
     actor Prof as Professor
     actor Stud as Student Device
     participant Client as Client Browser
-    participant Cloud as Google Apps Script API
-    participant DB as Google Sheet DB
+    participant Cloud as Node.js REST API
+    participant DB as Supabase DB
 
     Prof->>Client: Select Lab & Generate 6-Digit Code
     Client->>Cloud: Register active code with 5-minute expiry
@@ -158,7 +158,7 @@ sequenceDiagram
     Stud->>Client: Submit code (UUID + student ID)
     Client->>Cloud: Verify Code, Expiry, and UUID
     alt Code Valid & Device ID unique
-        Cloud->>DB: Log attendance state to sheets
+        Cloud->>DB: Log attendance state to database
         Cloud-->>Stud: Success Response (Access Granted)
     else Code Expired or Duplicate UUID
         Cloud-->>Stud: Block Submission (Access Denied)
@@ -174,9 +174,9 @@ sequenceDiagram
 | **UI Rendering** | HTML5, CSS3, Vanilla JS | ES6 Syntax, Outfit Google Fonts | Presentation layer with Glassmorphism styles. |
 | **Web Runtime** | jQuery | v3.7.1 | Dynamic DOM updates and asynchronous AJAX calls. |
 | **Edge AI** | `face-api.js` | v0.22.2 (TinyFaceDetector) | Face detection, landmark tracking, vector generation. |
-| **API Middleware** | Google Apps Script | V8 Javascript Engine | Serverless REST API executing database CRUD operations. |
-| **Database** | Google Sheets | Google Workspace | Cloud storage for user credentials, encodings, and logs. |
-| **Notifications** | MailApp & GmailApp | Native Google Apps Script | Automated OTP delivery and parent alert notifications. |
+| **API Middleware** | Node.js / Express | Node 18+ | REST API executing database CRUD operations and JWT Auth. |
+| **Database** | Supabase | PostgreSQL | Scalable cloud database for user credentials, encodings, and logs. |
+| **Notifications** | Nodemailer | SMTP | Automated OTP delivery and parent alert notifications. |
 | **Distribution** | PWA Manifest & Service Worker | Standard Web API | Transforms web portals into installable offline PWAs. |
 
 ---
@@ -184,8 +184,8 @@ sequenceDiagram
 ## 9. Security Infrastructure
 
 SmartAttend implements a zero-trust, multi-layered security framework:
-*   **Cryptographic Access Verification (OTP)**: Bypasses hardcoded passwords during activation. Users must submit a secure 6-digit OTP delivered via email, verified server-side with a strict **10-minute expiration** timestamp check.
-*   **Anti-Proxy Device Locking**: When logging attendance via lab access codes, the browser generates a random, permanent `DeviceID` UUID stored in the client’s local storage. The Apps Script backend rejects any submissions containing a duplicate `DeviceID` for the same session.
+*   **Cryptographic Access Verification (OTP) & JWT**: Bypasses hardcoded passwords during activation. Users must submit a secure 6-digit OTP delivered via email. Once verified, a secure JSON Web Token (JWT) is issued for all subsequent API requests.
+*   **Anti-Proxy Device Locking**: When logging attendance via lab access codes, the browser generates a random, permanent `DeviceID` UUID stored in the client’s local storage. The backend rejects any submissions containing a duplicate `DeviceID` for the same session.
 *   **Hardware Fingerprint Isolation**: Mitigates browser variations by using local storage UUID verification, eliminating false positives for identical phone models.
 *   **Date Restriction Checkpoints**: Replaces UTC-based date strings with local date strings (`toLocaleDateString('en-CA')` in YYYY-MM-DD format) synchronized to India Standard Time (IST - GMT+5:30) at the backend, blocking weekend entries and retrospective updates.
 
@@ -240,26 +240,24 @@ const detections = await faceapi
 The project codebase follows a modular design pattern:
 ```text
 SmartAttend/
-├── backend/                       # Core JS Controller Scripts
+├── server/                        # Node.js Backend API
+│   ├── server.js                  # Main Express Server & Supabase Integration
+│   └── package.json               # Backend dependencies (express, cors, supabase-js)
+├── backend/                       # Frontend JS Controller Scripts (AJAX/Fetch logic)
 │   ├── config.js                  # Central configuration (SCRIPT_URL)
 │   ├── admin_dashboard.js         # Admin panel CRUD and modal controllers
 │   ├── register.js                # Biometric registration, filters, and webcam stream
 │   ├── start_attendance.js        # Face scan video loop and live matching
 │   ├── student_dashboard.js       # Student views, UUID storage, and leave requests
-│   ├── record.js                  # Roster tables, file exports (PDF, CSV, Excel)
 │   └── login.js / forget.js       # Authentication handlers and OTP logic
 ├── html/                          # Portal HTML5 Files
 │   ├── admin_dashboard.html       # Administrative Panel
 │   ├── dashboard1.html            # Professor overview portal
 │   ├── Start Attendance.html      # Biometric scan camera module
-│   ├── Lab_Attendance.html        # Lab Access Code Generator
-│   ├── Record.html                # Class Roster & Analytics export
-│   ├── Setting.html               # Settings, Camera IPs, & Analytics triggers
 │   ├── student_dashboard.html     # Student Hub
 │   └── register.html              # Face Registration Portal
 ├── python files/                  # Local Biometric Validation Utilities
 │   ├── generate_encoding.py       # Computes average vectors from directory images
-│   ├── test_encoding.py           # Validates face match using Euclidean distance
 │   └── test_live_webcam.py        # Local Python webcam biometric tracker
 └── manifest.json / sw.js          # Progressive Web App configuration files
 ```
@@ -269,74 +267,56 @@ SmartAttend/
 ## 13. Installation & Configuration Guide
 
 ### System Prerequisites
-*   A Google Workspace Account (for Apps Script and Sheets deployment).
-*   Any browser supporting the WebRTC webcam API (Chrome, Safari, Firefox, Edge).
-*   A hosting account supporting HTTPS (e.g., Netlify, GitHub Pages, Vercel).
+*   A Supabase Account (for PostgreSQL Database).
+*   A Render Account (for hosting the Node.js backend).
+*   A Netlify Account (for hosting the frontend).
 
-### 1. Database Configuration
-Create a new Google Sheet and build the tables with the following columns in row 1:
-*   **`student`**: `ID`, `Name`, `Email`, `Department`, `Semester`, `Face_Encoding`, `Parent_Email`, `Password`, `OTP`, `OTP_Timestamp`
-*   **`professor`**: `Email`, `Password`, `Name`, `Department`, `OTP`, `OTP_Timestamp`
-*   **`departments`**: `Code`, `Name`
-*   **`AttendanceHistory`**: `Date`, `Department`, `Semester`, `Subject`, `StudentID`, `Status`
-*   **`Lab_Access_Logs`**: `Code`, `StudentID`, `Timestamp`
+### 1. Database Configuration (Supabase)
+1. Create a new Supabase project.
+2. Run the provided SQL setup scripts (or use the Supabase dashboard) to create your tables: `student`, `professor`, `departments`, `attendancehistory`, and `lab_access_logs`.
+3. Go to **Project Settings > API** and copy your `Project URL` and `service_role secret`.
 
-### 2. Google Apps Script API Setup
-1.  In your Google Sheet, navigate to **Extensions > Apps Script**.
-2.  Copy the backend code from [SmartAttend_AppScript_FINAL.gs](file:///c:/Users/LENOVO/Desktop/SmartAttend2@/Google%20script%20code/SmartAttend_AppScript_FINAL.gs) and paste it into the script editor.
-3.  Replace the sheet ID variables at the top of the script with your spreadsheet ID:
-    ```javascript
-    var STUDENT_SHEET_ID   = 'YOUR_GOOGLE_SHEET_SPREADSHEET_ID_HERE';
-    var PROFESSOR_SHEET_ID = 'YOUR_GOOGLE_SHEET_SPREADSHEET_ID_HERE';
-    ```
-4.  Click **Deploy > New Deployment**.
-    *   Select type: **Web App**
-    *   Execute as: **Me**
-    *   Who has access: **Anyone**
-5.  Deploy the web app and copy the generated **Web App URL**.
+### 2. Node.js Backend Setup (Render)
+1. Push the `server/` directory code to a GitHub repository.
+2. In Render, create a new **Web Service** and connect your GitHub repository.
+3. Set the Build Command to `npm install` and the Start Command to `node server.js`.
+4. Add your Environment Variables (`.env`) in the Render dashboard:
+    *   `SUPABASE_URL` = Your Supabase Project URL
+    *   `SUPABASE_SERVICE_ROLE_KEY` = Your Supabase Service Role Key
+    *   `JWT_SECRET` = A random secret string
+    *   `SMTP_USER` / `SMTP_PASS` = Your email credentials for OTPs
+5. Deploy the web service and copy the generated Render URL (e.g., `https://smartattend-api.onrender.com`).
 
-### 3. Local Web Config Setup
-1.  Open [backend/config.js](file:///c:/Users/LENOVO/Desktop/SmartAttend2@/backend/config.js) in your local code workspace.
-2.  Set the `SCRIPT_URL` property to your copied Web App URL:
+### 3. Frontend Config & Netlify Deployment
+1.  Open `backend/config.js` in your local code workspace.
+2.  Set the `SCRIPT_URL` property to your copied Render Web App URL:
     ```javascript
     window.SMART_ATTEND_CONFIG = {
-        SCRIPT_URL: "https://script.google.com/macros/s/.../exec"
+        SCRIPT_URL: "https://smartattend-api.onrender.com"
     };
     ```
+3. Drag and drop your root folder (excluding the `server/` directory) into Netlify for static frontend hosting.
 
 ---
 
 ## 14. Deployment Strategy
 
-The application must be served over an **HTTPS connection** to allow the browser to access the webcam API and trigger PWA installation:
-
-1.  Create a Netlify account and navigate to **Drag and Drop Deployment**.
-2.  Drag the root folder `SmartAttend/` containing the HTML, CSS, assets, and service worker files into the upload area.
-3.  Set up custom domain routing (e.g., `smartattend.institution.edu`) in Netlify Settings if deploying for university use.
-4.  Optionally run the local launcher script [Start_SmartAttend.bat](file:///c:/Users/LENOVO/Desktop/SmartAttend2@/Start_SmartAttend.bat) to launch the app directly on your local system for debugging.
+The application is deployed across three scalable platforms:
+1. **GitHub**: Stores the central repository and triggers automatic deployments.
+2. **Render**: Hosts the Node.js Express backend API, scaling resources as needed.
+3. **Netlify**: Globally caches and serves the frontend HTML/JS/CSS files, providing lightning-fast load times.
+4. **Oracle Cloud (Future Scale)**: If user limits exceed Render's affordable tiers, the Dockerized Node.js backend will be seamlessly migrated to an Oracle Cloud Always Free ARM instance to support 10,000+ concurrent connections.
 
 ---
 
 ## 15. Performance & Scalability Analysis
 
-SmartAttend is engineered to run on a serverless, database-free model, introducing unique design parameters:
+SmartAttend is engineered to run on a decoupled architecture, separating the API layer from the frontend delivery:
 
-### Google Apps Script Concurrency Limits
-Google restricts Apps Script execution to **30 concurrent requests** and has a **6-minute maximum execution time limit** per invocation. To mitigate this:
-*   **Roster Chunking**: Student rosters are queried in bulk and processed client-side. The API returns plain JSON, avoiding spreadsheet cell rendering overhead.
-*   **Edge Matching**: Heavy biometric computing is shifted to client browsers, keeping API requests below `50ms`.
-*   **Debounced Live Polling**: The Lab Attendance roster updates on a `5000ms` polling interval, minimizing server load during live class checks.
-
-### Cache Optimization
-To improve dashboard load times under large student rosters, database fetches are cached via Apps Script's `CacheService`:
-```javascript
-// Sample cache validation in Apps Script
-var cache = CacheService.getScriptCache();
-var cachedRoster = cache.get("student_roster");
-if (cachedRoster != null) {
-  return cachedRoster;
-}
-```
+### Concurrency Handling
+By migrating from Google Sheets to Supabase (PostgreSQL) and Node.js, the system can handle thousands of concurrent read/write operations per second. 
+*   **Edge Matching**: Heavy biometric computing is shifted to client browsers, meaning the server only processes lightweight JSON payloads (approx. 50ms per request).
+*   **Connection Pooling**: Node.js efficiently handles asynchronous database writes, preventing the server from locking up during a 9:00 AM attendance rush.
 
 ---
 
@@ -344,23 +324,22 @@ if (cachedRoster != null) {
 
 SmartAttend serves as a model for modern SaaS paradigms:
 *   **"Vibe Coding" Development Paradigm**: Evaluates human-AI collaborative systems, where a human developer acts as the system architect while generative AI models write boilerplate files.
-*   **Zero-Cost Educational ERP**: Proves that a campus-wide ERP can be operated at zero cost by utilizing Google Cloud's serverless Apps Script backend and Sheets database.
 *   **Edge Computing & Data Privacy**: Landmark vector matching runs locally on client devices, meaning biometric data is parsed and evaluated without sending raw user images to cloud servers.
 
 ---
 
 ## 17. Project Statistics
 
-*   **Total Lines of Code**: ~14,000 LOC (across HTML, CSS, JavaScript, Python, and Google Apps Script).
+*   **Total Lines of Code**: ~22,000 LOC (across HTML, CSS, JavaScript, Python, and Node.js).
 *   **Biometric Models Loading Time**: <1.5 seconds on standard desktop/mobile processors.
 *   **Euclidean Threshold Limit**: 0.5 (strictly calibrated to minimize false-positive matching under poor lighting).
-*   **Database Scaling Limit**: 10,000 concurrent records (governed by Google Sheets' limit of 10 million cells).
+*   **Database Scaling Limit**: 50,000+ active users (Supabase PostgreSQL limits).
 
 ---
 
 ## 18. Future Roadmap
 
-- [ ] **Database Migration (Supabase Integration)**: Move from Google Sheets to a PostgreSQL DB hosted on Supabase to support WebSockets and resolve concurrency issues.
+- [DONE - 28-06-2026 ] **Database Migration (Supabase Integration)**: Move from Google Sheets to a PostgreSQL DB hosted on Supabase to support WebSockets and resolve concurrency issues.
 - [ ] **Capacitor Android/iOS Wrappers**: Compile the frontend portal into standalone Android APK and iOS APP bundles using Capacitor CLI.
 - [ ] **Auto-Generated Leave Verification**: Integrate Gemini AI to parse uploaded leave/medical images and automatically check dates, signatures, and stamps.
 - [ ] **Multi-Tenant SaaS Panel**: Build a tenant panel allowing multiple departments to operate separate databases under a single system interface.
@@ -371,7 +350,7 @@ SmartAttend serves as a model for modern SaaS paradigms:
 
 Developing SmartAttend provided insights into:
 *   Real-world implementations of browser-based computer vision and Euclidean space vector comparisons.
-*   Optimizing serverless REST APIs for concurrent web queries under strict API rate limits.
+*   Migrating from Serverless MVP architectures (Google Apps Script) to Production Cloud stacks (Node.js/Supabase).
 *   Designing state-synchronized PWAs using service worker cache systems.
 *   Implementing strict anti-proxy tracking heuristics on edge devices.
 

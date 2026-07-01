@@ -158,3 +158,5 @@ OPTION 3: DETAILED TEXT SPECIFICATION (For manual recreation or AI reading)
 - **Attendance Flow**: Professor submits list -> Apps Script appends to `AttendanceHistory` -> Apps Script recalculates `Sheet2` totals -> Apps Script emails summary to Professor and alerts to Parents of absent students.
 - **Leave Flow**: Student submits request -> Apps Script logs to `LeaveRequests` -> Professor approves -> Apps Script updates status and notifies Parent.
 ================================================================================
+
+[done checkup 01/07/2026]

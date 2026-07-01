@@ -53,7 +53,7 @@ function authenticateToken(req, res, next) {
   const action = req.query.action || (req.body && req.body.action);
   const sheet = req.query.sheet || (req.body && req.body.sheet);
   
-  if (action === 'login' || action === 'send_otp' || action === 'verify_otp' || (!action && !sheet)) {
+  if (action === 'login' || action === 'send_otp' || action === 'verify_otp' || action === 'get_encoding' || action === 'save_encoding' || (!action && !sheet)) {
     return next();
   }
 
@@ -416,6 +416,29 @@ app.get('/', authenticateToken, async (req, res) => {
       if (error) throw error;
       const scannedArr = (data || []).map(r => r.StudentID);
       return res.json(scannedArr);
+    }
+
+    // ── Z. ENCODING ACTIONS ──
+    if (action === 'get_encoding') {
+      const studentIdStr = (req.query.id || req.query.studentId || '').toString().trim();
+      if (!studentIdStr) return res.json({ status: 'error', message: 'Missing student ID' });
+
+      const { data, error } = await supabase
+        .from('students')
+        .select('Face_Encoding')
+        .ilike('ID', studentIdStr)
+        .single();
+      
+      if (error || !data || !data.Face_Encoding) {
+        return res.json({ status: 'error', message: 'No encoding found in database.' });
+      }
+
+      let parsedEncoding = data.Face_Encoding;
+      if (typeof parsedEncoding === 'string') {
+        try { parsedEncoding = JSON.parse(parsedEncoding); } catch(e) {}
+      }
+
+      return res.json({ status: 'success', encoding: parsedEncoding });
     }
 
     // ── A. TIMETABLE ACTIONS ──
@@ -852,6 +875,41 @@ app.get('/', authenticateToken, async (req, res) => {
 app.post('/', authenticateToken, async (req, res) => {
   try {
     const { action, sheet, data, id, email, searchCol, searchVal } = req.body;
+
+    // ── Z. ENCODING ACTIONS ──
+    if (action === 'save_encoding') {
+      const studentIdStr = (req.body.id || req.body.studentId || '').toString().trim();
+      const encodingData = req.body.encoding;
+      
+      if (!studentIdStr || !encodingData) {
+        return res.json({ status: 'error', message: 'Missing student ID or encoding data' });
+      }
+      
+      const { error } = await supabase
+        .from('students')
+        .update({ Face_Encoding: typeof encodingData === 'string' ? encodingData : JSON.stringify(encodingData) })
+        .ilike('ID', studentIdStr);
+        
+      if (error) {
+        return res.json({ status: 'error', message: error.message });
+      }
+      
+      return res.json({ status: 'success', message: 'Encoding saved to database successfully.' });
+    }
+
+    if (action === 'get_encoding') {
+      const studentIdStr = (req.body.id || req.body.studentId || '').toString().trim();
+      if (!studentIdStr) return res.json({ status: 'error', message: 'Missing ID' });
+      
+      const { data: student, error } = await supabase
+        .from('students')
+        .select('Face_Encoding')
+        .ilike('ID', studentIdStr)
+        .single();
+        
+      if (error || !student) return res.json({ status: 'error', message: 'Not found' });
+      return res.json({ status: 'success', encoding: student.Face_Encoding });
+    }
 
     // ── SECURE LOGIN ACTION ──
     if (action === 'login') {

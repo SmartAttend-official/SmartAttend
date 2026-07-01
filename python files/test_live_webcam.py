@@ -61,22 +61,22 @@ def load_encoding_from_local():
     return encoding
 
 
-def load_encoding_from_sheet(script_url):
-    """Fetch face encoding directly from Google Sheets via the Apps Script API."""
+def load_encoding_from_server(server_url):
+    """Fetch face encoding directly from Supabase via the Node.js API."""
     try:
-        url = f"{script_url}?sheet=student&action=get_encoding&id={STUDENT_ID}"
-        print(f"🌐 Fetching encoding from Google Sheets...")
+        url = f"{server_url}?action=get_encoding&id={STUDENT_ID}"
+        print(f"🌐 Fetching encoding from Supabase Server...")
         req = urllib.request.urlopen(url, timeout=10)
         data = json.loads(req.read().decode())
         if data.get("status") == "success" and data.get("encoding"):
             encoding = np.array(data["encoding"])
-            print(f"✅ Loaded encoding from Google Sheets for [{STUDENT_ID}]")
+            print(f"✅ Loaded encoding from Server for [{STUDENT_ID}]")
             return encoding
         else:
-            print(f"⚠️  Sheet returned: {data.get('message', 'No encoding found')}")
+            print(f"⚠️  Server returned: {data.get('message', 'No encoding found')}")
             return None
     except Exception as ex:
-        print(f"⚠️  Could not fetch from Google Sheets: {ex}")
+        print(f"⚠️  Could not fetch from Server: {ex}")
         return None
 
 
@@ -177,7 +177,12 @@ if __name__ == "__main__":
     known_encoding = load_encoding_from_local()
 
     if known_encoding is None:
-        print("\n⚠️  Local encoding not found. Cannot continue.")
+        print("\n⚠️  Local encoding not found. Falling back to Supabase Server...")
+        SERVER_URL = "https://smartattend-o2te.onrender.com/"
+        known_encoding = load_encoding_from_server(SERVER_URL)
+
+    if known_encoding is None:
+        print("\n⚠️  Encoding not found locally or on server. Cannot continue.")
         print("   Run generate_encoding.py first, then retry.")
         sys.exit(1)
 

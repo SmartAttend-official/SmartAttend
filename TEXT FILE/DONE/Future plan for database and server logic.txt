@@ -54,3 +54,5 @@ The new Node.js server will use the Supabase library:
 
 Step 4: Point the Frontend to the New Server
 In the frontend `config.js`, the `SCRIPT_URL` currently points to a Google macro. Simply change that URL to point to the new Node.js server. The rest of the HTML, CSS, and Frontend JS will stay exactly the same!
+
+[done checkup 01/07/2026]

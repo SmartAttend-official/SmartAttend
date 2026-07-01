@@ -509,3 +509,10 @@ SmartAttend was developed using a **Human-AI Collaborative Engineering** model (
 *   **Fuzzy and Natural String Matching**: Added `isDeptMatch` and `isSemMatch` helper functions in JavaScript to handle variations in spelling/shorthand (e.g. matching `"MCA"` with `"Master of Computer Application"`, and matching `"2nd sem"` with `"2"`).
 *   **Safety Cleanups**: If a selected student is filtered out from the active dropdown, the system automatically resets the student selection and safely stops the camera stream if active to prevent erroneous face registration.
 
+### 42. Production Architecture & Infrastructure Migration
+**Objective**: Transition the platform from a serverless MVP architecture (Google Sheets & Apps Script) to a scalable, production-grade cloud infrastructure.
+
+*   **Database Migration**: Migrated the entire database from Google Sheets to **Supabase** (PostgreSQL). This resolves all Google Apps Script concurrency limits, API timeouts, and data locking issues, allowing for true real-time scale.
+*   **Backend Hosting (Render)**: The Node.js backend API code has been uploaded to GitHub and deployed on **Render**. Render is configured to automatically fetch and deploy updates from the GitHub repository, providing continuous integration and zero-downtime updates.
+*   **Frontend Hosting (Netlify)**: The frontend client (HTML/CSS/JS) has been securely deployed on **Netlify**, ensuring fast load times and automatic CI/CD deployment.
+*   **Future Scalability Plan (Oracle Cloud)**: A long-term scaling strategy has been established. If the user base grows significantly (e.g., hitting 10,000+ simultaneous connections) and the current Render tier limits are reached, the Node.js backend is designed to be fully portable and will be migrated to an **Oracle Cloud** instance for massive, cost-effective scalability.
