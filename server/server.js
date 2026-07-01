@@ -875,6 +875,64 @@ app.get('/', authenticateToken, async (req, res) => {
 app.post('/', authenticateToken, async (req, res) => {
   try {
     const { action, sheet, data, id, email, searchCol, searchVal } = req.body;
+    
+    // ── AI ASSISTANT ACTION ──
+    if (action === 'ask_gemini') {
+      const prompt = req.body.prompt;
+      if (!prompt) return res.json({ status: 'error', message: 'Prompt is required.' });
+
+      // Keep key hidden in backend. Recommended to move to .env later.
+      const apiKey = process.env.GEMINI_API_KEY || "AIzaSyBY60belKbg2wHUq_HsC1ODrZRYb7afbxc";
+      const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+      
+      const systemInstruction = `You are a helpful assistant for the SmartAttend2 system, used only in the Professor Panel. 
+You can answer questions about the system usage and general knowledge questions.
+CURRENT DATE AND TIME: ${new Date().toLocaleString()}
+
+SYSTEM OVERVIEW:
+SmartAttend2 is an automated attendance management system. 
+In the Professor Panel, professors can:
+1. View Dashboard with live camera feed.
+2. Start Attendance using facial recognition or manual toggles.
+3. View Student Records.
+4. View Attendance History.
+5. Manage Profile.
+6. View Proxy & Invigilation assignments.
+7. Handle Leave Requests.
+8. Configure Settings like IP Camera URL.
+9. Send alert emails to absent students and parents.
+
+RULES:
+1. Do not reveal any technical details about the system (e.g., API keys, database passwords, specific technologies used like Firebase, Node.js, etc.).
+2. If asked about these sensitive details, politely refuse to answer.
+3. Be concise and professional.
+4. Keep answers brief and avoid overly detailed responses unless asked.`;
+
+      try {
+        // Native fetch is available in Node.js 18+ (Render runs 18+)
+        const geminiResponse = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
+              { role: "user", parts: [{ text: systemInstruction }] },
+              { role: "model", parts: [{ text: "Understood. I will act as the SmartAttend2 assistant following these rules." }] },
+              { role: "user", parts: [{ text: prompt }] }
+            ]
+          })
+        });
+        
+        const responseData = await geminiResponse.json();
+        if (responseData.candidates && responseData.candidates[0].content && responseData.candidates[0].content.parts[0].text) {
+          return res.json({ status: 'success', message: responseData.candidates[0].content.parts[0].text });
+        } else {
+          return res.json({ status: 'error', message: responseData.error ? responseData.error.message : 'Unknown Gemini error.' });
+        }
+      } catch (error) {
+        console.error("Gemini API error:", error);
+        return res.json({ status: 'error', message: 'Failed to connect to AI provider.' });
+      }
+    }
 
     // ── Z. ENCODING ACTIONS ──
     if (action === 'save_encoding') {

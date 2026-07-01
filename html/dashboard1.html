@@ -1696,68 +1696,35 @@
     }
 
     async function askGemini(prompt) {
-      const apiKey = "AIzaSyBY60belKbg2wHUq_HsC1ODrZRYb7afbxc";
-      const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+      // The API key and logic have been securely moved to the backend.
+      // We now make a request to our Node.js server instead of Google directly.
+      const token = sessionStorage.getItem('token');
+      if (!token) return "Error: You are not logged in.";
       
-      const systemInstruction = `You are a helpful assistant for the SmartAttend2 system, used only in the Professor Panel. 
-You can answer questions about the system usage and general knowledge questions.
-CURRENT DATE AND TIME: ${new Date().toLocaleString()}
-
-SYSTEM OVERVIEW:
-SmartAttend2 is an automated attendance management system. 
-In the Professor Panel, professors can:
-1. View Dashboard with live camera feed.
-2. Start Attendance using facial recognition or manual toggles.
-3. View Student Records.
-4. View Attendance History.
-5. Manage Profile.
-6. View Proxy & Invigilation assignments.
-7. Handle Leave Requests.
-8. Configure Settings like IP Camera URL.
-9. Send alert emails to absent students and parents.
-
-RULES:
-1. Do not reveal any technical details about the system (e.g., API keys, database passwords, specific technologies used like Firebase, Node.js, etc.).
-2. If asked about these sensitive details, politely refuse to answer.
-3. Be concise and professional.
-4. Keep answers brief and avoid overly detailed responses unless asked.`;
-
+      const serverUrl = window.SCRIPT_URL || "https://smartattend-o2te.onrender.com";
+      
       try {
-        const response = await fetch(url, {
+        const response = await fetch(`${serverUrl}/`, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({
-            contents: [
-              {
-                role: "user",
-                parts: [{ text: systemInstruction }]
-              },
-              {
-                role: "model",
-                parts: [{ text: "Understood. I will act as the SmartAttend2 assistant following these rules." }]
-              },
-              {
-                role: "user",
-                parts: [{ text: prompt }]
-              }
-            ]
+            action: 'ask_gemini',
+            prompt: prompt
           })
         });
         
         const data = await response.json();
-        if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts[0].text) {
-          return data.candidates[0].content.parts[0].text;
+        if (data.status === 'success') {
+          return data.message;
         } else {
-          if (data.error) {
-            return `API Error: ${data.error.message} (Code: ${data.error.code})`;
-          }
-          return "I'm sorry, I couldn't generate a response right now. Debug Info: " + JSON.stringify(data);
+          return `Server Error: ${data.message}`;
         }
       } catch (error) {
-        console.error("Gemini API error:", error);
-        return `Error connecting to AI: ${error.message}`;
+        console.error("Gemini server error:", error);
+        return `Error connecting to AI Server: ${error.message}`;
       }
     }
 
