@@ -775,11 +775,11 @@ app.get('/', authenticateToken, async (req, res) => {
 
         if (hSub) {
           if (!subjectStats[hSub]) {
-            subjectStats[hSub] = { dates: new Set(), attended: 0 };
+            subjectStats[hSub] = { dates: new Set(), attendedDates: new Set() };
           }
           subjectStats[hSub].dates.add(hDate);
           if (hSid === dbStudentId.toLowerCase().trim() && ['present', 'late'].includes(hStatus)) {
-            subjectStats[hSub].attended++;
+            subjectStats[hSub].attendedDates.add(hDate);
           }
         }
       });
@@ -787,10 +787,11 @@ app.get('/', authenticateToken, async (req, res) => {
       const result = Object.keys(subjectStats).map(subName => {
         const stats = subjectStats[subName];
         const total = stats.dates.size;
-        const pct = total > 0 ? (stats.attended / total) * 100 : 0;
+        const attended = stats.attendedDates.size;
+        const pct = total > 0 ? (attended / total) * 100 : 0;
         return {
           Subject: subName,
-          Attended: stats.attended,
+          Attended: attended,
           Total: total,
           Percentage: parseFloat(pct.toFixed(2))
         };
@@ -1292,12 +1293,23 @@ RULES:
         try {
           const { data: history } = await supabase
             .from('AttendanceHistory')
-            .select('Status')
+            .select('Status, Date, Subject')
             .eq('StudentID', sId);
 
           if (history) {
-            const total = history.length;
-            const present = history.filter(r => ['present', 'late'].includes((r.Status || '').toLowerCase().trim())).length;
+            const uniqueSessions = new Set();
+            const uniqueAttended = new Set();
+            
+            history.forEach(r => {
+              const sessionKey = `${r.Date}_${r.Subject}`;
+              uniqueSessions.add(sessionKey);
+              if (['present', 'late'].includes((r.Status || '').toLowerCase().trim())) {
+                uniqueAttended.add(sessionKey);
+              }
+            });
+
+            const total = uniqueSessions.size;
+            const present = uniqueAttended.size;
             const pct = total > 0 ? parseFloat(((present / total) * 100).toFixed(2)) : 0.00;
 
             await supabase

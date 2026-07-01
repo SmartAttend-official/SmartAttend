@@ -8,4 +8,4 @@
 6) Fix lab attendance total class counting error (05-06-2026 done)
 7) Fix subject wise breakdown in student panel It is only showing Lab detail not the Class detail.   (05-06-2026 done)
 
-8) A double counting of the lab attendance error is still in the system
+8) A double counting of the lab attendance error is still in the system (01-07-2026 done)
