@@ -516,3 +516,22 @@ SmartAttend was developed using a **Human-AI Collaborative Engineering** model (
 *   **Backend Hosting (Render)**: The Node.js backend API code has been uploaded to GitHub and deployed on **Render**. Render is configured to automatically fetch and deploy updates from the GitHub repository, providing continuous integration and zero-downtime updates.
 *   **Frontend Hosting (Netlify)**: The frontend client (HTML/CSS/JS) has been securely deployed on **Netlify**, ensuring fast load times and automatic CI/CD deployment.
 *   **Future Scalability Plan (Oracle Cloud)**: A long-term scaling strategy has been established. If the user base grows significantly (e.g., hitting 10,000+ simultaneous connections) and the current Render tier limits are reached, the Node.js backend is designed to be fully portable and will be migrated to an **Oracle Cloud** instance for massive, cost-effective scalability.
+
+## 🌟 Security & Logic Hardening (**July 01, 2026**)
+
+### 43. AI Integration Security Patch
+**Objective**: Prevent the Google Gemini API key from being exposed to the client-side browser, eliminating a critical security and financial risk.
+
+*   **Server-Side Proxy (`server.js`)**: Moved the Gemini API call from the frontend to the Node.js backend. Created a secure `ask_gemini` route that handles all communication with Google's generative AI models.
+*   **Frontend Refactoring (`dashboard1.html`)**: Removed the exposed API key from `dashboard1.html`. The frontend `askGemini()` function now securely `fetch`es answers directly from the SmartAttend backend proxy.
+
+### 44. Mathematical Deduplication of Lab Attendance (Double-Counting Fix)
+**Objective**: Fix a legacy architectural bug that allowed a single student to be counted multiple times on the same date for the same subject, artificially inflating their attendance percentage over 100%.
+
+*   **Robust Set Logic (`server.js`)**: Updated the `SubjectAttendance` generation block and the `save_session` synchronization block to use JavaScript `Set` structures to evaluate the uniqueness of `Date + Subject` pairs.
+*   **Dirty Data Immunity**: By explicitly tracking unique `sessionKey` footprints (`${r.Date}_${r.Subject}`), the backend math engine is now entirely immune to dirty duplicate rows in the database resulting from race conditions or UI glitches.
+
+### 45. Batch Processing for Server-Side Face Encodings
+**Objective**: Prevent server memory crashes and V8 timeouts when loading large datasets of student face encodings from Supabase.
+
+*   **Batch Architecture (`generate_encoding.py`)**: Upgraded the encoding generation script to process records in strict batches of 50. This handles memory overhead elegantly, ensuring stability during massive department-wide face registrations.
