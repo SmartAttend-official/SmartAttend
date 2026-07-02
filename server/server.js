@@ -1327,7 +1327,7 @@ RULES:
       }
 
       await logActivity('SAVE_SESSION', `Saved attendance session for ${subject} - ${dept} - ${sem}`);
-      return res.json({ status: 'success' });
+      return res.json({ status: 'success', updated: students.length });
     }
 
     // ── F. GENERAL ACADEMIC WRITES ──
@@ -1903,6 +1903,7 @@ RULES:
       if (dbErr) throw dbErr;
 
       let sentCount = 0;
+      const emailPromises = [];
       for (const student of (dbStudents || [])) {
         const sEmail = student.Email;
         const pEmail = student.Parent_Email || student.ParentEmail || '';
@@ -1914,32 +1915,30 @@ RULES:
         const emailBody = getStudentAlertTemplate(name, subjectName, classDate, pct, att, tot);
 
         if (sEmail && sEmail.includes('@')) {
-          try {
-            await transporter.sendMail({
+          emailPromises.push(
+            transporter.sendMail({
               from: `SmartAttend <${process.env.SMTP_USER}>`,
               to: sEmail.trim(),
               subject: 'SmartAttend — Attendance Alert',
               html: emailBody
-            });
-          } catch (e) {
-            console.error(`Failed to send student email to ${sEmail}:`, e.message);
-          }
+            }).catch(e => console.error(`Failed to send student email to ${sEmail}:`, e.message))
+          );
         }
 
         if (pEmail && pEmail.includes('@')) {
-          try {
-            await transporter.sendMail({
+          emailPromises.push(
+            transporter.sendMail({
               from: `SmartAttend <${process.env.SMTP_USER}>`,
               to: pEmail.trim(),
               subject: `SmartAttend — Absenteeism Notification: ${name}`,
               html: getParentAbsentAlertTemplate(name, subjectName, classDate, pct)
-            });
-          } catch (e) {
-            console.error(`Failed to send parent email to ${pEmail}:`, e.message);
-          }
+            }).catch(e => console.error(`Failed to send parent email to ${pEmail}:`, e.message))
+          );
         }
         sentCount++;
       }
+
+      await Promise.allSettled(emailPromises);
 
       await logActivity('ABSENT_ALERTS', `Sent ${sentCount} alerts for ${subjectName}`);
       return res.json({ status: 'success', sent: sentCount });
@@ -1968,6 +1967,7 @@ RULES:
       if (dbErr) throw dbErr;
 
       let sentCount = 0;
+      const emailPromises = [];
       for (const s of lateStudents) {
         const cleanSId = String(s.id).trim();
         const student = (dbStudents || []).find(st => String(st.ID).trim() === cleanSId);
@@ -1980,33 +1980,31 @@ RULES:
           const name = student.Name || s.name || 'Student';
 
           if (sEmail && sEmail.includes('@')) {
-            try {
-              await transporter.sendMail({
+            emailPromises.push(
+              transporter.sendMail({
                 from: `SmartAttend <${process.env.SMTP_USER}>`,
                 to: sEmail.trim(),
                 subject: 'SmartAttend — Late Attendance Alert',
                 html: getLateAlertTemplate(name, cleanSId, subjectName, classDate, lateMins)
-              });
-            } catch (e) {
-              console.error(`Failed to send late student email to ${sEmail}:`, e.message);
-            }
+              }).catch(e => console.error(`Failed to send late student email to ${sEmail}:`, e.message))
+            );
           }
 
           if (pEmail && pEmail.includes('@')) {
-            try {
-              await transporter.sendMail({
+            emailPromises.push(
+              transporter.sendMail({
                 from: `SmartAttend <${process.env.SMTP_USER}>`,
                 to: pEmail.trim(),
                 subject: `SmartAttend — Late Attendance Notification: ${name}`,
                 html: getParentLateAlertTemplate(name, subjectName, classDate, lateMins)
-              });
-            } catch (e) {
-              console.error(`Failed to send late parent email to ${pEmail}:`, e.message);
-            }
+              }).catch(e => console.error(`Failed to send late parent email to ${pEmail}:`, e.message))
+            );
           }
           sentCount++;
         }
       }
+
+      await Promise.allSettled(emailPromises);
 
       await logActivity('LATE_ALERTS', `Sent ${sentCount} late alerts for ${subjectName}`);
       return res.json({ status: 'success', sent: sentCount });
