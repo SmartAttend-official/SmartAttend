@@ -7,7 +7,7 @@ import json
 # Newer Python versions removed 'pkg_resources', which crashes face_recognition.
 # We will create a fake 'pkg_resources' to trick it into working!
 try:
-    import pkg_resources
+    import pkg_resources  # type: ignore
 except ImportError:
     class FakePkgResources:
         @staticmethod

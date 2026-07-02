@@ -5,7 +5,7 @@ import urllib.request
 
 # ── Fix for Windows Python 3.12+ ──────────────────────────────
 try:
-    import pkg_resources
+    import pkg_resources  # type: ignore
 except ImportError:
     class FakePkgResources:
         @staticmethod
