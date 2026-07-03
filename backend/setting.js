@@ -39,14 +39,27 @@ document.addEventListener('DOMContentLoaded', () => {
     urlInput.value = savedUrl;
   }
 
+  // Email Toggle State Persistence
+  const emailToggle = document.getElementById('emailToggle');
+  if (emailToggle && localStorage.getItem('emailEnabled') === 'true') {
+    emailToggle.checked = true;
+  }
+  if (emailToggle) {
+    emailToggle.addEventListener('change', (e) => {
+      localStorage.setItem('emailEnabled', e.target.checked);
+    });
+  }
+
   // SMS Toggle State Persistence
   const smsToggle = document.getElementById('smsToggle');
-  if (localStorage.getItem('smsEnabled') === 'true') {
+  if (smsToggle && localStorage.getItem('smsEnabled') === 'true') {
     smsToggle.checked = true;
   }
-  smsToggle.addEventListener('change', (e) => {
-    localStorage.setItem('smsEnabled', e.target.checked);
-  });
+  if (smsToggle) {
+    smsToggle.addEventListener('change', (e) => {
+      localStorage.setItem('smsEnabled', e.target.checked);
+    });
+  }
 
   document.getElementById('saveCameraBtn').addEventListener('click', () => {
     let val = urlInput.value.trim();
@@ -223,6 +236,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       const res = await fetch(window.SMART_ATTEND_CONFIG.SCRIPT_URL, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
       const data = await res.json();

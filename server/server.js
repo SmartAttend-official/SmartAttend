@@ -1774,17 +1774,21 @@ RULES:
       `;
 
       try {
-        await transporter.sendMail({
+        transporter.sendMail({
           from: `SmartAttend <${process.env.SMTP_USER}>`,
           to: professorEmail,
           subject: `SmartAttend: ${timeframe} Analytic Report for ${subject}`,
           html: htmlBody
+        }).then(() => {
+          logActivity('GENERATE_REPORT', `Generated ${timeframe} report for ${subject} and sent to ${professorEmail}`);
+        }).catch(mailErr => {
+          console.error("Failed to send analytic email:", mailErr.message);
         });
-        await logActivity('GENERATE_REPORT', `Generated ${timeframe} report for ${subject} and sent to ${professorEmail}`);
+        
         return res.json({ status: 'success' });
-      } catch (mailErr) {
-        console.error("Failed to send analytic email:", mailErr.message);
-        return res.json({ status: 'error', message: 'Mail dispatch failed: ' + mailErr.message });
+      } catch (err) {
+        console.error("Report process failed:", err.message);
+        return res.json({ status: 'error', message: 'Report processing failed: ' + err.message });
       }
     }
 
@@ -1938,9 +1942,12 @@ RULES:
         sentCount++;
       }
 
-      await Promise.allSettled(emailPromises);
+      Promise.allSettled(emailPromises).then(() => {
+        logActivity('ABSENT_ALERTS', `Sent ${sentCount} alerts for ${subjectName}`);
+      }).catch(err => {
+        console.error('Error in email alerts:', err);
+      });
 
-      await logActivity('ABSENT_ALERTS', `Sent ${sentCount} alerts for ${subjectName}`);
       return res.json({ status: 'success', sent: sentCount });
     }
 
@@ -2004,9 +2011,12 @@ RULES:
         }
       }
 
-      await Promise.allSettled(emailPromises);
+      Promise.allSettled(emailPromises).then(() => {
+        logActivity('LATE_ALERTS', `Sent ${sentCount} late alerts for ${subjectName}`);
+      }).catch(err => {
+        console.error('Error in late email alerts:', err);
+      });
 
-      await logActivity('LATE_ALERTS', `Sent ${sentCount} late alerts for ${subjectName}`);
       return res.json({ status: 'success', sent: sentCount });
     }
 
