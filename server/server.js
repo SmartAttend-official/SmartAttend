@@ -93,7 +93,7 @@ const transporter = nodemailer.createTransport({
 // Helper: Log activities in AuditLogs table
 async function logActivity(action, details) {
   try {
-    await supabase.from('AuditLogs').insert([{ Action: action, Details: details }]);
+    await supabase.from('AuditLogs').insert([{ Type: action, Details: details }]);
   } catch (e) {
     console.error('Logging activity failed:', e.message);
   }
@@ -1783,6 +1783,7 @@ RULES:
           logActivity('GENERATE_REPORT', `Generated ${timeframe} report for ${subject} and sent to ${professorEmail}`);
         }).catch(mailErr => {
           console.error("Failed to send analytic email:", mailErr.message);
+          logActivity('EMAIL_ERROR', `Failed to send to ${professorEmail}: ${mailErr.message}`);
         });
         
         return res.json({ status: 'success' });
@@ -1942,8 +1943,13 @@ RULES:
         sentCount++;
       }
 
-      Promise.allSettled(emailPromises).then(() => {
+      Promise.allSettled(emailPromises).then((results) => {
         logActivity('ABSENT_ALERTS', `Sent ${sentCount} alerts for ${subjectName}`);
+        results.forEach(r => {
+          if (r.status === 'rejected') {
+            logActivity('EMAIL_ERROR', `Failed to send alert: ${r.reason.message}`);
+          }
+        });
       }).catch(err => {
         console.error('Error in email alerts:', err);
       });
