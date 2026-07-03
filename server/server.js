@@ -79,16 +79,44 @@ function authenticateToken(req, res, next) {
   });
 }
 
-// Initialize Nodemailer Transporter
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT || '587', 10),
-  secure: false, // true for 465, false for other ports
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+// Helper: Send email via Google Apps Script API
+async function sendEmailViaGAS({ to, subject, html, text }) {
+  const scriptUrl = process.env.EMAIL_SCRIPT_URL;
+  if (!scriptUrl) {
+    throw new Error('EMAIL_SCRIPT_URL environment variable is not defined.');
+  }
+
+  const payload = {
+    to: to,
+    subject: subject,
+    htmlBody: html || '',
+    textBody: text || ''
+  };
+
+  const res = await fetch(scriptUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' }, // Google Apps Script handles text/plain best for POST bodies
+    body: JSON.stringify(payload)
+  });
+
+  const result = await res.json();
+  if (result.status !== 'success') {
+    throw new Error(result.message || 'Google Apps Script returned an error.');
+  }
+  return result;
+}
+
+// Create a mock transporter to minimize code changes in routes
+const transporter = {
+  sendMail: async (mailOptions) => {
+    return sendEmailViaGAS({
+      to: mailOptions.to,
+      subject: mailOptions.subject,
+      html: mailOptions.html,
+      text: mailOptions.text
+    });
+  }
+};
 
 // Helper: Log activities in AuditLogs table
 async function logActivity(action, details) {
