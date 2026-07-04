@@ -108,8 +108,8 @@ async function sendEmailViaGAS({ to, subject, html, text }) {
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT || '587', 10),
-  secure: false, // true for 465, false for other ports
+  port: parseInt(process.env.SMTP_PORT || '465', 10),
+  secure: true, // Force true for 465 to bypass firewall limitations on cloud hosts like Render
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS
