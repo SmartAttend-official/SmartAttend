@@ -1800,22 +1800,20 @@ RULES:
       `;
 
       try {
-        transporter.sendMail({
+        await transporter.sendMail({
           from: `SmartAttend <${process.env.SMTP_USER}>`,
           to: professorEmail,
           subject: `SmartAttend: ${timeframe} Analytic Report for ${subject}`,
           html: htmlBody
-        }).then(() => {
-          logActivity('GENERATE_REPORT', `Generated ${timeframe} report for ${subject} and sent to ${professorEmail}`);
-        }).catch(mailErr => {
-          console.error("Failed to send analytic email:", mailErr.message);
-          logActivity('EMAIL_ERROR', `Failed to send to ${professorEmail}: ${mailErr.message}`);
         });
         
+        await logActivity('GENERATE_REPORT', `Generated ${timeframe} report for ${subject} and sent to ${professorEmail}`);
         return res.json({ status: 'success' });
-      } catch (err) {
-        console.error("Report process failed:", err.message);
-        return res.json({ status: 'error', message: 'Report processing failed: ' + err.message });
+
+      } catch (mailErr) {
+        console.error("Failed to send analytic email:", mailErr.message);
+        await logActivity('EMAIL_ERROR', `Failed to send to ${professorEmail}: ${mailErr.message}`);
+        return res.json({ status: 'error', message: 'Report generated, but email failed to send: ' + mailErr.message });
       }
     }
 
