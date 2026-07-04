@@ -106,17 +106,15 @@ async function sendEmailViaGAS({ to, subject, html, text }) {
   return result;
 }
 
-// Create a mock transporter to minimize code changes in routes
-const transporter = {
-  sendMail: async (mailOptions) => {
-    return sendEmailViaGAS({
-      to: mailOptions.to,
-      subject: mailOptions.subject,
-      html: mailOptions.html,
-      text: mailOptions.text
-    });
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || 'smtp.gmail.com',
+  port: parseInt(process.env.SMTP_PORT || '587', 10),
+  secure: false, // true for 465, false for other ports
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS
   }
-};
+});
 
 // Helper: Log activities in AuditLogs table
 async function logActivity(action, details) {
