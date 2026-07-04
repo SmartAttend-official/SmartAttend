@@ -104,7 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
       testConnectionBtn.disabled = true;
 
       // Silent Ping
-      fetch(val, { mode: 'no-cors', cache: 'no-store' })
+      fetch(val, { cache: 'no-store' })
         .then(() => {
           testConnectionBtn.innerHTML = '<i class="fa-solid fa-circle-check"></i> Connected';
           testConnectionBtn.style.color = '#10b981';

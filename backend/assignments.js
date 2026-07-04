@@ -216,7 +216,6 @@ document.addEventListener('DOMContentLoaded', async function () {
             try {
                 const response = await fetch(SCRIPT_URL, {
                     method: 'POST',
-                    mode: 'no-cors', // standard CORS workaround for Google Web Apps
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
@@ -451,7 +450,6 @@ async function deleteAssignment(id) {
 
         const response = await fetch(SCRIPT_URL, {
             method: 'POST',
-            mode: 'no-cors',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 sheet: 'student_assignments',

@@ -63,7 +63,6 @@ async function handleDeleteStudent() {
     const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
     await fetch(SCRIPT_URL, {
       method: 'POST',
-      mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sheet: 'student', action: 'delete', id: studentId })
     });
@@ -100,7 +99,6 @@ async function handleEditSubmit(event) {
       const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
       await fetch(SCRIPT_URL, {
         method: 'POST',
-        mode: 'no-cors',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sheet: 'student', action: 'update', id: studentId, data: { Name: newName, Semester: newSem, 'Email': newEmail } })
       });

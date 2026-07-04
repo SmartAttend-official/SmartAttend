@@ -367,7 +367,6 @@ async function renderProfessorMgmt() {
 
         await fetch(SCRIPT_URL, {
             method: 'POST',
-            mode: 'no-cors',
             body: JSON.stringify({ action: 'add_professor', data: data })
         });
         showToast(`Professor ${data['Professor first_name']} added successfully!`, 'success');
@@ -399,7 +398,6 @@ async function renderProfessorMgmt() {
             try {
                 await fetch(SCRIPT_URL, {
                     method: 'POST',
-                    mode: 'no-cors',
                     body: JSON.stringify({ action: 'update', sheet: 'professor', searchCol: 'Email', searchVal: originalEmail, data: data })
                 });
                 showToast(`Professor updated successfully!`, 'success');
@@ -511,7 +509,6 @@ window.deleteProfessor = async (email) => {
     if (!confirm(`Are you sure you want to remove professor ${email}? This action is irreversible.`)) return;
     await fetch(SCRIPT_URL, {
         method: 'POST',
-        mode: 'no-cors',
         body: JSON.stringify({ action: 'delete_professor', email: email })
     });
     showToast(`Professor ${email} removed from system.`, 'error');
@@ -583,7 +580,6 @@ window.editProfessorDept = (email, currentDept) => {
         try {
             await fetch(SCRIPT_URL, {
                 method: 'POST',
-                mode: 'no-cors',
                 body: JSON.stringify({
                     action: 'update',
                     sheet: 'professor',
@@ -871,7 +867,6 @@ async function renderStudentMgmt() {
 
             await fetch(SCRIPT_URL, {
                 method: 'POST',
-                mode: 'no-cors',
                 body: JSON.stringify({ action: 'add', sheet: 'student', data: data })
             });
             showToast(`Student ${data.Name} registered successfully!`, 'success');
@@ -923,7 +918,6 @@ async function renderStudentMgmt() {
             try {
                 await fetch(SCRIPT_URL, {
                     method: 'POST',
-                    mode: 'no-cors',
                     body: JSON.stringify({ action: 'update', sheet: 'student', id: id, data: data })
                 });
                 showToast(`Student #${id} updated successfully!`, 'success');
@@ -1021,7 +1015,6 @@ window.executeBulkPromotion = async () => {
     try {
         await fetch(SCRIPT_URL, {
             method: 'POST',
-            mode: 'no-cors',
             body: JSON.stringify({ 
                 action: 'bulk_update_semester', 
                 ids: selectedIds, 
@@ -1117,7 +1110,6 @@ window.deleteStudent = async (id) => {
     if (!confirm("Delete student record #" + id + "?")) return;
     await fetch(SCRIPT_URL, {
         method: 'POST',
-        mode: 'no-cors',
         body: JSON.stringify({ action: 'delete', sheet: 'student', id: id })
     });
     showToast(`Student record #${id} deleted.`, 'error');
@@ -1292,7 +1284,6 @@ window.runCloudBackup = async () => {
         // Stage 2: Call Backend
         const response = await fetch(SCRIPT_URL, {
             method: 'POST',
-            mode: 'no-cors',
             body: JSON.stringify({ action: 'create_backup' })
         });
 
@@ -1901,7 +1892,6 @@ async function renderAdminProfile() {
             const deptRole = fd.get('departmentRole');
             await fetch(SCRIPT_URL, {
                 method: 'POST',
-                mode: 'no-cors',
                 body: JSON.stringify({
                     action: 'update_profile',
                     sheet: 'admin',
@@ -2084,7 +2074,6 @@ window.executeBulkDeptUpdate = async () => {
     try {
         await fetch(SCRIPT_URL, {
             method: 'POST',
-            mode: 'no-cors',
             body: JSON.stringify({ 
                 action: 'bulk_update_dept_year', 
                 codes: codes, 
@@ -2789,7 +2778,6 @@ async function handleAcademicSubmit(e, action, modalId, viewToReload, extraData 
 
     await fetch(SCRIPT_URL, {
         method: 'POST',
-        mode: 'no-cors',
         body: JSON.stringify(payload)
     });
     closeModal(modalId);
@@ -2812,7 +2800,6 @@ window.deleteAcademic = async (subSheet, key, val, viewToReload) => {
     try {
         await fetch(SCRIPT_URL, {
             method: 'POST',
-            mode: 'no-cors',
             body: JSON.stringify({ action: 'delete_academic', subSheet: subSheet, key: key, val: val })
         });
 
@@ -2937,7 +2924,6 @@ window.sendBulkRecovery = async () => {
         const emailParams = selectedEmails.join(',');
         await fetch(`${SCRIPT_URL}?action=send_admin_otps&emails=${encodeURIComponent(emailParams)}`, {
             method: 'GET',
-            mode: 'no-cors'
         });
         showToast(`Success! Recovery OTPs sent to ${selectedEmails.length} students.`, 'success');
         renderRecoverySystem();
