@@ -1124,7 +1124,7 @@ RULES:
 
     // ── B. REGISTRATION ACTIONS ──
     if (action === 'add' && sheet === 'student') {
-      const { ID, Name, Email, Password, Department, Semester, Parent_Email } = data;
+      const { ID, Name, Email, Password, Department, Semester, Parent_Email, Mobile } = data;
       const { error } = await supabase
         .from('students')
         .insert([{
@@ -1135,6 +1135,7 @@ RULES:
           Department: Department,
           Semester: Semester,
           Parent_Email: Parent_Email,
+          Mobile: Mobile,
           Total_Classes: 0,
           Classes_Attended: 0,
           Attendance_Percentage: 0.00

@@ -361,17 +361,27 @@ async function renderProfessorMgmt() {
             'Professor id': 'P' + Math.floor(1000 + Math.random() * 9000),
             'Professor first_name': fd.get('firstName'),
             'Professor last_name': fd.get('lastName'),
+            'Name': fd.get('firstName') + ' ' + fd.get('lastName'),
             'Email': fd.get('email'),
             'Department': fd.get('department')
         };
 
-        await fetch(SCRIPT_URL, {
-            method: 'POST',
-            body: JSON.stringify({ action: 'add_professor', data: data })
-        });
-        showToast(`Professor ${data['Professor first_name']} added successfully!`, 'success');
-        closeModal('profModal');
-        loadView('professors');
+        try {
+            const response = await fetch(SCRIPT_URL, {
+                method: 'POST',
+                body: JSON.stringify({ action: 'add_professor', data: data })
+            });
+            const result = await response.json();
+            if (result.status === 'success') {
+                showToast(`Professor ${data['Professor first_name']} added successfully!`, 'success');
+                closeModal('profModal');
+                loadView('professors');
+            } else {
+                showToast("Error: " + (result.message || "Failed to add professor"), "error");
+            }
+        } catch (err) {
+            showToast("Network Error: " + err.message, "error");
+        }
     };
 
     const updateProfForm = document.getElementById('updateProfForm');
@@ -853,25 +863,37 @@ async function renderStudentMgmt() {
                 'Name': fd.get('name'),
                 'Email': fd.get('email'),
                 'Parent Email': fd.get('parentEmail'),
+                'Parent_Email': fd.get('parentEmail'),
                 'Mobile Number': mobileStr,
                 'Mobile': mobileStr,
                 'Mobile No': mobileStr,
                 'Phone': mobileStr,
                 'DEPARTMENT': fd.get('department'),
+                'Department': fd.get('department'),
                 'SEMESTER': fd.get('semester'),
+                'Semester': fd.get('semester'),
                 'Attendance_Status': 'Not Marked',
                 'Total_Classes': 0,
                 'Classes_Attended': 0,
                 'Attendance_Percentage': 0
             };
 
-            await fetch(SCRIPT_URL, {
-                method: 'POST',
-                body: JSON.stringify({ action: 'add', sheet: 'student', data: data })
-            });
-            showToast(`Student ${data.Name} registered successfully!`, 'success');
-            closeModal('studentModal');
-            loadView('students');
+            try {
+                const response = await fetch(SCRIPT_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'add', sheet: 'student', data: data })
+                });
+                const result = await response.json();
+                if (result.status === 'success') {
+                    showToast(`Student ${data.Name} registered successfully!`, 'success');
+                    closeModal('studentModal');
+                    loadView('students');
+                } else {
+                    showToast("Error: " + (result.message || "Failed to register student"), "error");
+                }
+            } catch (err) {
+                showToast("Network Error: " + err.message, "error");
+            }
         };
     }
 
