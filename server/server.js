@@ -53,7 +53,7 @@ function authenticateToken(req, res, next) {
   const action = req.query.action || (req.body && req.body.action);
   const sheet = req.query.sheet || (req.body && req.body.sheet);
   
-  if (action === 'login' || action === 'send_otp' || action === 'verify_otp' || action === 'get_encoding' || action === 'save_encoding' || (!action && !sheet)) {
+  if (action === 'login' || action === 'send_otp' || action === 'verify_otp' || action === 'verify_student_email' || action === 'get_encoding' || action === 'save_encoding' || (!action && !sheet)) {
     return next();
   }
 
@@ -245,6 +245,25 @@ function getOtpEmailTemplate(otp, name) {
       </div>
     </div>
   `;
+}
+
+// HTML Email Template for Welcome/New Student
+function getWelcomeEmailTemplate(name, id, password) {
+  return `
+  <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f4f7f6; color: #333;">
+    <div style="max-width: 600px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 8px; border-top: 4px solid #10b981; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+      <h2 style="color: #10b981; margin-bottom: 20px;">Welcome to SmartAttend!</h2>
+      <p>Hello <strong>${name}</strong>,</p>
+      <p>Your student account has been successfully created. You can now log into the SmartAttend portal using the credentials below:</p>
+      <div style="background: #f8fafc; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #10b981;">
+        <p style="margin: 5px 0;"><strong>Student ID:</strong> ${id}</p>
+        <p style="margin: 5px 0;"><strong>Password:</strong> ${password}</p>
+      </div>
+      <p>Please log in and ensure your information is up to date.</p>
+      <hr style="border: none; border-top: 1px solid #eaeaea; margin: 20px 0;" />
+      <p style="font-size: 12px; color: #888;">If you did not request this, please contact the administration.</p>
+    </div>
+  </div>`;
 }
 
 // HTML Email Template for Assignment Upload
@@ -588,7 +607,7 @@ app.get('/', authenticateToken, async (req, res) => {
     if (action === 'verify_student_email') {
       const { data, error } = await supabase
         .from('students')
-        .select('ID')
+        .select('ID, Name')
         .eq('Email', email);
 
       if (error) throw error;
@@ -597,7 +616,25 @@ app.get('/', authenticateToken, async (req, res) => {
         return res.json({ status: 'error', message: 'This email is not registered in the student database.' });
       }
 
-      return res.json({ status: 'success', message: 'Email verified.' });
+      const studentName = data[0].Name || 'Student';
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiry = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+      const { error: updateErr } = await supabase
+        .from('students')
+        .update({ OTP: otp, OTP_Timestamp: expiry, ResetStatus: 'PENDING' })
+        .eq('Email', email);
+
+      if (updateErr) throw updateErr;
+
+      await transporter.sendMail({
+        from: `SmartAttend <${process.env.SMTP_USER}>`,
+        to: email,
+        subject: 'SmartAttend — Your Password Reset OTP',
+        html: getOtpEmailTemplate(otp, studentName),
+      }).catch(e => console.error('Failed to send OTP email:', e.message));
+
+      return res.json({ status: 'success', message: 'Email verified and OTP sent.' });
     }
 
     if (action === 'verify_otp') {
@@ -1142,6 +1179,16 @@ RULES:
         }]);
 
       if (error) throw error;
+
+      if (Email && Email.includes('@')) {
+        transporter.sendMail({
+          from: `SmartAttend <${process.env.SMTP_USER}>`,
+          to: Email.trim(),
+          subject: 'SmartAttend — Your Student Account Details',
+          html: getWelcomeEmailTemplate(Name || 'Student', ID, Password),
+        }).catch(e => console.error('Failed to send welcome email:', e.message));
+      }
+
       await logActivity('ADD_STUDENT', `Student added: ${Name} (${ID})`);
       return res.json({ status: 'success' });
     }
