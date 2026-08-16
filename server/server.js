@@ -565,42 +565,43 @@ app.get('/', authenticateToken, async (req, res) => {
     }
 
     if (action === 'send_admin_otps') {
-      const emailList = (req.query.emails || "").split(',');
+      const emailList = (req.query.emails || "").split(',').map(e => e.trim()).filter(Boolean);
+      const emailPromises = [];
+      let processedCount = 0;
       
       for (const targetEmail of emailList) {
-        const trimmedEmail = targetEmail.trim();
-        if (!trimmedEmail) continue;
-
         const { data: students, error: stdErr } = await supabase
           .from('students')
           .select('*')
-          .eq('Email', trimmedEmail);
+          .ilike('Email', targetEmail);
 
         if (stdErr || !students || students.length === 0) continue;
 
+        const student = students[0];
+        const actualEmail = student.Email;
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         const expiry = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
         await supabase
           .from('students')
           .update({ OTP: otp, OTP_Timestamp: expiry, ResetStatus: 'PENDING' })
-          .eq('Email', trimmedEmail);
+          .eq('ID', student.ID);
 
-        const studentName = students[0].Name || 'Student';
+        const studentName = student.Name || 'Student';
 
-        try {
-          await transporter.sendMail({
+        emailPromises.push(
+          transporter.sendMail({
             from: `SmartAttend <${process.env.SMTP_USER}>`,
-            to: trimmedEmail,
+            to: actualEmail,
             subject: 'SmartAttend — Your Password Reset OTP',
             html: getOtpEmailTemplate(otp, studentName),
-          });
-        } catch (mailErr) {
-          console.error("Mail Send Error:", mailErr);
-        }
+          }).catch(mailErr => console.error("Mail Send Error:", mailErr))
+        );
+        processedCount++;
       }
 
-      await logActivity('OTP_DISPATCH', `Sent Recovery OTPs to ${emailList.length} students`);
+      await Promise.allSettled(emailPromises);
+      await logActivity('OTP_DISPATCH', `Sent Recovery OTPs to ${processedCount} students`);
       return res.json({ status: 'success', message: 'OTPs processed.' });
     }
 
