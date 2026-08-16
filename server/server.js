@@ -554,7 +554,7 @@ app.get('/', authenticateToken, async (req, res) => {
       const profName = targetProf['Professor  first_name'] || targetProf['Professor first_name'] || 'Professor';
 
       // Send Email
-      await transporter.sendMail({
+      await sendEmailViaGAS({
         from: `SmartAttend <${process.env.SMTP_USER}>`,
         to: email,
         subject: 'SmartAttend — Your Password Reset OTP',
@@ -590,7 +590,7 @@ app.get('/', authenticateToken, async (req, res) => {
         const studentName = student.Name || 'Student';
 
         emailPromises.push(
-          transporter.sendMail({
+          sendEmailViaGAS({
             from: `SmartAttend <${process.env.SMTP_USER}>`,
             to: actualEmail,
             subject: 'SmartAttend — Your Password Reset OTP',
@@ -628,7 +628,7 @@ app.get('/', authenticateToken, async (req, res) => {
 
       if (updateErr) throw updateErr;
 
-      await transporter.sendMail({
+      await sendEmailViaGAS({
         from: `SmartAttend <${process.env.SMTP_USER}>`,
         to: email,
         subject: 'SmartAttend — Your Password Reset OTP',
@@ -1182,7 +1182,7 @@ RULES:
       if (error) throw error;
 
       if (Email && Email.includes('@')) {
-        transporter.sendMail({
+        sendEmailViaGAS({
           from: `SmartAttend <${process.env.SMTP_USER}>`,
           to: Email.trim(),
           subject: 'SmartAttend — Your Student Account Details',
@@ -1554,7 +1554,7 @@ RULES:
           for (const s of filteredStudents) {
             if (s.Email && s.Email.includes('@')) {
               try {
-                await transporter.sendMail({
+                await sendEmailViaGAS({
                   from: `SmartAttend <${process.env.SMTP_USER}>`,
                   to: s.Email,
                   subject: `New Assignment: ${title} (${subject})`,
@@ -1617,7 +1617,7 @@ RULES:
           for (const s of filteredStudents) {
             if (s.Email && s.Email.includes('@')) {
               try {
-                await transporter.sendMail({
+                await sendEmailViaGAS({
                   from: `SmartAttend <${process.env.SMTP_USER}>`,
                   to: s.Email,
                   subject: `RETRACTED: Assignment Cancelled: ${assignment.Title}`,
@@ -1850,7 +1850,7 @@ RULES:
       `;
 
       try {
-        await transporter.sendMail({
+        await sendEmailViaGAS({
           from: `SmartAttend <${process.env.SMTP_USER}>`,
           to: professorEmail,
           subject: `SmartAttend: ${timeframe} Analytic Report for ${subject}`,
@@ -1995,7 +1995,7 @@ RULES:
 
         if (sEmail && sEmail.includes('@')) {
           emailPromises.push(
-            transporter.sendMail({
+            sendEmailViaGAS({
               from: `SmartAttend <${process.env.SMTP_USER}>`,
               to: sEmail.trim(),
               subject: 'SmartAttend — Attendance Alert',
@@ -2006,7 +2006,7 @@ RULES:
 
         if (pEmail && pEmail.includes('@')) {
           emailPromises.push(
-            transporter.sendMail({
+            sendEmailViaGAS({
               from: `SmartAttend <${process.env.SMTP_USER}>`,
               to: pEmail.trim(),
               subject: `SmartAttend — Absenteeism Notification: ${name}`,
@@ -2068,7 +2068,7 @@ RULES:
 
           if (sEmail && sEmail.includes('@')) {
             emailPromises.push(
-              transporter.sendMail({
+              sendEmailViaGAS({
                 from: `SmartAttend <${process.env.SMTP_USER}>`,
                 to: sEmail.trim(),
                 subject: 'SmartAttend — Late Attendance Alert',
@@ -2079,7 +2079,7 @@ RULES:
 
           if (pEmail && pEmail.includes('@')) {
             emailPromises.push(
-              transporter.sendMail({
+              sendEmailViaGAS({
                 from: `SmartAttend <${process.env.SMTP_USER}>`,
                 to: pEmail.trim(),
                 subject: `SmartAttend — Late Attendance Notification: ${name}`,
