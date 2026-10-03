@@ -68,14 +68,24 @@ async function renderRequests() {
     card.style.opacity = req.status === 'Pending' ? '1' : '0.8';
     
     let attachmentsHTML = '';
-    if (req.image || req.pdf) {
+    if (req.image || req.pdf || req.reason) {
       attachmentsHTML += '<div class="attachments" style="flex-direction: column; gap: 12px; margin-top: 16px;">';
       if (req.image) {
         attachmentsHTML += `
           <div style="width: 100%; border: 1px solid var(--glass-border); border-radius: 8px; padding: 8px; background: rgba(0,0,0,0.2);">
-            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;"><i class="fa-regular fa-image"></i> Attached Image:</div>
+            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+              <span><i class="fa-regular fa-image"></i> Attached Image:</span>
+              <button onclick="analyzeDocWithAI('${req.id}', '${encodeURIComponent(req.image)}', '${encodeURIComponent(req.studentName)}', '${req.studentId}', '${encodeURIComponent(req.reason || '')}')" id="aiBtn-${req.id}" style="background: linear-gradient(135deg, #8b5cf6, #3b82f6); border: none; color: white; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px; box-shadow: 0 0 10px rgba(139, 92, 246, 0.4);">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> AI Audit Proof 🤖
+              </button>
+            </div>
             <img src="${req.image}" style="width: 100%; max-height: 250px; object-fit: contain; border-radius: 4px;" alt="Document">
           </div>`;
+      } else {
+        attachmentsHTML += `
+          <button onclick="analyzeDocWithAI('${req.id}', '', '${encodeURIComponent(req.studentName)}', '${req.studentId}', '${encodeURIComponent(req.reason || '')}')" id="aiBtn-${req.id}" style="background: linear-gradient(135deg, #8b5cf6, #3b82f6); border: none; color: white; padding: 8px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 0 10px rgba(139, 92, 246, 0.4); margin-top: 8px;">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> AI Verify Request Details 🤖
+          </button>`;
       }
       if (req.pdf) {
         attachmentsHTML += `
@@ -83,6 +93,7 @@ async function renderRequests() {
             <i class="fa-solid fa-file-pdf" style="color:#ef4444;"></i> Download Medical (PDF)
           </a>`;
       }
+      attachmentsHTML += `<div id="aiResult-${req.id}" style="display:none; margin-top: 12px;"></div>`;
       attachmentsHTML += '</div>';
     }
 
@@ -119,6 +130,89 @@ async function renderRequests() {
     `;
     container.appendChild(card);
   });
+}
+
+async function analyzeDocWithAI(reqId, encodedImage, encodedName, studentId, encodedReason) {
+  const btn = document.getElementById(`aiBtn-${reqId}`);
+  const resultDiv = document.getElementById(`aiResult-${reqId}`);
+  if (!btn || !resultDiv) return;
+
+  const originalHTML = btn.innerHTML;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> AI Auditing...';
+  btn.disabled = true;
+
+  resultDiv.style.display = 'block';
+  resultDiv.innerHTML = '<div style="font-size: 12px; color: var(--text-muted); text-align: center; padding: 12px; background: rgba(139, 92, 246, 0.1); border-radius: 8px; border: 1px dashed rgba(139, 92, 246, 0.4);"><i class="fa-solid fa-brain fa-spin"></i> Gemini AI is analyzing document authenticity & OCR text...</div>';
+
+  const image = decodeURIComponent(encodedImage || '');
+  const studentName = decodeURIComponent(encodedName || '');
+  const reason = decodeURIComponent(encodedReason || '');
+
+  const token = sessionStorage.getItem('token');
+  const serverUrl = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
+
+  try {
+    const res = await fetch(`${serverUrl}/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        action: 'verify_leave_proof',
+        image: image,
+        text: reason,
+        studentName: studentName,
+        studentId: studentId
+      })
+    });
+
+    const data = await res.json();
+    if (data.status === 'success' && data.data) {
+      const ai = data.data;
+      let badgeBg = 'rgba(16, 185, 129, 0.2)';
+      let badgeBorder = 'rgba(16, 185, 129, 0.5)';
+      let badgeColor = '#10b981';
+      let icon = 'fa-circle-check';
+
+      if (ai.verdict === 'SUSPICIOUS') {
+        badgeBg = 'rgba(245, 158, 11, 0.2)';
+        badgeBorder = 'rgba(245, 158, 11, 0.5)';
+        badgeColor = '#f59e0b';
+        icon = 'fa-triangle-exclamation';
+      } else if (ai.verdict === 'INVALID') {
+        badgeBg = 'rgba(239, 68, 68, 0.2)';
+        badgeBorder = 'rgba(239, 68, 68, 0.5)';
+        badgeColor = '#ef4444';
+        icon = 'fa-circle-xmark';
+      }
+
+      resultDiv.innerHTML = `
+        <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid ${badgeBorder}; border-radius: 10px; padding: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.4);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--purple); letter-spacing: 0.5px;"><i class="fa-solid fa-robot"></i> SmartAttend AI Audit</span>
+            <span style="background: ${badgeBg}; color: ${badgeColor}; border: 1px solid ${badgeBorder}; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700;">
+              <i class="fa-solid ${icon}"></i> ${ai.verdict || 'VERIFIED'} (${ai.confidenceScore || 90}% match)
+            </span>
+          </div>
+          <div style="font-size: 12px; color: var(--text-main); margin-bottom: 6px;">${ai.aiSummary || 'Document parsed successfully.'}</div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; font-size: 11px;">
+            ${ai.nameMatches !== undefined ? `<span style="background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px; color: ${ai.nameMatches ? '#10b981':'#ef4444'};"><i class="fa-solid ${ai.nameMatches ? 'fa-check':'fa-xmark'}"></i> Name Match</span>` : ''}
+            ${ai.hasDoctorSignatureOrStamp !== undefined ? `<span style="background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px; color: ${ai.hasDoctorSignatureOrStamp ? '#10b981':'#f59e0b'};"><i class="fa-solid ${ai.hasDoctorSignatureOrStamp ? 'fa-signature':'fa-question'}"></i> ${ai.hasDoctorSignatureOrStamp ? 'Doctor Stamp Detected' : 'No Clear Stamp'}</span>` : ''}
+            ${ai.medicalDiagnosis ? `<span style="background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px; color: var(--text-muted);"><i class="fa-solid fa-notes-medical"></i> Diagnosis: ${ai.medicalDiagnosis}</span>` : ''}
+          </div>
+        </div>
+      `;
+    } else {
+      resultDiv.innerHTML = `<div style="font-size: 12px; color: #ef4444; padding: 8px; background: rgba(239,68,68,0.1); border-radius: 6px;"><i class="fa-solid fa-circle-exclamation"></i> AI Analysis error: ${data.message || 'Unknown failure.'}</div>`;
+    }
+  } catch (err) {
+    console.error("AI audit failed:", err);
+    resultDiv.innerHTML = `<div style="font-size: 12px; color: #ef4444; padding: 8px; background: rgba(239,68,68,0.1); border-radius: 6px;"><i class="fa-solid fa-circle-exclamation"></i> Connection error with AI service.</div>`;
+  } finally {
+    btn.innerHTML = originalHTML;
+    btn.disabled = false;
+  }
 }
 
 async function resolveRequest(id, decision) {
