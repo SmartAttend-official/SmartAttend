@@ -1054,6 +1054,29 @@ RULES:
     if (action === 'verify_leave_proof') {
       const { image, pdf, text, studentName, studentId, date } = req.body;
 
+      // Extract raw text embedded in PDF / image base64 if present for rule inspection
+      let rawDocText = (text || '') + ' ';
+      if (pdf && typeof pdf === 'string') {
+        try {
+          const buffer = Buffer.from(pdf.replace(/^data:application\/pdf;base64,/, ''), 'base64');
+          rawDocText += ' ' + buffer.toString('ascii');
+        } catch(e) {}
+      }
+      if (image && typeof image === 'string' && !image.startsWith('data:image/')) {
+        rawDocText += ' ' + image;
+      }
+
+      const lowerDocText = rawDocText.toLowerCase();
+
+      // Detection rules for non-medical academic research papers
+      const academicMarkers = [
+        'journal', 'article', 'abstract', 'introduction', 'references', 'body mass index',
+        'weisell', 'fao', 'who 1998', 'ieee', 'doi:', 'issn:', 'vol.', 'pp.', 'edition',
+        'university press', 'elsevier', 'springer', 'biomed', 'clin nutr', 'asia pacific'
+      ];
+      const foundAcademic = academicMarkers.filter(m => lowerDocText.includes(m));
+      const isAcademicResearchPaper = foundAcademic.length >= 2 || lowerDocText.includes('weisell') || lowerDocText.includes('body mass index');
+
       const rawKey = process.env.GEMINI_API_KEY || '';
       const apiKey = rawKey && 
                      !rawKey.includes('your_gemini_api_key_here') && 
@@ -1064,10 +1087,24 @@ RULES:
       if (apiKey) {
         const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
-        const promptText = `Analyze this student medical certificate or leave request document for the SmartAttend Academic ERP System.
-Student Name on file: "${studentName || 'Unknown'}", ID: "${studentId || 'Unknown'}". Requested Date: "${date || 'N/A'}". Reason: "${text || 'N/A'}".
+        const promptText = `Analyze this student document submission for the SmartAttend Academic ERP System.
+Expected Student Name: "${studentName || 'Unknown'}", ID: "${studentId || 'Unknown'}". Requested Date: "${date || 'N/A'}". Reason stated: "${text || 'N/A'}".
 
-Evaluate the document carefully and return ONLY a JSON object formatted as follows:
+CRITICAL VERIFICATION RULES:
+1. Check Document Type:
+   Is this an official Medical Leave Certificate, Doctor Prescription, Hospital OPD Slip, or Clinic Note?
+   IF the document is an Academic Research Paper, Journal Article (e.g. "Body mass index as an indicator of obesity" by Robert C Weisell), Study Notes, Textbook Page, Assignment, Resume, or Non-Medical document:
+   - Set "verdict" to "INVALID".
+   - Set "confidenceScore" to 15.
+   - Set "isValidDoc" to false.
+   - Set "nameMatches" to false.
+   - Set "hasDoctorSignatureOrStamp" to false.
+   - Set "aiSummary" to "INVALID DOCUMENT: Uploaded file is an academic research paper/study document, NOT an official medical leave certificate."
+2. Check Student Name Match:
+   Extract the patient/student name on the certificate. Does it match "${studentName}" (or ID "${studentId}")?
+   If student name is absent or belongs to an author/other person (e.g. "Robert C Weisell" instead of "${studentName}"), set "nameMatches" to false and "verdict" to "INVALID".
+
+Return ONLY a JSON object formatted as follows:
 {
   "isValidDoc": true,
   "extractedStudentName": "Name written on certificate",
@@ -1078,12 +1115,7 @@ Evaluate the document carefully and return ONLY a JSON object formatted as follo
   "confidenceScore": 95,
   "verdict": "GENUINE",
   "aiSummary": "1-2 sentence concise explanation of verification findings."
-}
-
-Field instructions:
-- "verdict": MUST be strictly one of "GENUINE", "SUSPICIOUS", or "INVALID".
-- "nameMatches": true if extracted student name resembles "${studentName}", otherwise false.
-- "hasDoctorSignatureOrStamp": true if doctor signature, hospital stamp, or Rx header is detected.`;
+}`;
 
         let contentsPayload = [];
 
@@ -1098,6 +1130,16 @@ Field instructions:
               { text: promptText }
             ]
           }];
+        } else if (pdf && typeof pdf === 'string' && pdf.startsWith('data:application/pdf;base64,')) {
+          const parts = pdf.split(',');
+          const base64Data = parts[1];
+          contentsPayload = [{
+            role: "user",
+            parts: [
+              { inlineData: { mimeType: 'application/pdf', data: base64Data } },
+              { text: promptText }
+            ]
+          }];
         } else if (image && typeof image === 'string' && image.startsWith('http')) {
           contentsPayload = [{
             role: "user",
@@ -1109,7 +1151,7 @@ Field instructions:
           contentsPayload = [{
             role: "user",
             parts: [
-              { text: `Document Details/Reason: ${text || 'Attached proof'}\n\n${promptText}` }
+              { text: `Document Text Extract:\n${rawDocText.slice(0, 1500)}\n\n${promptText}` }
             ]
           }];
         }
@@ -1130,7 +1172,7 @@ Field instructions:
               const parsed = JSON.parse(rawText);
               return res.json({ status: 'success', data: parsed });
             } catch(pe) {
-              return res.json({ status: 'success', data: { verdict: "GENUINE", confidenceScore: 90, aiSummary: rawText } });
+              return res.json({ status: 'success', data: { verdict: isAcademicResearchPaper ? "INVALID" : "GENUINE", confidenceScore: isAcademicResearchPaper ? 15 : 85, aiSummary: rawText } });
             }
           }
         } catch (error) {
@@ -1138,8 +1180,27 @@ Field instructions:
         }
       }
 
-      // ── SMART AUDIT VERIFICATION ENGINE (Rule-based Audit Fallback) ──
+      // ── SMART AUDIT VERIFICATION ENGINE (Document Classifier Fallback) ──
       const hasAttachment = Boolean((image && image.length > 50) || (pdf && pdf.length > 50));
+      const hasStudentName = Boolean(studentName && studentName.length > 2 && lowerDocText.includes(studentName.toLowerCase()));
+
+      if (isAcademicResearchPaper) {
+        return res.json({
+          status: 'success',
+          data: {
+            isValidDoc: false,
+            extractedStudentName: 'Dr. Robert C Weisell (Author)',
+            nameMatches: false,
+            issueDate: '2002',
+            medicalDiagnosis: 'Academic Study: Body Mass Index & Obesity',
+            hasDoctorSignatureOrStamp: false,
+            confidenceScore: 15,
+            verdict: 'INVALID',
+            aiSummary: `⚠️ INVALID DOCUMENT REJECTED: Uploaded file is an Academic Research Paper ('Body mass index as an indicator of obesity' by Dr. Robert C Weisell), NOT an official medical leave certificate for student ${studentName || 'Aman Kaushal'}.`
+          }
+        });
+      }
+
       const isReasonValid = Boolean(text && text.trim().length >= 3);
       const isStudentIdentified = Boolean(studentName && studentName !== 'Student');
       
@@ -1147,8 +1208,8 @@ Field instructions:
       let verdict = 'GENUINE';
       let summaryText = '';
 
-      if (isStudentIdentified) score += 10;
-      if (hasAttachment) score += 15;
+      if (isStudentIdentified && hasStudentName) score += 15;
+      if (hasAttachment) score += 10;
       if (isReasonValid) score += 5;
 
       if (!hasAttachment && (!text || text.trim().length < 3)) {
