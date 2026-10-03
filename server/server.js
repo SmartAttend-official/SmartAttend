@@ -806,11 +806,16 @@ app.get('/', authenticateToken, async (req, res) => {
     if (sheet === 'leave') {
       let query = supabase.from('LeaveRequests').select('*');
       if (studentId) query = query.eq('studentId', studentId);
-      if (req.query.profEmail) query = query.eq('targetProfessor', req.query.profEmail);
+      if (req.query.profEmail) {
+        query = query.ilike('targetProfessor', req.query.profEmail.trim());
+      }
 
       const { data, error } = await query;
-      if (error) throw error;
-      return res.json(data);
+      if (error) {
+        console.error("Fetch leave error:", error);
+        return res.status(500).json({ status: 'error', message: error.message });
+      }
+      return res.json(data || []);
     }
 
     if ((sheet === 'subject_stats' || sheet === 'SubjectAttendance') && (email || studentId)) {
@@ -966,12 +971,16 @@ app.post('/', authenticateToken, async (req, res) => {
     const { action, sheet, data, id, email, searchCol, searchVal } = req.body;
     
     // ── AI ASSISTANT ACTION ──
+    // ── AI ASSISTANT ACTION ──
     if (action === 'ask_gemini') {
       const prompt = req.body.prompt;
       if (!prompt) return res.json({ status: 'error', message: 'Prompt is required.' });
 
-      // Keep key hidden in backend. Recommended to move to .env later.
-      const apiKey = process.env.GEMINI_API_KEY || "AIzaSyBY60belKbg2wHUq_HsC1ODrZRYb7afbxc";
+      const apiKey = process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY.startsWith('AIzaSyBY60belKbg2wHUq') ? process.env.GEMINI_API_KEY.trim() : null;
+      if (!apiKey) {
+        return res.json({ status: 'error', message: 'Gemini API Key is unconfigured. Please add GEMINI_API_KEY=your_key in server/.env' });
+      }
+
       const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
       
       const systemInstruction = `You are a helpful assistant for the SmartAttend2 system, used only in the Professor Panel. 
@@ -998,7 +1007,6 @@ RULES:
 4. Keep answers brief and avoid overly detailed responses unless asked.`;
 
       try {
-        // Native fetch is available in Node.js 18+ (Render runs 18+)
         const geminiResponse = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1024,7 +1032,10 @@ RULES:
     }
 
     if (action === 'list_ai_models') {
-      const apiKey = process.env.GEMINI_API_KEY || "AIzaSyBY60belKbg2wHUq_HsC1ODrZRYb7afbxc";
+      const apiKey = process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY.startsWith('AIzaSyBY60belKbg2wHUq') ? process.env.GEMINI_API_KEY.trim() : null;
+      if (!apiKey) {
+        return res.json({ status: 'error', message: 'Gemini API Key is unconfigured in server/.env' });
+      }
       const url = `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`;
       try {
         const response = await fetch(url);
@@ -1046,7 +1057,11 @@ RULES:
         return res.json({ status: 'error', message: 'No image or document data provided for AI verification.' });
       }
 
-      const apiKey = process.env.GEMINI_API_KEY || "AIzaSyBY60belKbg2wHUq_HsC1ODrZRYb7afbxc";
+      const apiKey = process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY.startsWith('AIzaSyBY60belKbg2wHUq') ? process.env.GEMINI_API_KEY.trim() : null;
+      if (!apiKey) {
+        return res.json({ status: 'error', message: 'Gemini API Key is unconfigured. Please add GEMINI_API_KEY=your_key in server/.env file.' });
+      }
+
       const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
       const promptText = `Analyze this student medical certificate or leave request document for the SmartAttend Academic ERP System.
@@ -1364,46 +1379,60 @@ Field instructions:
 
     // ── D. LEAVE REQUEST ACTIONS ──
     if (action === 'submit_leave') {
-      const { studentId, email: studentEmail, reason, image } = req.body;
-      
-      if (image) {
-        // Validate size (5MB limit)
-        const sizeInBytes = (image.length * 3) / 4;
-        const maxBytes = 5 * 1024 * 1024;
-        if (sizeInBytes > maxBytes) {
-          return res.json({ status: 'error', message: 'Attachment file size exceeds the 5MB limit.' });
-        }
+      const leaveData = req.body.data || req.body;
+      const {
+        id: rawId,
+        studentId,
+        studentName: rawStudentName,
+        targetProfessor,
+        date,
+        reason,
+        image,
+        pdf
+      } = leaveData;
 
-        // Validate format
-        const mimeType = image.split(';')[0].split(':')[1] || '';
-        const forbiddenTypes = [
-          'application/x-msdownload',
-          'application/octet-stream',
-          'text/javascript',
-          'application/javascript',
-          'text/html'
-        ];
-        if (forbiddenTypes.includes(mimeType)) {
-          return res.json({ status: 'error', message: 'Forbidden attachment format. Only images and PDFs are allowed.' });
+      if (!studentId) {
+        return res.json({ status: 'error', message: 'Missing student ID for leave submission.' });
+      }
+
+      if (image) {
+        // Validate size (10MB limit for base64 images)
+        const sizeInBytes = (image.length * 3) / 4;
+        const maxBytes = 10 * 1024 * 1024;
+        if (sizeInBytes > maxBytes) {
+          return res.json({ status: 'error', message: 'Attachment file size exceeds the 10MB limit.' });
         }
       }
-      
-      const { data: std } = await supabase.from('students').select('Name').eq('ID', studentId).single();
-      const studentName = std ? std.Name : 'Student';
+
+      let studentName = rawStudentName;
+      if (!studentName) {
+        const { data: std } = await supabase.from('students').select('Name').eq('ID', studentId).single();
+        if (std && std.Name) studentName = std.Name;
+      }
+
+      const leaveRecord = {
+        id: rawId ? (isNaN(Number(rawId)) ? Date.now() : Number(rawId)) : Date.now(),
+        studentId: studentId,
+        studentName: studentName || 'Student',
+        targetProfessor: (targetProfessor || '').trim(),
+        date: date || new Date().toLocaleDateString('en-CA'),
+        reason: reason || '',
+        image: image || null,
+        pdf: pdf || null,
+        status: 'Pending',
+        submittedAt: new Date().toISOString()
+      };
 
       const { error } = await supabase
         .from('LeaveRequests')
-        .insert([{
-          studentId: studentId,
-          studentName: studentName,
-          reason: reason,
-          image: image || null,
-          status: 'Pending',
-          submittedAt: new Date().toISOString()
-        }]);
+        .insert([leaveRecord]);
 
-      if (error) throw error;
-      await logActivity('SUBMIT_LEAVE', `Student ${studentId} submitted leave request`);
+      if (error) {
+        console.error("Database insert leave request error:", error);
+        return res.json({ status: 'error', message: error.message });
+      }
+
+      await logActivity('SUBMIT_LEAVE', `Student ${studentId} submitted leave request to professor ${targetProfessor}`);
       return res.json({ status: 'success' });
     }
 

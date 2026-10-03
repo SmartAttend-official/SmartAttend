@@ -339,27 +339,32 @@ document.getElementById('leaveForm').addEventListener('submit', async (e) => {
     
     const response = await fetch(SCRIPT_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         action: 'submit_leave',
         data: request
       })
     });
 
-    // Note: with no-cors we can't read the response body, but if it doesn't throw, it likely succeeded.
-    // For a better UX, we'll assume success if no error.
-
-    btn.innerHTML = '<i class="fa-solid fa-check"></i> Request Sent to Professor!';
-    btn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+    const resData = await response.json();
+    if (resData.status === 'success') {
+      btn.innerHTML = '<i class="fa-solid fa-check"></i> Request Sent to Professor!';
+      btn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+    } else {
+      btn.innerHTML = `<i class="fa-solid fa-xmark"></i> ${resData.message || 'Error submitting request'}`;
+      btn.style.background = '#ef4444';
+    }
     
     setTimeout(() => {
       btn.innerHTML = original;
       btn.disabled = false;
       btn.style.background = '';
-      e.target.reset();
-      document.getElementById('leaveFileName').innerText = 'No file selected';
-      document.getElementById('medicalFileName').innerText = 'No file selected';
-      renderLeaveHistory(); // Refresh after submission
+      if (resData.status === 'success') {
+        e.target.reset();
+        document.getElementById('leaveFileName').innerText = 'No file selected';
+        document.getElementById('medicalFileName').innerText = 'No file selected';
+        if (typeof renderLeaveHistory === 'function') renderLeaveHistory();
+      }
     }, 3000);
 
   } catch (error) {
