@@ -1396,7 +1396,7 @@
         const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
         const response = await fetch(SCRIPT_URL, {
           method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
         
@@ -1416,13 +1416,49 @@
           showGlobalAlert('Error: ' + (result.message || 'Failed to save data.'));
         }
       } catch (e) {
-        console.error(e);
-        showGlobalAlert('Network error while saving attendance.');
+        console.error("Network error while saving attendance:", e);
+        // Save to offline queue
+        let queue = [];
+        try { queue = JSON.parse(localStorage.getItem('smartattend_offline_queue') || '[]'); } catch(err){}
+        queue.push({ payload: payload, timestamp: new Date().toISOString() });
+        localStorage.setItem('smartattend_offline_queue', JSON.stringify(queue));
+        showGlobalAlert('⚠️ Wi-Fi Disconnected! Attendance saved safely to device memory. It will auto-sync when connection is restored. 💾');
       } finally {
         btn.innerHTML = originalText;
         btn.disabled = false;
       }
     }
+
+    async function syncOfflineQueue() {
+      let queue = [];
+      try { queue = JSON.parse(localStorage.getItem('smartattend_offline_queue') || '[]'); } catch(e) { return; }
+      if (!queue.length) return;
+
+      const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
+      const remainingQueue = [];
+
+      for (const item of queue) {
+        try {
+          const res = await fetch(SCRIPT_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(item.payload)
+          });
+          const data = await res.json();
+          if (data.status !== 'success') remainingQueue.push(item);
+        } catch(err) {
+          remainingQueue.push(item);
+        }
+      }
+
+      localStorage.setItem('smartattend_offline_queue', JSON.stringify(remainingQueue));
+      if (queue.length > remainingQueue.length && window.showGlobalAlert) {
+        showGlobalAlert(`Synced ${queue.length - remainingQueue.length} offline attendance session(s) to server! ✅`);
+      }
+    }
+
+    window.addEventListener('online', syncOfflineQueue);
+    document.addEventListener('DOMContentLoaded', syncOfflineQueue);
 
     async function handleLateAlerts() {
       const btn = document.getElementById('alertLateBtn');
@@ -1679,17 +1715,20 @@
     }
 
     async function listModels() {
-      const apiKey = "AIzaSyDwLkBBI2vlqJbiKdGZ7X1t1JT5PblTjso";
-      const url = `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`;
-      
+      const token = sessionStorage.getItem('token');
+      if (!token) return "Error: You are not logged in.";
+      const serverUrl = window.SCRIPT_URL || "https://smartattend-o2te.onrender.com";
       try {
-        const response = await fetch(url);
+        const response = await fetch(`${serverUrl}/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ action: 'list_ai_models' })
+        });
         const data = await response.json();
-        if (data.models) {
-          return "Available models: " + data.models.map(m => m.name.replace("models/", "")).join(", ");
-        } else {
-          return "No models found or error: " + JSON.stringify(data);
-        }
+        return data.message || JSON.stringify(data);
       } catch (error) {
         return "Error listing models: " + error.message;
       }

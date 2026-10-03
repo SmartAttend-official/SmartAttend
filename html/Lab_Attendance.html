@@ -1111,7 +1111,7 @@
         try {
             const res = await fetch(SCRIPT_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
             const result = await res.json();
@@ -1125,7 +1125,12 @@
                 showAlert(result.message || 'Error saving session', true);
             }
         } catch(e) {
-            showAlert('Network error while saving.', true);
+            console.error("Network error while saving lab session:", e);
+            let queue = [];
+            try { queue = JSON.parse(localStorage.getItem('smartattend_offline_queue') || '[]'); } catch(err){}
+            queue.push({ payload: payload, timestamp: new Date().toISOString() });
+            localStorage.setItem('smartattend_offline_queue', JSON.stringify(queue));
+            showAlert('⚠️ Wi-Fi Disconnected! Lab Attendance saved locally to device memory. Will auto-sync when restored. 💾');
         } finally {
             btn.innerHTML = originalText;
             btn.disabled = false;

@@ -44,7 +44,7 @@ for university deployment (without migrating to a multi-language database system
      at that moment, rather than the entire database.
 
 --------------------------------------------------------------------------------
-🟢 MINOR FIXES (Polish & UX Experience)
+🟢 MINOR FIXES (Polish & UX Experience)  
 --------------------------------------------------------------------------------
 
 5. Smart Offline Mode & Queueing

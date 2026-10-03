@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 const { createClient } = require('@supabase/supabase-js');
 const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken');
@@ -10,6 +11,17 @@ const PORT = process.env.PORT || 3000;
 
 // Enable CORS
 app.use(cors());
+
+// Rate Limiter: Max 300 requests per 15 minutes per IP
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { status: 'error', message: 'Too many requests from this IP, please try again later.' }
+});
+
+app.use(apiLimiter);
 
 // Parse any incoming body as text first to handle no-cors content-types securely
 app.use(express.text({ limit: '50mb', type: '*/*' }));
@@ -890,6 +902,17 @@ app.get('/', authenticateToken, async (req, res) => {
       return res.json(data);
     }
 
+    if (sheet === 'proxies') {
+      let query = supabase.from('Proxies').select('*');
+      const profEmail = req.query.profEmail;
+      if (profEmail) {
+        query = query.eq('Professor_Email', profEmail);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return res.json(data || []);
+    }
+
     if (sheet === 'audit_logs') {
       const { data, error } = await supabase
         .from('AuditLogs')
@@ -997,6 +1020,22 @@ RULES:
       } catch (error) {
         console.error("Gemini API error:", error);
         return res.json({ status: 'error', message: 'Failed to connect to AI provider.' });
+      }
+    }
+
+    if (action === 'list_ai_models') {
+      const apiKey = process.env.GEMINI_API_KEY || "AIzaSyBY60belKbg2wHUq_HsC1ODrZRYb7afbxc";
+      const url = `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`;
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+        if (data.models) {
+          return res.json({ status: 'success', message: "Available models: " + data.models.map(m => m.name.replace("models/", "")).join(", ") });
+        } else {
+          return res.json({ status: 'error', message: "No models found." });
+        }
+      } catch (error) {
+        return res.json({ status: 'error', message: error.message });
       }
     }
 

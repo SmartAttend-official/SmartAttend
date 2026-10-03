@@ -1,4 +1,3 @@
-[DONE AND ALL CLEAR]
 -->ERROR IN SMARTATTEND
 1) Mobile Number error while adding student from admin panal (04-06-2026 done)
 2) Fix Avatar issue in lab attendance of professor and remove logut button (04-06-2026 done)

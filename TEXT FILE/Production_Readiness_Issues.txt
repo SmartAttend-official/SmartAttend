@@ -1,0 +1,92 @@
+SMARTATTEND - PRODUCTION READINESS ISSUES
+
+Below is the list of issues that need to be resolved before the project is ready for enterprise deployment or commercial sale.
+
+🔴 CRITICAL FIXES (Security & Architecture)
+1. Exposed API Keys: Gemini AI API keys are hardcoded in the frontend HTML (e.g., dashboard1.html). Needs to be moved to a secure backend environment.
+2. [DONE - 28-06-2026]Google Sheets as a Database: Google Apps Script has rate limits and is not secure for biometric data. Needs migration to a scalable database like PostgreSQL, MySQL, Firebase, or MongoDB.
+3. Authentication & Session Security: Relying on localStorage/sessionStorage is insecure and easily manipulated by users. Needs secure JWT (JSON Web Tokens) via a real backend server.
+
+🟡 MAJOR FIXES (Scalability & Performance)
+4. Client-Side Facial Recognition Overload: Downloading all student encodings to the browser (face-api.js) will crash on large datasets (1000+ students). Needs backend facial matching instead of client-side execution.
+5. No Multi-Tenancy / Organization Isolation: The app currently cannot host multiple colleges securely on the same codebase without data overlapping. Needs an organization_id structure implemented in the database.
+
+🟢 MINOR FIXES (Polish & UX)
+6. Centralize Configuration: API URLs and configuration are scattered across multiple files. Needs to be centralized in environment variables (.env files).
+7. Offline Handling: Dropped internet connections during scans can cause data loss. Needs local caching and auto-sync when the connection is restored.
+
+
+
+
+
+================================================================================
+SMARTATTEND - PRODUCTION READINESS ISSUES & ROADMAP
+================================================================================
+
+Below is the categorized list of development tasks, security hardening, and 
+optimizations required to make our current Google Sheets + Apps Script system 
+fully reliable, secure, and ready for campus-wide university deployment.
+
+--------------------------------------------------------------------------------
+🔴 CRITICAL FIXES (Security & Session Integrity)
+--------------------------------------------------------------------------------
+
+1. API Obfuscation & Endpoint Hardening
+   - Issue: The Apps Script `SCRIPT_URL` in `config.js` is stored in plain text. 
+     A student with basic web browser console skills can find this URL and execute 
+     direct POST/GET requests to mark themselves present without opening the app.
+   - Solution: Obfuscate/encrypt the `SCRIPT_URL` in the frontend code. Implement 
+     a rolling cryptographic signature check (e.g., hash containing a timestamp 
+     and app-secret) in the Apps Script doPost handler to reject raw API requests.
+
+2. Exposed Frontend API Keys
+   - Issue: API keys (like Gemini AI integration keys) are hardcoded in the 
+     HTML client scripts (e.g., dashboard1.html).
+   - Solution: Remove keys from client files. Route any external API actions 
+     through a backend Google Apps Script wrapper function so the keys remain 
+     privately stored on Google's cloud server.
+
+3. Session Authentication Security
+   - Issue: Relying solely on localStorage variables for checking login status 
+     can be bypassed by manually editing the browser's storage values.
+   - Solution: Implement a server-side session validator that matches a temporary 
+     session token generated in Google Sheets upon user login. Reject dashboard 
+     fetches if the active token is expired or invalid.
+
+--------------------------------------------------------------------------------
+🟡 MAJOR FIXES (Speed & Performance Optimization)
+--------------------------------------------------------------------------------
+
+4. Apps Script Caching (CacheService)
+   - Issue: Reading Google Sheets directly on every page load creates a latency of 
+     2–3 seconds, causing dashboard load screens to feel slow.
+   - Solution: Integrate Google's built-in `CacheService` in Apps Script to cache 
+     student registries, timetables, and subject structures. Set cache expiry 
+     (e.g., 2 hours) and only fetch raw sheet rows when data is updated. This 
+     will drop API fetch response times to <0.5 seconds.
+
+5. Client-Side Face Encoding Optimization
+   - Issue: As the student roster grows, loading all facial model weights and student 
+     face encodings from Sheets down to client browsers consumes high bandwidth.
+   - Solution: Implement paginated or department-filtered encoding downloads. The 
+     scanner should only download face encodings matching the specific department 
+     and semester of the class active at that moment, rather than the entire college.
+
+--------------------------------------------------------------------------------
+🟢 MINOR FIXES (Polish & UX Experience)
+--------------------------------------------------------------------------------
+
+6. Smart Offline Mode & Local Sync Queue
+   - Issue: Dropped Wi-Fi or cellular connections mid-scan causes attendance data 
+     transmission to fail, resulting in lost records.
+   - Solution: Implement a browser IndexedDB/LocalStorage queue. If an Apps Script 
+     fetch request fails during a scan, queue the attendance log locally. Auto-sync 
+     and push the queue back to Google Sheets the millisecond internet is restored.
+
+7. High-Tech Visuals: Face-Detection Boundary Boxes
+   - Issue: The camera face scanner works in the background but doesn't feel visually 
+     interactive or advanced.
+   - Solution: Use HTML5 Canvas to draw a green tracking rectangle over detected 
+     faces in the video stream. Show the matching percentage and matched name 
+     dynamically above the student's head to make the interface look premium.
+================================================================================
