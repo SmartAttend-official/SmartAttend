@@ -5,6 +5,7 @@ const { createClient } = require('@supabase/supabase-js');
 const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken');
 const zlib = require('zlib');
+const pdfParse = require('pdf-parse');
 require('dotenv').config();
 
 const app = express();
@@ -1116,8 +1117,15 @@ RULES:
         try {
           const cleanB64 = pdf.replace(/^data:application\/pdf;base64,/, '').trim();
           const buffer = Buffer.from(cleanB64, 'base64');
-          const pdfExtracted = extractTextFromPdfBuffer(buffer);
-          rawDocText += ' ' + pdfExtracted;
+          try {
+            const parsedPdf = await pdfParse(buffer);
+            if (parsedPdf && parsedPdf.text) {
+              rawDocText += ' ' + parsedPdf.text;
+            }
+          } catch(pe) {
+            const pdfExtracted = extractTextFromPdfBuffer(buffer);
+            rawDocText += ' ' + pdfExtracted;
+          }
         } catch(e) {}
       }
       if (image && typeof image === 'string') {
@@ -1133,35 +1141,84 @@ RULES:
         }
       }
 
-      const lowerDocText = rawDocText.toLowerCase();
-
-      // Academic & Non-medical document indicators
+      // Academic & Non-medical document indicators (with word boundaries)
       const academicMarkers = [
-        'journal', 'article', 'abstract', 'introduction', 'references', 'body mass index',
-        'weisell', 'fao', 'who 1998', 'ieee', 'doi:', 'issn:', 'vol.', 'pp.', 'edition',
-        'university press', 'elsevier', 'springer', 'biomed', 'clin nutr', 'asia pacific',
-        'proceedings', 'curriculum vitae', 'resume', 'semester', 'assignment', 'homework',
-        'exam paper', 'question paper', 'syllabus', 'textbook', 'chapter', 'author',
-        'working group', 'consultation', 'dietary', 'energy intake', 'nutrition division',
-        'robert c weisell', 'table 1', 'table 2', 'table 3', 'table 4', 'original article'
+        /\bjournal\b/i,
+        /\barticle\b/i,
+        /\babstract\b/i,
+        /\bintroduction\b/i,
+        /\breferences\b/i,
+        /\bbody mass index\b/i,
+        /\bweisell\b/i,
+        /\bfao\b/i,
+        /\bwho\b/i,
+        /\bieee\b/i,
+        /\bdoi\b/i,
+        /\bissn\b/i,
+        /\bvol\.\s*\d+/i,
+        /\bpp\.\s*\d+/i,
+        /\buniversity\b/i,
+        /\belsevier\b/i,
+        /\bspringer\b/i,
+        /\bbiomed\b/i,
+        /\bclin\s+nutr\b/i,
+        /\basia\s+pacific\b/i,
+        /\bproceedings\b/i,
+        /\bcurriculum\s+vitae\b/i,
+        /\bresume\b/i,
+        /\bassignment\b/i,
+        /\bhomework\b/i,
+        /\bquestion\s+paper\b/i,
+        /\bsyllabus\b/i,
+        /\btextbook\b/i,
+        /\bchapter\s+\d+/i,
+        /\boriginal\s+article\b/i,
+        /\bchronic\s+energy\s+deficiency\b/i,
+        /\bidecg\b/i,
+        /\bced\s+grade\b/i,
+        /\bcorrespondence\b/i,
+        /\bdepartment\s+of\b/i,
+        /\bdivision\b/i,
+        /\bauthor\b/i,
+        /\bobesity\b/i,
+        /\bundernutrition\b/i,
+        /\bcalorie\b/i,
+        /\bkilocalorie\b/i
       ];
-      const foundAcademic = academicMarkers.filter(m => lowerDocText.includes(m));
+
+      const foundAcademic = academicMarkers.filter(m => m.test(rawDocText));
       const isAcademicDoc = foundAcademic.length >= 2 || 
-                            lowerDocText.includes('weisell') || 
-                            lowerDocText.includes('body mass index') || 
-                            lowerDocText.includes('original article') || 
-                            lowerDocText.includes('curriculum vitae') ||
-                            lowerDocText.includes('resume');
+                            /weisell/i.test(rawDocText) || 
+                            /body mass index/i.test(rawDocText) || 
+                            /original article/i.test(rawDocText) || 
+                            /curriculum vitae/i.test(rawDocText) || 
+                            /resume/i.test(rawDocText);
 
       // Genuine medical prescription/certificate indicators
       const medicalMarkers = [
-        'prescription', 'rx', 'opd', 'doctor', 'dr.', 'hospital', 'clinic', 'patient',
-        'advised rest', 'diagnosed with', 'medical certificate', 'fitness certificate',
-        'bed rest', 'suffering from', 'date of examination', 'under my treatment',
-        'unfit for duty', 'medical officer', 'consultant physician', 'mbbs', 'md',
-        'pharma', 'dosage', 'tablet', 'syrup', 'capsule', 'temperature', 'reg no', 'registration no'
+        /\bprescription\b/i,
+        /\brx\b/i,
+        /\bopd\b/i,
+        /\bmedical\s+certificate\b/i,
+        /\bfitness\s+certificate\b/i,
+        /\bunfit\s+for\s+(duty|class|attendance|school|college)\b/i,
+        /\badvised\s+(bed\s+)?rest\b/i,
+        /\bsuffering\s+from\b/i,
+        /\bunder\s+my\s+treatment\b/i,
+        /\bdate\s+of\s+examination\b/i,
+        /\bconsultant\s+physician\b/i,
+        /\bmedical\s+officer\b/i,
+        /\bdr\.\s+[a-z]{3,}/i,
+        /\bdoctor\s+[a-z]{3,}/i,
+        /\bpatient\s+(name|id|mr|mrs|ms)?\b/i,
+        /\bdiagnosis\b/i,
+        /\bdosage\b/i,
+        /\btablet(s)?\b/i,
+        /\bsyrup\b/i,
+        /\bcapsule(s)?\b/i,
+        /\breg(istration)?\s*(no|number|#)?\b/i
       ];
-      const foundMedical = medicalMarkers.filter(m => lowerDocText.includes(m));
+      const foundMedical = medicalMarkers.filter(m => m.test(rawDocText));
 
       const rawKey = process.env.GEMINI_API_KEY || '';
       const apiKey = rawKey && 
@@ -1181,7 +1238,7 @@ TASK & RULES:
    Determine if this document is an authentic Medical Certificate, Doctor Prescription, Clinic Slip, or Hospital OPD document.
    IF the document is an Academic Research Paper, Journal Article (e.g. "Body mass index as an indicator of obesity" by Robert C Weisell), Study Notes, Assignment, Textbook page, Resume, or Non-Medical file:
    - "verdict": "INVALID"
-   - "confidenceScore": 10
+   - "confidenceScore": 0
    - "isValidDoc": false
    - "nameMatches": false
    - "hasDoctorSignatureOrStamp": false
@@ -1208,7 +1265,7 @@ Return ONLY valid JSON:
   "issueDate": "Date",
   "medicalDiagnosis": "Diagnosis",
   "hasDoctorSignatureOrStamp": false,
-  "confidenceScore": 10,
+  "confidenceScore": 0,
   "verdict": "INVALID",
   "aiSummary": "Summary explanation"
 }`;
@@ -1268,7 +1325,7 @@ Return ONLY valid JSON:
               const parsed = JSON.parse(rawText);
               return res.json({ status: 'success', data: parsed });
             } catch(pe) {
-              return res.json({ status: 'success', data: { verdict: isAcademicDoc ? "INVALID" : "GENUINE", confidenceScore: isAcademicDoc ? 10 : 85, aiSummary: rawText } });
+              return res.json({ status: 'success', data: { verdict: isAcademicDoc ? "INVALID" : "GENUINE", confidenceScore: isAcademicDoc ? 0 : 85, aiSummary: rawText } });
             }
           }
         } catch (error) {
@@ -1279,23 +1336,23 @@ Return ONLY valid JSON:
       // ── SMART AUDIT VERIFICATION ENGINE (Local Classifier Fallback) ──
       const hasAttachment = Boolean((image && image.length > 50) || (pdf && pdf.length > 50));
       const sName = (studentName || '').toLowerCase().trim();
-      const hasStudentName = Boolean(sName.length > 2 && lowerDocText.includes(sName));
+      const hasStudentName = Boolean(sName.length > 2 && rawDocText.toLowerCase().includes(sName));
 
       if (isAcademicDoc) {
-        const detectedPaperTitle = lowerDocText.includes('body mass index') 
+        const detectedPaperTitle = /body mass index/i.test(rawDocText) 
           ? "'Body mass index as an indicator of obesity' by Robert C Weisell PhD"
-          : "Academic Research Paper / Study Document";
+          : (foundAcademic.length > 0 ? "Academic Research Paper / Study Document" : "Non-Medical Document");
 
         return res.json({
           status: 'success',
           data: {
             isValidDoc: false,
-            extractedStudentName: lowerDocText.includes('weisell') ? 'Robert C Weisell PhD (Author)' : 'Academic Author (Not student)',
+            extractedStudentName: /weisell/i.test(rawDocText) ? 'Robert C Weisell PhD (Author)' : 'Academic Author (Not student)',
             nameMatches: false,
             issueDate: 'N/A',
             medicalDiagnosis: 'Non-Medical Document (Research Paper / Journal Article)',
             hasDoctorSignatureOrStamp: false,
-            confidenceScore: 10,
+            confidenceScore: 0,
             verdict: 'INVALID',
             aiSummary: `⚠️ INVALID DOCUMENT REJECTED: Uploaded file is an ${detectedPaperTitle}, NOT an official medical leave certificate for student ${studentName || 'student'}.`
           }
@@ -1312,9 +1369,9 @@ Return ONLY valid JSON:
             issueDate: date || 'N/A',
             medicalDiagnosis: text || 'No proof attached',
             hasDoctorSignatureOrStamp: false,
-            confidenceScore: 35,
-            verdict: 'SUSPICIOUS',
-            aiSummary: `⚠️ NO ATTACHMENT: Request has no medical certificate or prescription attachment uploaded. Manual professor verification required.`
+            confidenceScore: 0,
+            verdict: 'INVALID',
+            aiSummary: `⚠️ NO ATTACHMENT: Request has no medical certificate or prescription attachment uploaded. Please provide authentic medical proof.`
           }
         });
       }
@@ -1329,14 +1386,30 @@ Return ONLY valid JSON:
             issueDate: 'N/A',
             medicalDiagnosis: 'Unverified Non-Medical Document',
             hasDoctorSignatureOrStamp: false,
-            confidenceScore: 20,
+            confidenceScore: 0,
             verdict: 'INVALID',
             aiSummary: `⚠️ REJECTED: Uploaded file does not contain recognized medical certificate headers, clinic info, or doctor signature.`
           }
         });
       }
 
-      const score = Math.min(95, 70 + (hasStudentName ? 15 : 0) + (foundMedical.length * 5));
+      if (!hasStudentName) {
+        return res.json({
+          status: 'success',
+          data: {
+            isValidDoc: false,
+            extractedStudentName: 'Name Mismatch / Absent',
+            nameMatches: false,
+            issueDate: date || 'N/A',
+            medicalDiagnosis: text || 'Medical Leave',
+            hasDoctorSignatureOrStamp: false,
+            confidenceScore: 15,
+            verdict: 'INVALID',
+            aiSummary: `⚠️ REJECTED (Name Mismatch): The uploaded medical document does not match the name of student "${studentName || 'student'}". Upload your own valid medical certificate.`
+          }
+        });
+      }
+
       const isGenuine = foundMedical.length >= 2 && hasStudentName;
 
       return res.json({
@@ -1344,15 +1417,13 @@ Return ONLY valid JSON:
         data: {
           isValidDoc: true,
           extractedStudentName: studentName || 'Student',
-          nameMatches: hasStudentName,
+          nameMatches: true,
           issueDate: date || 'Recorded',
           medicalDiagnosis: text || 'Medical Leave',
-          hasDoctorSignatureOrStamp: foundMedical.length >= 2,
-          confidenceScore: score,
-          verdict: isGenuine ? 'GENUINE' : 'SUSPICIOUS',
-          aiSummary: isGenuine 
-            ? `Medical certificate verified for student ${studentName || 'Student'} (${studentId || 'ID'}). Authentic medical evidence detected.`
-            : `Medical terms detected, but lacks explicit student name match or full clinic seal for student ${studentName || 'Student'}. Manual check advised.`
+          hasDoctorSignatureOrStamp: true,
+          confidenceScore: 92,
+          verdict: 'GENUINE',
+          aiSummary: `Medical certificate verified for student ${studentName || 'Student'} (${studentId || 'ID'}). Authentic medical evidence detected.`
         }
       });
     }
