@@ -535,3 +535,31 @@ SmartAttend was developed using a **Human-AI Collaborative Engineering** model (
 **Objective**: Prevent server memory crashes and V8 timeouts when loading large datasets of student face encodings from Supabase.
 
 *   **Batch Architecture (`generate_encoding.py`)**: Upgraded the encoding generation script to process records in strict batches of 50. This handles memory overhead elegantly, ensuring stability during massive department-wide face registrations.
+
+## 🌟 Major System Overhaul & AI Verification Hardening (**October 03–04, 2026**)
+
+### 46. Email Infrastructure & Student Onboarding Overhaul
+**Objective**: Resolve SMTP connection timeouts on cloud hosting (Render) and automate student password recovery and welcome communications.
+
+*   **Dual-Layer Email Engine (`server.js`)**: Implemented dynamic port selection (587 TLS / 465 SSL) with a transparent fallback to the Google Apps Script Web App email dispatcher to ensure 100% email delivery uptime.
+*   **Student Welcome & OTP Dispatch (`student_forget.js` & `server.js`)**: Added automated welcome email triggers upon new student registration and fixed case-sensitivity bugs during 5-digit OTP verification.
+
+### 47. Cross-Origin (CORS) & Client-Server Communication Stabilization
+**Objective**: Fix silent POST request failures caused by restrictive `no-cors` mode and opaque fetch responses.
+
+*   **Full Standard CORS Enforcement**: Removed legacy `mode: 'no-cors'` across all frontend fetch calls (`leave_requests.js`, `student_dashboard.js`, `register.js`, etc.), enabling proper JSON response parsing and status code checking.
+*   **JSON-Safe Express Middleware**: Configured Express body-parser with a 50MB limit to support high-resolution medical document uploads and base64 face encodings.
+
+### 48. AI-Powered Medical Leave & Proof Verification System
+**Objective**: Automate the verification of medical certificates and leave requests in the Professor Panel to reduce manual fraud.
+
+*   **Multi-Model Verification**: Integrated Google Gemini 1.5 Flash with a native backend fallback classifier engine (`verify_leave_proof`).
+*   **Interactive Professor Audit Card (`leave_requests.js`)**: Added a 1-click **"AI Verify Medical Document 🤖"** audit badge displaying color-coded trust statuses (**GENUINE**, **SUSPICIOUS**, **INVALID**), diagnostic summaries, and doctor stamp detection tags.
+
+### 49. PDF Decompression & Anti-Fraud Document Classifier
+**Objective**: Prevent non-medical documents (such as academic research papers, assignments, textbook scans, and resumes) from being falsely approved as genuine medical certificates.
+
+*   **Full PDF Text Extraction (`pdf-parse` & `zlib`)**: Integrated server-side PDF stream decompilers to extract raw text, literal strings (`Tj` / `TJ`), and metadata from compressed multi-page PDF documents.
+*   **Regex Word-Boundary Academic Filter**: Built strict detection rules identifying academic markers (`journal`, `volume`, `abstract`, `references`, `weisell`, `body mass index`, `doi`, `fao`, `who`, etc.) and non-medical submissions.
+*   **Zero-Tolerance Rejection Policy**: Any research paper, study note, or certificate with a mismatched student name is automatically rejected (**INVALID 0% match**) with a detailed explanation of the document's true contents.
+
