@@ -87,14 +87,37 @@ architectural solutions to upgrade the platform to a production-grade system.
     - Define precise API endpoints that filter database queries server-side and 
       only return clean, non-sensitive JSON payloads to the frontend.
 
+--------------------------------------------------------------------------------
+6. FACIAL RECOGNITION MATCH TOLERANCE & FALSE POSITIVES
+--------------------------------------------------------------------------------
+*   THE PROBLEM IN SMARTATTEND:
+    The default `face-api.js` FaceMatcher uses a lenient Euclidean distance 
+    threshold (0.6). When only a few students are registered in a class, the nearest-
+    neighbor matcher can match an unregistered face (or a family member sharing 
+    facial bone structure) to the closest existing student profile, causing false 
+    attendance approvals.
+
+*   THE SOLUTION:
+    1. Stricter Euclidean / Cosine Distance Threshold:
+       - Lower the recognition distance threshold from 0.6 to a strict 0.40–0.45. 
+         Any face with a distance > 0.45 will be labeled "Unknown / Unverified".
+    2. Multi-Sample Facial Enrollment:
+       - Instead of capturing 1 single photo, register 3–5 face angles (Front, 
+         Slight Left, Slight Right) during student registration to build a high-precision 
+         averaged 128-d face embedding vector.
+    3. Liveness & Anti-Spoofing Check:
+       - Implement an eye-blink detection or head-turn prompt before confirming 
+         attendance to prevent photo/proxy spoofing.
+
 ================================================================================
 MIGRATION ROADMAP FOR "SMARTATTEND PRO"
 ================================================================================
 To implement these fixes systematically, we recommend a two-phase approach:
 
-Phase 1: Standardized Data Types (Short-Term)
-- Implement schema validation on the current Apps Script backend (using AJV or Joi).
-- Ensure all Google Apps Script operations return strict, sanitized JSON payloads.
+Phase 1: Standardized Data Types & AI Hardening (Short-Term)
+- Implement schema validation on the current backend.
+- Lower face matcher distance threshold to 0.42 and require high confidence.
+- Ensure all database operations return strict, sanitized JSON payloads.
 
 Phase 2: Full-Stack Stack Overhaul (Long-Term)
 - Setup a React + TypeScript frontend using Vite.
@@ -102,3 +125,4 @@ Phase 2: Full-Stack Stack Overhaul (Long-Term)
 - Deploy the database on Supabase (PostgreSQL) and utilize real-time subscriptions 
   for the live attendance grids.
 ================================================================================
+
