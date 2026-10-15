@@ -66,7 +66,7 @@ document.getElementById('adminLoginForm').addEventListener('submit', async funct
 
 	} catch (error) {
 		console.error("Admin Login Error:", error);
-		errorDiv.innerText = 'A security system error occurred. Please contact tech support.';
+		errorDiv.innerText = error.message || 'A security system error occurred. Please contact tech support.';
 		errorDiv.style.display = 'block';
 
 		loginBtn.disabled = false;

@@ -78,7 +78,7 @@ document.getElementById('loginForm').addEventListener('submit', async function (
 
 	} catch (error) {
 		console.error("Login Error:", error);
-		errorDiv.innerText = 'An error occurred during login. Please try again.';
+		errorDiv.innerText = error.message || 'An error occurred during login. Please try again.';
 		errorDiv.style.display = 'block';
 
 		// Reset button state

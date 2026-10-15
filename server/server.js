@@ -11,21 +11,13 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Trust reverse proxy (Render, Cloudflare, AWS, Nginx) for accurate client IP resolution
+app.set('trust proxy', 1);
+
 // Enable CORS
 app.use(cors());
 
-// Rate Limiter: Max 300 requests per 15 minutes per IP
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 300,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { status: 'error', message: 'Too many requests from this IP, please try again later.' }
-});
-
-app.use(apiLimiter);
-
-// Parse any incoming body as text first to handle no-cors content-types securely
+// Parse any incoming body first so action-based rate limiting can inspect req.body securely
 app.use(express.text({ limit: '50mb', type: '*/*' }));
 app.use((req, res, next) => {
   if (req.body && typeof req.body === 'string') {
@@ -49,6 +41,114 @@ app.use((req, res, next) => {
   next();
 });
 
+// =========================================================================
+// ADVANCED SECURITY & RATE LIMITING SUITE (OWASP A07 & DoS Hardening)
+// =========================================================================
+
+// 1. Dedicated Strict Login Limiter (Max 5 attempts / 15 min per IP)
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  statusCode: 429,
+  message: {
+    status: 'error',
+    message: 'Security Alert: Maximum login attempts exceeded from this IP. Please try again after 15 minutes.'
+  }
+});
+
+// 2. Strict OTP Dispatch Limiter (Max 3 OTP requests / 15 min per IP)
+const otpSendLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  statusCode: 429,
+  message: {
+    status: 'error',
+    message: 'Security Alert: Too many OTP requests from this IP. Please try again after 15 minutes.'
+  }
+});
+
+// 3. Strict OTP Verification Limiter (Max 5 attempts / 15 min per IP)
+const otpVerifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  statusCode: 429,
+  message: {
+    status: 'error',
+    message: 'Security Alert: Maximum OTP verification attempts exceeded. Please try again after 15 minutes.'
+  }
+});
+
+// 4. Student Lab Attendance Code Limiter (Max 5 attempts / 2 min per IP)
+const labCodeLimiter = rateLimit({
+  windowMs: 2 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  statusCode: 429,
+  message: {
+    status: 'error',
+    message: 'Security Alert: Too many lab code verification attempts. Please wait 2 minutes.'
+  }
+});
+
+// 5. AI Assistant & Heavy Computing Limiter (Max 20 requests / 15 min per IP)
+const heavyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  statusCode: 429,
+  message: {
+    status: 'error',
+    message: 'Rate limit exceeded: Too many AI / heavy report requests. Please try again later.'
+  }
+});
+
+// 6. Global Server API Limiter (Max 600 requests / 15 min per IP - tuned for campus NAT)
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  statusCode: 429,
+  message: {
+    status: 'error',
+    message: 'Too many requests from this IP, please try again later.'
+  }
+});
+
+// Dynamic Rate Limiting Middleware: routes each request to its dedicated limiter
+app.use((req, res, next) => {
+  // Allow OPTIONS preflight calls without rate limiting
+  if (req.method === 'OPTIONS') return next();
+
+  const action = req.query.action || (req.body && req.body.action);
+
+  if (action === 'login') {
+    return loginLimiter(req, res, next);
+  }
+  if (action === 'send_otp' || action === 'verify_student_email') {
+    return otpSendLimiter(req, res, next);
+  }
+  if (action === 'verify_otp' || action === 'verify_otp_only') {
+    return otpVerifyLimiter(req, res, next);
+  }
+  if (action === 'verify_lab_code') {
+    return labCodeLimiter(req, res, next);
+  }
+  if (action === 'ask_gemini' || action === 'verify_leave_proof' || action === 'generate_analytic_report') {
+    return heavyLimiter(req, res, next);
+  }
+
+  return generalLimiter(req, res, next);
+});
+
 // Initialize Supabase Client
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -67,7 +167,7 @@ function authenticateToken(req, res, next) {
   const action = req.query.action || (req.body && req.body.action);
   const sheet = req.query.sheet || (req.body && req.body.sheet);
   
-  if (action === 'login' || action === 'send_otp' || action === 'verify_otp' || action === 'verify_student_email' || action === 'get_encoding' || action === 'save_encoding' || (!action && !sheet)) {
+  if (action === 'login' || action === 'send_otp' || action === 'verify_otp' || action === 'verify_otp_only' || action === 'verify_student_email' || action === 'get_encoding' || action === 'save_encoding' || (!action && !sheet)) {
     return next();
   }
 
@@ -139,6 +239,168 @@ async function logActivity(action, details) {
     console.error('Logging activity failed:', e.message);
   }
 }
+
+// =========================================================================
+// STATEFUL IN-MEMORY ANTI-BRUTE-FORCE & ATTACK MITIGATION ENGINES
+// =========================================================================
+
+// A. Account-Level Login Lockout Engine (Mitigates distributed proxy/botnet attacks)
+const accountLockouts = new Map();
+const MAX_FAILED_LOGIN_ATTEMPTS = 5;
+const ACCOUNT_LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15-minute lockout
+
+function getAccountLockout(email) {
+  if (!email) return null;
+  const key = email.toLowerCase().trim();
+  const state = accountLockouts.get(key);
+  if (!state) return null;
+  if (state.lockedUntil && Date.now() > state.lockedUntil) {
+    accountLockouts.delete(key);
+    return null;
+  }
+  return state;
+}
+
+function recordFailedLogin(email) {
+  if (!email) return null;
+  const key = email.toLowerCase().trim();
+  const now = Date.now();
+  const state = accountLockouts.get(key) || { failedAttempts: 0, lockedUntil: 0, lastAttempt: now };
+  if (state.lockedUntil && now > state.lockedUntil) {
+    state.failedAttempts = 0;
+    state.lockedUntil = 0;
+  }
+  state.failedAttempts += 1;
+  state.lastAttempt = now;
+  if (state.failedAttempts >= MAX_FAILED_LOGIN_ATTEMPTS) {
+    state.lockedUntil = now + ACCOUNT_LOCKOUT_DURATION_MS;
+    logActivity('SECURITY_ALERT', `Account ${key} locked for 15 minutes due to ${state.failedAttempts} consecutive failed login attempts.`);
+  }
+  accountLockouts.set(key, state);
+  return state;
+}
+
+function resetFailedLogin(email) {
+  if (!email) return;
+  accountLockouts.delete(email.toLowerCase().trim());
+}
+
+// B. Per-Email OTP Request Throttler (Stops email inbox bombing and SMTP exhaustion)
+const emailOtpRequests = new Map();
+const OTP_RESEND_COOLDOWN_MS = 60 * 1000; // 60 seconds minimum between OTP requests
+const MAX_OTP_PER_WINDOW = 3;             // Max 3 OTP requests per 15 minutes per email
+
+function checkOtpRequestAllowed(email) {
+  if (!email) return { allowed: true };
+  const key = email.toLowerCase().trim();
+  const now = Date.now();
+  const entry = emailOtpRequests.get(key);
+  if (!entry) return { allowed: true };
+
+  const timeSinceLast = now - entry.lastSent;
+  if (timeSinceLast < OTP_RESEND_COOLDOWN_MS) {
+    const secondsLeft = Math.ceil((OTP_RESEND_COOLDOWN_MS - timeSinceLast) / 1000);
+    return { allowed: false, message: `Please wait ${secondsLeft} second(s) before requesting another OTP.` };
+  }
+
+  if (now - entry.windowStart < 15 * 60 * 1000) {
+    if (entry.count >= MAX_OTP_PER_WINDOW) {
+      const minutesLeft = Math.ceil((15 * 60 * 1000 - (now - entry.windowStart)) / (60 * 1000));
+      return { allowed: false, message: `Too many OTP requests for this account. Please try again after ${minutesLeft} minute(s).` };
+    }
+  } else {
+    entry.count = 0;
+    entry.windowStart = now;
+  }
+  return { allowed: true };
+}
+
+function recordOtpSent(email) {
+  if (!email) return;
+  const key = email.toLowerCase().trim();
+  const now = Date.now();
+  const entry = emailOtpRequests.get(key) || { count: 0, windowStart: now, lastSent: 0 };
+  if (now - entry.windowStart >= 15 * 60 * 1000) {
+    entry.count = 1;
+    entry.windowStart = now;
+  } else {
+    entry.count += 1;
+  }
+  entry.lastSent = now;
+  emailOtpRequests.set(key, entry);
+}
+
+// C. Per-Email OTP Failure Tracker (Permanently invalidates OTP after 5 wrong attempts)
+const otpFailureTracker = new Map();
+const MAX_OTP_FAILED_ATTEMPTS = 5;
+
+function recordOtpFailure(email) {
+  if (!email) return 1;
+  const key = email.toLowerCase().trim();
+  const count = (otpFailureTracker.get(key) || 0) + 1;
+  otpFailureTracker.set(key, count);
+  return count;
+}
+
+function resetOtpFailure(email) {
+  if (!email) return;
+  otpFailureTracker.delete(email.toLowerCase().trim());
+}
+
+// D. Student Lab Code Failure Tracker (Stops automated rotating code brute force)
+const labCodeFailureTracker = new Map();
+
+function getLabCodeFailure(studentId) {
+  if (!studentId) return 0;
+  const key = studentId.toLowerCase().trim();
+  const entry = labCodeFailureTracker.get(key);
+  if (!entry) return 0;
+  if (Date.now() - entry.timestamp > 2 * 60 * 1000) {
+    labCodeFailureTracker.delete(key);
+    return 0;
+  }
+  return entry.count;
+}
+
+function recordLabCodeFailure(studentId) {
+  if (!studentId) return 1;
+  const key = studentId.toLowerCase().trim();
+  const now = Date.now();
+  const entry = labCodeFailureTracker.get(key);
+  if (!entry || now - entry.timestamp > 2 * 60 * 1000) {
+    labCodeFailureTracker.set(key, { count: 1, timestamp: now });
+    return 1;
+  }
+  entry.count += 1;
+  entry.timestamp = now;
+  labCodeFailureTracker.set(key, entry);
+  return entry.count;
+}
+
+function resetLabCodeFailure(studentId) {
+  if (!studentId) return;
+  labCodeFailureTracker.delete(studentId.toLowerCase().trim());
+}
+
+// Background cleanup: Prune expired tracking entries every 30 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, state] of accountLockouts.entries()) {
+    if (state.lockedUntil && now > state.lockedUntil + 30 * 60 * 1000) {
+      accountLockouts.delete(key);
+    }
+  }
+  for (const [key, entry] of emailOtpRequests.entries()) {
+    if (now - entry.windowStart > 60 * 60 * 1000) {
+      emailOtpRequests.delete(key);
+    }
+  }
+  for (const [key, entry] of labCodeFailureTracker.entries()) {
+    if (now - entry.timestamp > 5 * 60 * 1000) {
+      labCodeFailureTracker.delete(key);
+    }
+  }
+}, 30 * 60 * 1000).unref();
 
 // Helper: Format Student for frontend compatibility
 function formatStudent(row) {
@@ -537,13 +799,24 @@ app.get('/', authenticateToken, async (req, res) => {
 
     // ── B. OTP / RESET ACTIONS ──
     if (action === 'send_otp') {
+      const cleanEmail = (email || '').toString().toLowerCase().trim();
+      if (!cleanEmail) {
+        return res.status(400).json({ status: 'error', message: 'Email address is required.' });
+      }
+
+      // Check per-email rate limiting and resend cooldown (Anti-Email-Bombing)
+      const throttleCheck = checkOtpRequestAllowed(cleanEmail);
+      if (!throttleCheck.allowed) {
+        return res.status(429).json({ status: 'error', message: throttleCheck.message });
+      }
+
       // Find which department sheet has this professor's email
       const deptSheets = ['BCA', 'MCA', 'BBA', 'MBA'];
       let targetTable = null;
       let targetProf = null;
 
       for (const table of deptSheets) {
-        const { data, error } = await supabase.from(table).select('*').eq('Email', email);
+        const { data, error } = await supabase.from(table).select('*').eq('Email', cleanEmail);
         if (!error && data && data.length > 0) {
           targetTable = table;
           targetProf = data[0];
@@ -561,16 +834,19 @@ app.get('/', authenticateToken, async (req, res) => {
       const { error: updateErr } = await supabase
         .from(targetTable)
         .update({ OTP: otp, OTP_Timestamp: expiry })
-        .eq('Email', email);
+        .eq('Email', cleanEmail);
 
       if (updateErr) throw updateErr;
+
+      // Track OTP sent for cooldown and hourly cap
+      recordOtpSent(cleanEmail);
 
       const profName = targetProf['Professor  first_name'] || targetProf['Professor first_name'] || 'Professor';
 
       // Send Email
       await transporter.sendMail({
         from: `SmartAttend <${process.env.SMTP_USER}>`,
-        to: email,
+        to: cleanEmail,
         subject: 'SmartAttend — Your Password Reset OTP',
         html: getOtpEmailTemplate(otp, profName),
       });
@@ -620,10 +896,21 @@ app.get('/', authenticateToken, async (req, res) => {
     }
 
     if (action === 'verify_student_email') {
+      const cleanEmail = (email || '').toString().toLowerCase().trim();
+      if (!cleanEmail) {
+        return res.status(400).json({ status: 'error', message: 'Email address is required.' });
+      }
+
+      // Check per-email rate limiting and resend cooldown (Anti-Email-Bombing)
+      const throttleCheck = checkOtpRequestAllowed(cleanEmail);
+      if (!throttleCheck.allowed) {
+        return res.status(429).json({ status: 'error', message: throttleCheck.message });
+      }
+
       const { data, error } = await supabase
         .from('students')
         .select('ID, Name')
-        .eq('Email', email);
+        .eq('Email', cleanEmail);
 
       if (error) throw error;
 
@@ -638,13 +925,16 @@ app.get('/', authenticateToken, async (req, res) => {
       const { error: updateErr } = await supabase
         .from('students')
         .update({ OTP: otp, OTP_Timestamp: expiry, ResetStatus: 'PENDING' })
-        .eq('Email', email);
+        .eq('Email', cleanEmail);
 
       if (updateErr) throw updateErr;
 
+      // Track OTP sent for cooldown and hourly cap
+      recordOtpSent(cleanEmail);
+
       await transporter.sendMail({
         from: `SmartAttend <${process.env.SMTP_USER}>`,
-        to: email,
+        to: cleanEmail,
         subject: 'SmartAttend — Your Password Reset OTP',
         html: getOtpEmailTemplate(otp, studentName),
       }).catch(e => console.error('Failed to send OTP email:', e.message));
@@ -653,18 +943,19 @@ app.get('/', authenticateToken, async (req, res) => {
     }
 
     if (action === 'verify_otp') {
+      const cleanEmail = (email || '').toString().toLowerCase().trim();
       const isStudent = (req.query.sheet === 'student');
       let targetTable = 'students';
       let users = [];
 
       if (isStudent) {
-        const { data } = await supabase.from('students').select('*').eq('Email', email);
+        const { data } = await supabase.from('students').select('*').eq('Email', cleanEmail);
         users = data || [];
       } else {
         // Professor check
         const deptSheets = ['BCA', 'MCA', 'BBA', 'MBA'];
         for (const table of deptSheets) {
-          const { data } = await supabase.from(table).select('*').eq('Email', email);
+          const { data } = await supabase.from(table).select('*').eq('Email', cleanEmail);
           if (data && data.length > 0) {
             targetTable = table;
             users = data;
@@ -678,43 +969,64 @@ app.get('/', authenticateToken, async (req, res) => {
       }
 
       const user = users[0];
-      const inputOtp = req.query.otp;
+      const inputOtp = (req.query.otp || '').toString().trim();
 
-      if (!user.OTP || user.OTP.toString().trim() !== inputOtp.toString().trim()) {
-        return res.json({ status: 'error', message: 'Invalid or expired OTP.' });
+      if (!user.OTP || user.OTP.toString().trim() !== inputOtp) {
+        const failures = recordOtpFailure(cleanEmail);
+        if (failures >= MAX_OTP_FAILED_ATTEMPTS) {
+          await supabase.from(targetTable).update({ OTP: null, OTP_Timestamp: null }).eq('Email', cleanEmail);
+          resetOtpFailure(cleanEmail);
+          await logActivity('SECURITY_ALERT', `OTP for ${cleanEmail} permanently invalidated after ${MAX_OTP_FAILED_ATTEMPTS} incorrect attempts.`);
+          return res.status(429).json({
+            status: 'error',
+            message: 'Security Alert: Maximum OTP verification attempts exceeded. This OTP has been permanently invalidated. Please request a new OTP.'
+          });
+        }
+        const remaining = MAX_OTP_FAILED_ATTEMPTS - failures;
+        return res.status(400).json({
+          status: 'error',
+          message: `Invalid or expired OTP. (${remaining} attempt(s) remaining)`
+        });
       }
 
       if (user.OTP_Timestamp) {
         const expiry = new Date(user.OTP_Timestamp).getTime();
         if (Date.now() > expiry) {
-          await supabase.from(targetTable).update({ OTP: null, OTP_Timestamp: null }).eq('Email', email);
+          await supabase.from(targetTable).update({ OTP: null, OTP_Timestamp: null }).eq('Email', cleanEmail);
+          resetOtpFailure(cleanEmail);
           return res.json({ status: 'error', message: 'OTP has expired. Please request a new one.' });
         }
       }
+
+      // Successful verification: reset failure tracker
+      resetOtpFailure(cleanEmail);
 
       // Update password
       await supabase
         .from(targetTable)
         .update({ Password: newPassword, OTP: null, OTP_Timestamp: null, ResetStatus: 'USED' })
-        .eq('Email', email);
+        .eq('Email', cleanEmail);
 
-      await logActivity('PASSWORD_RESET', `${isStudent ? 'Student' : 'Professor'} ${email} updated password successfully`);
+      await logActivity('PASSWORD_RESET', `${isStudent ? 'Student' : 'Professor'} ${cleanEmail} updated password successfully`);
       return res.json({ status: 'success', message: 'Password updated successfully.' });
     }
 
     if (action === 'verify_otp_only') {
+      const cleanEmail = (email || '').toString().toLowerCase().trim();
       const isStudent = (req.query.sheet === 'student');
+      let targetTable = 'students';
       let users = [];
 
       if (isStudent) {
-        const { data } = await supabase.from('students').select('*').eq('Email', email);
+        const { data } = await supabase.from('students').select('*').eq('Email', cleanEmail);
         users = data || [];
       } else {
         // Professor check
         const deptSheets = ['BCA', 'MCA', 'BBA', 'MBA'];
         for (const table of deptSheets) {
-          const { data } = await supabase.from(table).select('*').eq('Email', email);
+          const { data } = await supabase.from(table).select('*').eq('Email', cleanEmail);
           if (data && data.length > 0) {
+            targetTable = table;
             users = data;
             break;
           }
@@ -726,18 +1038,36 @@ app.get('/', authenticateToken, async (req, res) => {
       }
 
       const user = users[0];
-      const inputOtp = req.query.otp;
+      const inputOtp = (req.query.otp || '').toString().trim();
 
-      if (!user.OTP || user.OTP.toString().trim() !== inputOtp.toString().trim()) {
-        return res.json({ status: 'error', message: 'Invalid or expired OTP.' });
+      if (!user.OTP || user.OTP.toString().trim() !== inputOtp) {
+        const failures = recordOtpFailure(cleanEmail);
+        if (failures >= MAX_OTP_FAILED_ATTEMPTS) {
+          await supabase.from(targetTable).update({ OTP: null, OTP_Timestamp: null }).eq('Email', cleanEmail);
+          resetOtpFailure(cleanEmail);
+          await logActivity('SECURITY_ALERT', `OTP for ${cleanEmail} permanently invalidated after ${MAX_OTP_FAILED_ATTEMPTS} incorrect attempts.`);
+          return res.status(429).json({
+            status: 'error',
+            message: 'Security Alert: Maximum OTP verification attempts exceeded. This OTP has been permanently invalidated. Please request a new OTP.'
+          });
+        }
+        const remaining = MAX_OTP_FAILED_ATTEMPTS - failures;
+        return res.status(400).json({
+          status: 'error',
+          message: `Invalid or expired OTP. (${remaining} attempt(s) remaining)`
+        });
       }
 
       if (user.OTP_Timestamp) {
         const expiry = new Date(user.OTP_Timestamp).getTime();
         if (Date.now() > expiry) {
+          resetOtpFailure(cleanEmail);
           return res.json({ status: 'error', message: 'OTP has expired.' });
         }
       }
+
+      // Successful verification: reset failure tracker
+      resetOtpFailure(cleanEmail);
 
       return res.json({ status: 'success', message: 'OTP verified.' });
     }
@@ -1473,6 +1803,16 @@ Return ONLY valid JSON:
         return res.status(400).json({ status: 'error', message: 'Email, password, and role are required.' });
       }
 
+      // Check Account Lockout (Anti-Distributed Brute Force & Credential Stuffing)
+      const lockout = getAccountLockout(cleanEmail);
+      if (lockout && lockout.lockedUntil && Date.now() < lockout.lockedUntil) {
+        const remainingMinutes = Math.ceil((lockout.lockedUntil - Date.now()) / (60 * 1000));
+        return res.status(429).json({
+          status: 'error',
+          message: `Security Alert: This account is temporarily locked due to multiple failed login attempts. Please try again after ${remainingMinutes} minute(s) or reset your password.`
+        });
+      }
+
       let user = null;
       let matchedTable = '';
 
@@ -1509,14 +1849,26 @@ Return ONLY valid JSON:
       }
 
       if (!user) {
-        return res.status(401).json({ status: 'error', message: 'User not found in database.' });
+        recordFailedLogin(cleanEmail);
+        return res.status(401).json({ status: 'error', message: 'Invalid email or password.' });
       }
 
       // Check Password (case-sensitive check as in original client code)
       const dbPass = user.Password || user.password || '';
       if (dbPass !== cleanPass) {
-        return res.status(401).json({ status: 'error', message: 'Invalid credentials. Password mismatch.' });
+        const state = recordFailedLogin(cleanEmail);
+        const remainingAttempts = Math.max(0, MAX_FAILED_LOGIN_ATTEMPTS - (state ? state.failedAttempts : 0));
+        let errorMsg = 'Invalid email or password.';
+        if (remainingAttempts > 0 && remainingAttempts < MAX_FAILED_LOGIN_ATTEMPTS) {
+          errorMsg = `Invalid email or password. (${remainingAttempts} attempt(s) remaining before account lockout)`;
+        } else if (remainingAttempts === 0) {
+          errorMsg = 'Security Alert: Maximum login attempts exceeded. This account has been locked for 15 minutes.';
+        }
+        return res.status(401).json({ status: 'error', message: errorMsg });
       }
+
+      // Reset failed login tracking upon successful authentication
+      resetFailedLogin(cleanEmail);
 
       // Generate a signed JWT
       const payload = {
@@ -2340,22 +2692,34 @@ Return ONLY valid JSON:
     if (action === 'verify_lab_code') {
       const { studentId, code, deviceId } = req.body;
       const cleanStudentId = (studentId || '').toString().toLowerCase().trim();
+      const cleanCode = (code || '').toString().trim();
+
+      // Check student-level lab code attempt failure tracker (Anti-Brute-Force)
+      const studentLabFailure = getLabCodeFailure(cleanStudentId);
+      if (studentLabFailure >= 5) {
+        return res.status(429).json({
+          status: 'error',
+          message: 'Security Alert: Too many incorrect lab code attempts. Please wait 2 minutes.'
+        });
+      }
 
       const { data: session, error: fetchSessionErr } = await supabase
         .from('Active_Codes')
         .select('*')
-        .eq('Code', code.toString().trim())
+        .eq('Code', cleanCode)
         .single();
 
       if (fetchSessionErr || !session || Date.now() > Number(session.ExpiresAt)) {
-        return res.json({ status: 'error', message: 'Code is invalid or has expired.' });
+        const fails = recordLabCodeFailure(cleanStudentId);
+        const remaining = Math.max(0, 5 - fails);
+        return res.json({ status: 'error', message: `Code is invalid or has expired. (${remaining} attempt(s) remaining)` });
       }
 
       // Check if student already scanned this code in Lab_Access_Logs
       const { data: existingScans, error: checkErr } = await supabase
         .from('Lab_Access_Logs')
         .select('*')
-        .eq('Code', code.toString().trim());
+        .eq('Code', cleanCode);
 
       if (checkErr) throw checkErr;
 
@@ -2381,8 +2745,12 @@ Return ONLY valid JSON:
         .single();
 
       if (!student) {
+        recordLabCodeFailure(cleanStudentId);
         return res.json({ status: 'error', message: 'Student ID not found in database.' });
       }
+
+      // Successful verification: reset failure tracker
+      resetLabCodeFailure(cleanStudentId);
 
       const dbStudentId = student.ID;
 
@@ -2390,7 +2758,7 @@ Return ONLY valid JSON:
       const { error: insertLogErr } = await supabase
         .from('Lab_Access_Logs')
         .insert([{
-          Code: code.toString().trim(),
+          Code: cleanCode,
           StudentID: dbStudentId,
           Timestamp: Date.now(),
           DeviceID: deviceId || ''
