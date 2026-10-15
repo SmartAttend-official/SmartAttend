@@ -24,3 +24,8 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# Generated Documents and PDFs (Keep in local folder only)
+PDF/*.pdf
+*.pdf
+scratch/
