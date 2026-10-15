@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
+const bcrypt = require('bcryptjs');
 const { createClient } = require('@supabase/supabase-js');
 const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken');
@@ -523,17 +524,31 @@ function getOtpEmailTemplate(otp, name) {
   `;
 }
 
+// Helper: HTML escaping for secure email templating (Anti-XSS/Injection)
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 // HTML Email Template for Welcome/New Student
 function getWelcomeEmailTemplate(name, id, password) {
+  const safeName = escapeHtml(name);
+  const safeId = escapeHtml(id);
+  const safePassword = escapeHtml(password);
   return `
   <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f4f7f6; color: #333;">
     <div style="max-width: 600px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 8px; border-top: 4px solid #10b981; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
       <h2 style="color: #10b981; margin-bottom: 20px;">Welcome to SmartAttend!</h2>
-      <p>Hello <strong>${name}</strong>,</p>
+      <p>Hello <strong>${safeName}</strong>,</p>
       <p>Your student account has been successfully created. You can now log into the SmartAttend portal using the credentials below:</p>
       <div style="background: #f8fafc; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #10b981;">
-        <p style="margin: 5px 0;"><strong>Student ID:</strong> ${id}</p>
-        <p style="margin: 5px 0;"><strong>Password:</strong> ${password}</p>
+        <p style="margin: 5px 0;"><strong>Student ID:</strong> ${safeId}</p>
+        <p style="margin: 5px 0;"><strong>Password:</strong> ${safePassword}</p>
       </div>
       <p>Please log in and ensure your information is up to date.</p>
       <hr style="border: none; border-top: 1px solid #eaeaea; margin: 20px 0;" />
@@ -855,6 +870,11 @@ app.get('/', authenticateToken, async (req, res) => {
     }
 
     if (action === 'send_admin_otps') {
+      const userRole = (req.user && req.user.role) || '';
+      if (userRole !== 'admin') {
+        return res.status(403).json({ status: 'error', message: 'Access Denied: Only administrators can dispatch bulk OTPs.' });
+      }
+
       const emailList = (req.query.emails || "").split(',').map(e => e.trim()).filter(Boolean);
       const emailPromises = [];
       let processedCount = 0;
@@ -1001,10 +1021,16 @@ app.get('/', authenticateToken, async (req, res) => {
       // Successful verification: reset failure tracker
       resetOtpFailure(cleanEmail);
 
-      // Update password
+      // Validate and hash password with salted bcrypt
+      const cleanNewPass = (newPassword || '').toString().trim();
+      if (!cleanNewPass || cleanNewPass.length < 8) {
+        return res.status(400).json({ status: 'error', message: 'Password must be at least 8 characters long.' });
+      }
+      const hashedNewPassword = await bcrypt.hash(cleanNewPass, 10);
+
       await supabase
         .from(targetTable)
-        .update({ Password: newPassword, OTP: null, OTP_Timestamp: null, ResetStatus: 'USED' })
+        .update({ Password: hashedNewPassword, OTP: null, OTP_Timestamp: null, ResetStatus: 'USED' })
         .eq('Email', cleanEmail);
 
       await logActivity('PASSWORD_RESET', `${isStudent ? 'Student' : 'Professor'} ${cleanEmail} updated password successfully`);
@@ -1301,6 +1327,53 @@ app.get('/', authenticateToken, async (req, res) => {
 app.post('/', authenticateToken, async (req, res) => {
   try {
     const { action, sheet, data, id, email, searchCol, searchVal } = req.body;
+    
+    // ── ROLE-BASED ACCESS CONTROL (RBAC) AUTHORIZATION GATE ──
+    const userRole = (req.user && req.user.role) || '';
+
+    const RBAC_RULES = {
+      // Administrator Only Actions
+      'add_professor': ['admin'],
+      'delete_professor': ['admin'],
+      'delete': ['admin'],
+      'add_dept': ['admin'],
+      'add_class': ['admin'],
+      'add_subject': ['admin'],
+      'add_proxy': ['admin'],
+      'delete_academic': ['admin'],
+      'update_academic': ['admin'],
+      'add_camera_ip': ['admin'],
+      'update_camera_ip': ['admin'],
+      'delete_camera_ip': ['admin'],
+      'upload_timetable': ['admin'],
+      'delete_timetable': ['admin'],
+
+      // Faculty & Administrator Actions
+      'generate_lab_code': ['professor', 'admin'],
+      'email_students': ['professor', 'admin'],
+      'email_late_students': ['professor', 'admin'],
+      'resolve_leave': ['professor', 'admin'],
+      'save_session': ['professor', 'admin'],
+      'upload_assignment': ['professor', 'admin'],
+      'delete_assignment': ['professor', 'admin'],
+      'ask_gemini': ['professor', 'admin'],
+      'generate_analytic_report': ['professor', 'admin'],
+
+      // Student & Administrator Actions
+      'submit_leave': ['student', 'admin'],
+      'verify_leave_proof': ['student', 'admin']
+    };
+
+    if (action && RBAC_RULES[action]) {
+      const allowedRoles = RBAC_RULES[action];
+      if (!allowedRoles.includes(userRole)) {
+        await logActivity('SECURITY_ALERT', `Access Denied: User ${req.user ? req.user.email : 'Unknown'} with role '${userRole}' attempted unauthorized action '${action}'`);
+        return res.status(403).json({
+          status: 'error',
+          message: `Access Denied: You do not have permission to perform this action (${action}). Required: [${allowedRoles.join(', ')}]`
+        });
+      }
+    }
     
     // ── AI ASSISTANT ACTION ──
     // ── AI ASSISTANT ACTION ──
@@ -1853,9 +1926,28 @@ Return ONLY valid JSON:
         return res.status(401).json({ status: 'error', message: 'Invalid email or password.' });
       }
 
-      // Check Password (case-sensitive check as in original client code)
+      // Check Password with bcrypt and automatic legacy plaintext migration
       const dbPass = user.Password || user.password || '';
-      if (dbPass !== cleanPass) {
+      let isPasswordMatch = false;
+
+      if (dbPass.startsWith('$2a$') || dbPass.startsWith('$2b$')) {
+        isPasswordMatch = await bcrypt.compare(cleanPass, dbPass);
+      } else {
+        isPasswordMatch = (dbPass === cleanPass);
+        // Automatic migration: If valid, silently re-hash and upgrade to salted bcrypt in database
+        if (isPasswordMatch) {
+          try {
+            const upgradedHash = await bcrypt.hash(cleanPass, 10);
+            supabase.from(matchedTable).update({ Password: upgradedHash }).eq('Email', cleanEmail).then(() => {
+              console.log(`🔒 Security: Auto-migrated password for ${cleanEmail} to bcrypt hash.`);
+            }).catch(err => console.error('Auto-migration error:', err.message));
+          } catch (e) {
+            console.error('Password auto-hash upgrade error:', e);
+          }
+        }
+      }
+
+      if (!isPasswordMatch) {
         const state = recordFailedLogin(cleanEmail);
         const remainingAttempts = Math.max(0, MAX_FAILED_LOGIN_ATTEMPTS - (state ? state.failedAttempts : 0));
         let errorMsg = 'Invalid email or password.';
@@ -1903,13 +1995,29 @@ Return ONLY valid JSON:
       });
     }
 
-    // ── A. UPDATE DATA ──
+    // ── A. UPDATE DATA (With IDOR & Password Protection) ──
     if (action === 'update') {
+      // IDOR & Privilege Escalation Protection: Students can only update their own student profile
+      if (userRole === 'student') {
+        if (sheet && sheet !== 'student') {
+          return res.status(403).json({ status: 'error', message: 'Access Denied: Students can only update student profiles.' });
+        }
+        const studentOwnId = ((req.user && req.user.id) || '').toString().trim().toLowerCase();
+        const studentOwnEmail = ((req.user && req.user.email) || '').toString().trim().toLowerCase();
+        const requestedTarget = (searchVal || id || '').toString().trim().toLowerCase();
+        if (requestedTarget && requestedTarget !== studentOwnId && requestedTarget !== studentOwnEmail) {
+          return res.status(403).json({ status: 'error', message: 'Access Denied: You cannot modify records belonging to other users.' });
+        }
+      }
+
       let table = 'students';
       let searchColumn = searchCol || 'ID';
       let searchValue = searchVal || id;
 
       if (sheet === 'admin') {
+        if (userRole !== 'admin') {
+          return res.status(403).json({ status: 'error', message: 'Access Denied: Admin privileges required.' });
+        }
         table = 'ADMIN';
         searchColumn = searchCol === 'Email' ? 'Email' : 'Admin_id';
       } else if (sheet === 'professor') {
@@ -1931,6 +2039,23 @@ Return ONLY valid JSON:
         }
       }
 
+      // Securely hash password if it's being updated
+      if (mappedData.Password) {
+        const rawPass = mappedData.Password.toString().trim();
+        if (rawPass.length < 8) {
+          return res.status(400).json({ status: 'error', message: 'Password must be at least 8 characters long.' });
+        }
+        mappedData.Password = await bcrypt.hash(rawPass, 10);
+      }
+      if (mappedData.password) {
+        const rawPass = mappedData.password.toString().trim();
+        if (rawPass.length < 8) {
+          return res.status(400).json({ status: 'error', message: 'Password must be at least 8 characters long.' });
+        }
+        mappedData.Password = await bcrypt.hash(rawPass, 10);
+        delete mappedData.password;
+      }
+
       const { error } = await supabase
         .from(table)
         .update(mappedData)
@@ -1940,16 +2065,23 @@ Return ONLY valid JSON:
       return res.json({ status: 'success' });
     }
 
-    // ── B. REGISTRATION ACTIONS ──
+    // ── B. REGISTRATION ACTIONS (With Salted Bcrypt Hashing) ──
     if (action === 'add' && sheet === 'student') {
+      if (userRole !== 'admin' && userRole !== 'professor') {
+        return res.status(403).json({ status: 'error', message: 'Access Denied: Only administrators or faculty can add students.' });
+      }
+
       const { ID, Name, Email, Password, Department, Semester, Parent_Email, Mobile } = data;
+      const rawPassword = (Password || '').toString().trim() || 'Welcome@123';
+      const hashedPassword = await bcrypt.hash(rawPassword, 10);
+
       const { error } = await supabase
         .from('students')
         .insert([{
           ID: ID,
           Name: Name,
           Email: Email,
-          Password: Password,
+          Password: hashedPassword,
           Department: Department,
           Semester: Semester,
           Parent_Email: Parent_Email,
@@ -1966,7 +2098,7 @@ Return ONLY valid JSON:
           from: `SmartAttend <${process.env.SMTP_USER}>`,
           to: Email.trim(),
           subject: 'SmartAttend — Your Student Account Details',
-          html: getWelcomeEmailTemplate(Name || 'Student', ID, Password),
+          html: getWelcomeEmailTemplate(Name || 'Student', ID, rawPassword),
         }).catch(e => console.error('Failed to send welcome email:', e.message));
       }
 
@@ -1976,6 +2108,9 @@ Return ONLY valid JSON:
 
     if (action === 'add_professor') {
       const { Name, Email, Password, Department } = data;
+      const rawProfPass = (Password || '').toString().trim() || 'Prof@123';
+      const hashedProfPass = await bcrypt.hash(rawProfPass, 10);
+
       const nameParts = (Name || '').split(' ');
       const firstName = nameParts[0] || '';
       const lastName = nameParts.slice(1).join(' ') || '';
@@ -1988,7 +2123,7 @@ Return ONLY valid JSON:
           'Professor  first_name': firstName,
           'Professor  last_name': lastName,
           'Email': Email,
-          'Password': Password,
+          'Password': hashedProfPass,
           'Department': Department
         }]);
 

@@ -10,3 +10,4 @@
 
 8) A double counting of the lab attendance error is still in the system (07-06-2026 done)
 9) Solve all rate limiting vulnerabilities (login brute-force, OTP bombing/guessing, lab code brute-force, reverse proxy IP detection, account lockout) to protect system from hackers (15-10-2026 done)
+10) Implement enterprise security suite: salted bcrypt password hashing, automatic legacy migration, strict Role-Based Access Control (RBAC), and IDOR protection (15-10-2026 done)
