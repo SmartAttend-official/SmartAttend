@@ -7,6 +7,8 @@ const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken');
 const zlib = require('zlib');
 const pdfParse = require('pdf-parse');
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 require('dotenv').config();
 
 const app = express();
@@ -194,34 +196,27 @@ function authenticateToken(req, res, next) {
   });
 }
 
-// Helper: Send email via Google Apps Script API
-async function sendEmailViaGAS({ to, subject, html, text }) {
-  const scriptUrl = process.env.EMAIL_SCRIPT_URL;
-  if (!scriptUrl) {
-    throw new Error('EMAIL_SCRIPT_URL environment variable is not defined.');
+// Helper: Robust Date Parser for attendance history
+function parseRecordDate(dateStr) {
+  if (!dateStr) return null;
+  if (dateStr instanceof Date) return isNaN(dateStr.getTime()) ? null : dateStr;
+  const str = String(dateStr).trim();
+
+  let d = new Date(str);
+  if (!isNaN(d.getTime())) return d;
+
+  const dmyMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (dmyMatch) {
+    const day = parseInt(dmyMatch[1], 10);
+    const month = parseInt(dmyMatch[2], 10) - 1;
+    const year = parseInt(dmyMatch[3], 10);
+    d = new Date(year, month, day);
+    if (!isNaN(d.getTime())) return d;
   }
-
-  const payload = {
-    to: to,
-    subject: subject,
-    htmlBody: html || '',
-    textBody: text || ''
-  };
-
-  const res = await fetch(scriptUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain' }, // Google Apps Script handles text/plain best for POST bodies
-    body: JSON.stringify(payload)
-  });
-
-  const result = await res.json();
-  if (result.status !== 'success') {
-    throw new Error(result.message || 'Google Apps Script returned an error.');
-  }
-  return result;
+  return null;
 }
 
-const smtpPort = parseInt(process.env.SMTP_PORT || '465', 10);
+const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
   port: smtpPort,
@@ -229,8 +224,77 @@ const transporter = nodemailer.createTransport({
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS
-  }
+  },
+  connectionTimeout: 6000,
+  greetingTimeout: 6000,
+  socketTimeout: 8000
 });
+
+// Central robust email dispatch function with GAS API + SMTP fallback
+async function sendEmail({ to, subject, html, text }) {
+  if (!to || typeof to !== 'string' || !to.includes('@')) {
+    console.warn(`[sendEmail] Skipped invalid or empty recipient: "${to}"`);
+    return { status: 'skipped', message: 'Invalid recipient email' };
+  }
+
+  const cleanTo = to.trim();
+
+  // 1. Primary Engine: Google Apps Script Web App (HTTPS over port 443)
+  // Bypasses cloud host SMTP blocking (Render, AWS, DigitalOcean) and sends via Gmail API
+  const gasUrl = process.env.EMAIL_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwbVUxhvM4pIvjO7FqMclGLg8UXxYSCnTfmWinj655VvVPtWRrcpuCRo9yvlCwv06Kv/exec';
+  if (gasUrl) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s timeout
+
+      const res = await fetch(gasUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({
+          to: cleanTo,
+          subject: subject,
+          htmlBody: html || '',
+          html: html || '',
+          textBody: text || '',
+          body: text || ''
+        }),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      const textRes = await res.text();
+      let result = null;
+      try {
+        result = JSON.parse(textRes);
+      } catch (jsonErr) {
+        throw new Error(`GAS returned non-JSON response: ${textRes.slice(0, 100)}`);
+      }
+
+      if (result && result.status === 'success') {
+        return { status: 'success', engine: 'GAS' };
+      } else {
+        throw new Error((result && result.message) || 'GAS reported failure');
+      }
+    } catch (gasErr) {
+      console.warn(`[sendEmail] GAS delivery failed for ${cleanTo} (${gasErr.message}), falling back to SMTP...`);
+    }
+  }
+
+  // 2. Fallback Engine: Nodemailer SMTP
+  try {
+    const info = await transporter.sendMail({
+      from: `SmartAttend <${process.env.SMTP_USER || 'smartattend.official@gmail.com'}>`,
+      to: cleanTo,
+      subject: subject,
+      html: html,
+      text: text
+    });
+    return { status: 'success', engine: 'SMTP', messageId: info.messageId };
+  } catch (smtpErr) {
+    console.error(`[sendEmail] SMTP fallback failed for ${cleanTo}:`, smtpErr.message);
+    throw smtpErr;
+  }
+}
 
 // Helper: Log activities in AuditLogs table
 async function logActivity(action, details) {
@@ -859,8 +923,7 @@ app.get('/', authenticateToken, async (req, res) => {
       const profName = targetProf['Professor  first_name'] || targetProf['Professor first_name'] || 'Professor';
 
       // Send Email
-      await transporter.sendMail({
-        from: `SmartAttend <${process.env.SMTP_USER}>`,
+      await sendEmail({
         to: cleanEmail,
         subject: 'SmartAttend — Your Password Reset OTP',
         html: getOtpEmailTemplate(otp, profName),
@@ -900,12 +963,11 @@ app.get('/', authenticateToken, async (req, res) => {
         const studentName = student.Name || 'Student';
 
         emailPromises.push(
-          transporter.sendMail({
-            from: `SmartAttend <${process.env.SMTP_USER}>`,
+          sendEmail({
             to: actualEmail,
             subject: 'SmartAttend — Your Password Reset OTP',
             html: getOtpEmailTemplate(otp, studentName),
-          }).catch(mailErr => console.error("Mail Send Error:", mailErr))
+          }).catch(mailErr => console.error("Mail Send Error:", mailErr.message))
         );
         processedCount++;
       }
@@ -952,8 +1014,7 @@ app.get('/', authenticateToken, async (req, res) => {
       // Track OTP sent for cooldown and hourly cap
       recordOtpSent(cleanEmail);
 
-      await transporter.sendMail({
-        from: `SmartAttend <${process.env.SMTP_USER}>`,
+      await sendEmail({
         to: cleanEmail,
         subject: 'SmartAttend — Your Password Reset OTP',
         html: getOtpEmailTemplate(otp, studentName),
@@ -1326,7 +1387,9 @@ app.get('/', authenticateToken, async (req, res) => {
 // ==========================================
 app.post('/', authenticateToken, async (req, res) => {
   try {
-    const { action, sheet, data, id, email, searchCol, searchVal } = req.body;
+    const action = (req.body && req.body.action) || req.query.action;
+    const sheet = (req.body && req.body.sheet) || req.query.sheet;
+    const { data, id, email, searchCol, searchVal } = req.body || {};
     
     // ── ROLE-BASED ACCESS CONTROL (RBAC) AUTHORIZATION GATE ──
     const userRole = (req.user && req.user.role) || '';
@@ -1352,6 +1415,7 @@ app.post('/', authenticateToken, async (req, res) => {
       'generate_lab_code': ['professor', 'admin'],
       'email_students': ['professor', 'admin'],
       'email_late_students': ['professor', 'admin'],
+      'email_report': ['professor', 'admin'],
       'resolve_leave': ['professor', 'admin'],
       'save_session': ['professor', 'admin'],
       'upload_assignment': ['professor', 'admin'],
@@ -2094,8 +2158,7 @@ Return ONLY valid JSON:
       if (error) throw error;
 
       if (Email && Email.includes('@')) {
-        transporter.sendMail({
-          from: `SmartAttend <${process.env.SMTP_USER}>`,
+        sendEmail({
           to: Email.trim(),
           subject: 'SmartAttend — Your Student Account Details',
           html: getWelcomeEmailTemplate(Name || 'Student', ID, rawPassword),
@@ -2332,7 +2395,87 @@ Return ONLY valid JSON:
       }
 
       await logActivity('SAVE_SESSION', `Saved attendance session for ${subject} - ${dept} - ${sem}`);
-      return res.json({ status: 'success', updated: students.length });
+
+      // Optional Auto-Dispatch Email Alerts to Absent/Late students and parents
+      let autoAlertsCount = 0;
+      if (req.body.sendEmailAlerts) {
+        try {
+          const absentStudents = (students || []).filter(s => (s.status || '').toLowerCase() === 'absent');
+          const lateStudentsList = (students || []).filter(s => (parseInt(s.lateMinutes) || 0) > 0);
+
+          if (absentStudents.length > 0 || lateStudentsList.length > 0) {
+            const allTargetIds = Array.from(new Set([...absentStudents, ...lateStudentsList].map(s => String(s.id).trim())));
+            const idVariants = Array.from(new Set(allTargetIds.flatMap(id => [id, id.toUpperCase(), id.toLowerCase()])));
+            const { data: dbStudents } = await supabase.from('students').select('*').in('ID', idVariants);
+
+            if (dbStudents && dbStudents.length > 0) {
+              const bgPromises = [];
+
+              for (const absStudent of absentStudents) {
+                const s = dbStudents.find(st => String(st.ID).trim().toLowerCase() === String(absStudent.id).trim().toLowerCase());
+                if (!s) continue;
+                const sEmail = (s.Email || '').trim();
+                const pEmail = (s.Parent_Email || s.ParentEmail || '').trim();
+                const sName = s.Name || absStudent.name || 'Student';
+                const sPct = s.Attendance_Percentage || 0;
+                const sAtt = s.Classes_Attended || 0;
+                const sTot = s.Total_Classes || 0;
+
+                if (sEmail && sEmail.includes('@')) {
+                  bgPromises.push(sendEmail({
+                    to: sEmail,
+                    subject: 'SmartAttend — Attendance Alert',
+                    html: getStudentAlertTemplate(sName, subject, date, sPct, sAtt, sTot)
+                  }).catch(e => console.error(`[save_session] Student alert failed for ${sEmail}:`, e.message)));
+                }
+
+                if (pEmail && pEmail.includes('@')) {
+                  bgPromises.push(sendEmail({
+                    to: pEmail,
+                    subject: `SmartAttend — Absenteeism Notification: ${sName}`,
+                    html: getParentAbsentAlertTemplate(sName, subject, date, sPct)
+                  }).catch(e => console.error(`[save_session] Parent alert failed for ${pEmail}:`, e.message)));
+                }
+                autoAlertsCount++;
+              }
+
+              for (const lateStudent of lateStudentsList) {
+                const s = dbStudents.find(st => String(st.ID).trim().toLowerCase() === String(lateStudent.id).trim().toLowerCase());
+                if (!s) continue;
+                const sEmail = (s.Email || '').trim();
+                const pEmail = (s.Parent_Email || s.ParentEmail || '').trim();
+                const sName = s.Name || lateStudent.name || 'Student';
+                const mins = parseInt(lateStudent.lateMinutes) || 0;
+
+                if (sEmail && sEmail.includes('@')) {
+                  bgPromises.push(sendEmail({
+                    to: sEmail,
+                    subject: 'SmartAttend — Late Attendance Alert',
+                    html: getLateAlertTemplate(sName, s.ID, subject, date, mins)
+                  }).catch(e => console.error(`[save_session] Late student alert failed for ${sEmail}:`, e.message)));
+                }
+
+                if (pEmail && pEmail.includes('@')) {
+                  bgPromises.push(sendEmail({
+                    to: pEmail,
+                    subject: `SmartAttend — Late Attendance Notification: ${sName}`,
+                    html: getParentLateAlertTemplate(sName, subject, date, mins)
+                  }).catch(e => console.error(`[save_session] Late parent alert failed for ${pEmail}:`, e.message)));
+                }
+                autoAlertsCount++;
+              }
+
+              Promise.allSettled(bgPromises).then(() => {
+                logActivity('AUTO_ALERTS', `Auto-dispatched ${bgPromises.length} alerts during session save for ${subject}`);
+              });
+            }
+          }
+        } catch (autoErr) {
+          console.error("Auto alert error in save_session:", autoErr.message);
+        }
+      }
+
+      return res.json({ status: 'success', updated: students.length, alertsSent: autoAlertsCount });
     }
 
     // ── F. GENERAL ACADEMIC WRITES ──
@@ -2483,8 +2626,7 @@ Return ONLY valid JSON:
           for (const s of filteredStudents) {
             if (s.Email && s.Email.includes('@')) {
               try {
-                await transporter.sendMail({
-                  from: `SmartAttend <${process.env.SMTP_USER}>`,
+                await sendEmail({
                   to: s.Email,
                   subject: `New Assignment: ${title} (${subject})`,
                   html: getAssignmentEmailTemplate(title, description, subject, professorEmail, fileUrl, fileName, dueDate)
@@ -2546,8 +2688,7 @@ Return ONLY valid JSON:
           for (const s of filteredStudents) {
             if (s.Email && s.Email.includes('@')) {
               try {
-                await transporter.sendMail({
-                  from: `SmartAttend <${process.env.SMTP_USER}>`,
+                await sendEmail({
                   to: s.Email,
                   subject: `RETRACTED: Assignment Cancelled: ${assignment.Title}`,
                   html: getAssignmentRetractionEmailTemplate(assignment.Title, assignment.Subject, professorEmail)
@@ -2659,15 +2800,24 @@ Return ONLY valid JSON:
     // ── ANALYTIC REPORTS ──
     if (action === 'generate_analytic_report') {
       const { professorEmail, department, semester, subject, timeframe, sessionType = 'All' } = req.body;
+      const targetProfEmail = (professorEmail || (req.user && req.user.email) || '').trim();
+
+      if (!targetProfEmail || !targetProfEmail.includes('@')) {
+        return res.status(400).json({ status: 'error', message: 'Valid professor email address is required.' });
+      }
 
       // Determine cutoff date
       const now = new Date();
+      now.setHours(23, 59, 59, 999); // Include full current day regardless of server timezone
       const cutoff = new Date();
+
       if (timeframe === 'Weekly') cutoff.setDate(now.getDate() - 7);
       else if (timeframe === 'Monthly') cutoff.setDate(now.getDate() - 30);
       else if (timeframe === 'Half-Yearly') cutoff.setDate(now.getDate() - 182);
       else if (timeframe === 'Yearly') cutoff.setDate(now.getDate() - 365);
+      else if (timeframe === 'All' || timeframe === 'All Time') cutoff.setTime(0);
       else cutoff.setDate(now.getDate() - 7);
+      cutoff.setHours(0, 0, 0, 0);
 
       // Fetch all attendance logs for this semester
       const { data: historyRecords, error: historyErr } = await supabase
@@ -2690,8 +2840,8 @@ Return ONLY valid JSON:
         if (sessionType === 'Theory' && rSubject.toLowerCase().includes('lab')) return false;
         if (sessionType === 'Lab' && !rSubject.toLowerCase().includes('lab')) return false;
 
-        const rDate = new Date(r.Date);
-        if (isNaN(rDate.getTime())) return false;
+        const rDate = parseRecordDate(r.Date);
+        if (!rDate) return false;
         if (rDate < cutoff || rDate > now) return false;
 
         return true;
@@ -2779,19 +2929,18 @@ Return ONLY valid JSON:
       `;
 
       try {
-        await transporter.sendMail({
-          from: `SmartAttend <${process.env.SMTP_USER}>`,
-          to: professorEmail,
+        await sendEmail({
+          to: targetProfEmail,
           subject: `SmartAttend: ${timeframe} Analytic Report for ${subject}`,
           html: htmlBody
         });
         
-        await logActivity('GENERATE_REPORT', `Generated ${timeframe} report for ${subject} and sent to ${professorEmail}`);
+        await logActivity('GENERATE_REPORT', `Generated ${timeframe} report for ${subject} and sent to ${targetProfEmail}`);
         return res.json({ status: 'success' });
 
       } catch (mailErr) {
         console.error("Failed to send analytic email:", mailErr.message);
-        await logActivity('EMAIL_ERROR', `Failed to send to ${professorEmail}: ${mailErr.message}`);
+        await logActivity('EMAIL_ERROR', `Failed to send to ${targetProfEmail}: ${mailErr.message}`);
         return res.json({ status: 'error', message: 'Report generated, but email failed to send: ' + mailErr.message });
       }
     }
@@ -2918,20 +3067,30 @@ Return ONLY valid JSON:
       const subjectName = subject || 'Academic Session';
       const classDate = date || new Date().toLocaleDateString('en-IN');
 
-      // Fetch all students matching these IDs
+      // Fetch all students (query case-insensitively with all variants)
+      const idVariants = Array.from(new Set(absentIds.flatMap(id => [id, id.toUpperCase(), id.toLowerCase()])));
       const { data: dbStudents, error: dbErr } = await supabase
         .from('students')
         .select('*')
-        .in('ID', absentIds);
+        .in('ID', idVariants);
 
       if (dbErr) throw dbErr;
 
       let sentCount = 0;
       const emailPromises = [];
-      for (const student of (dbStudents || [])) {
-        const sEmail = student.Email;
-        const pEmail = student.Parent_Email || student.ParentEmail || '';
-        const name = student.Name || 'Student';
+
+      for (const reqStudent of studentsToAlert) {
+        const cleanReqId = String(reqStudent.id).trim().toLowerCase();
+        const student = (dbStudents || []).find(st => String(st.ID).trim().toLowerCase() === cleanReqId);
+
+        if (!student) {
+          console.warn(`[email_students] Student ID "${reqStudent.id}" not found in database.`);
+          continue;
+        }
+
+        const sEmail = (student.Email || '').trim();
+        const pEmail = (student.Parent_Email || student.ParentEmail || '').trim();
+        const name = student.Name || reqStudent.name || 'Student';
         const pct = student.Attendance_Percentage || 0;
         const att = student.Classes_Attended || 0;
         const tot = student.Total_Classes || 0;
@@ -2940,9 +3099,8 @@ Return ONLY valid JSON:
 
         if (sEmail && sEmail.includes('@')) {
           emailPromises.push(
-            transporter.sendMail({
-              from: `SmartAttend <${process.env.SMTP_USER}>`,
-              to: sEmail.trim(),
+            sendEmail({
+              to: sEmail,
               subject: 'SmartAttend — Attendance Alert',
               html: emailBody
             }).catch(e => console.error(`Failed to send student email to ${sEmail}:`, e.message))
@@ -2951,9 +3109,8 @@ Return ONLY valid JSON:
 
         if (pEmail && pEmail.includes('@')) {
           emailPromises.push(
-            transporter.sendMail({
-              from: `SmartAttend <${process.env.SMTP_USER}>`,
-              to: pEmail.trim(),
+            sendEmail({
+              to: pEmail,
               subject: `SmartAttend — Absenteeism Notification: ${name}`,
               html: getParentAbsentAlertTemplate(name, subjectName, classDate, pct)
             }).catch(e => console.error(`Failed to send parent email to ${pEmail}:`, e.message))
@@ -2962,16 +3119,8 @@ Return ONLY valid JSON:
         sentCount++;
       }
 
-      Promise.allSettled(emailPromises).then((results) => {
-        logActivity('ABSENT_ALERTS', `Sent ${sentCount} alerts for ${subjectName}`);
-        results.forEach(r => {
-          if (r.status === 'rejected') {
-            logActivity('EMAIL_ERROR', `Failed to send alert: ${r.reason.message}`);
-          }
-        });
-      }).catch(err => {
-        console.error('Error in email alerts:', err);
-      });
+      await Promise.allSettled(emailPromises);
+      await logActivity('ABSENT_ALERTS', `Dispatched absent alerts for ${sentCount} students in ${subjectName}`);
 
       return res.json({ status: 'success', sent: sentCount });
     }
@@ -2990,43 +3139,42 @@ Return ONLY valid JSON:
       const subjectName = subject || 'Academic Session';
       const classDate = date || new Date().toLocaleDateString('en-IN');
 
-      // Fetch student details from database
+      const idVariants = Array.from(new Set(lateIds.flatMap(id => [id, id.toUpperCase(), id.toLowerCase()])));
       const { data: dbStudents, error: dbErr } = await supabase
         .from('students')
         .select('*')
-        .in('ID', lateIds);
+        .in('ID', idVariants);
 
       if (dbErr) throw dbErr;
 
       let sentCount = 0;
       const emailPromises = [];
+
       for (const s of lateStudents) {
-        const cleanSId = String(s.id).trim();
-        const student = (dbStudents || []).find(st => String(st.ID).trim() === cleanSId);
+        const cleanSId = String(s.id).trim().toLowerCase();
+        const student = (dbStudents || []).find(st => String(st.ID).trim().toLowerCase() === cleanSId);
         if (!student) continue;
 
         const lateMins = parseInt(s.lateMinutes) || 0;
         if (lateMins > 0) {
-          const sEmail = student.Email;
-          const pEmail = student.Parent_Email || student.ParentEmail || '';
+          const sEmail = (student.Email || '').trim();
+          const pEmail = (student.Parent_Email || student.ParentEmail || '').trim();
           const name = student.Name || s.name || 'Student';
 
           if (sEmail && sEmail.includes('@')) {
             emailPromises.push(
-              transporter.sendMail({
-                from: `SmartAttend <${process.env.SMTP_USER}>`,
-                to: sEmail.trim(),
+              sendEmail({
+                to: sEmail,
                 subject: 'SmartAttend — Late Attendance Alert',
-                html: getLateAlertTemplate(name, cleanSId, subjectName, classDate, lateMins)
+                html: getLateAlertTemplate(name, student.ID, subjectName, classDate, lateMins)
               }).catch(e => console.error(`Failed to send late student email to ${sEmail}:`, e.message))
             );
           }
 
           if (pEmail && pEmail.includes('@')) {
             emailPromises.push(
-              transporter.sendMail({
-                from: `SmartAttend <${process.env.SMTP_USER}>`,
-                to: pEmail.trim(),
+              sendEmail({
+                to: pEmail,
                 subject: `SmartAttend — Late Attendance Notification: ${name}`,
                 html: getParentLateAlertTemplate(name, subjectName, classDate, lateMins)
               }).catch(e => console.error(`Failed to send late parent email to ${pEmail}:`, e.message))
@@ -3036,13 +3184,83 @@ Return ONLY valid JSON:
         }
       }
 
-      Promise.allSettled(emailPromises).then(() => {
-        logActivity('LATE_ALERTS', `Sent ${sentCount} late alerts for ${subjectName}`);
-      }).catch(err => {
-        console.error('Error in late email alerts:', err);
-      });
+      await Promise.allSettled(emailPromises);
+      await logActivity('LATE_ALERTS', `Dispatched late alerts for ${sentCount} students in ${subjectName}`);
 
       return res.json({ status: 'success', sent: sentCount });
+    }
+
+    // ── EMAIL SESSION REPORT TO PROFESSOR ──
+    if (action === 'email_report') {
+      const { email: profEmail, subject: subName, stats, students: studentList } = req.body;
+      const targetProfEmail = (profEmail || (req.user && req.user.email) || '').trim();
+
+      if (!targetProfEmail || !targetProfEmail.includes('@')) {
+        return res.status(400).json({ status: 'error', message: 'Valid professor email address is required.' });
+      }
+
+      const presentCount = (stats && stats.present) || 0;
+      const absentCount = (stats && stats.absent) || 0;
+      const totalCount = (stats && stats.total) || ((studentList || []).length);
+
+      const rowsHtml = (studentList || []).map(s => `
+        <tr>
+          <td style="padding:10px; border-bottom:1px solid #e2e8f0; font-size:14px;">${s.name || s.id}<br><span style="color:#64748b; font-size:12px;">${s.id}</span></td>
+          <td style="padding:10px; border-bottom:1px solid #e2e8f0; font-size:14px; text-align:center; font-weight:bold; color:${s.status === 'Present' ? '#10b981' : '#ef4444'};">${s.status}</td>
+        </tr>
+      `).join('');
+
+      const htmlBody = `
+        <div style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width:600px; margin:20px auto; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden;">
+          <div style="background:linear-gradient(135deg, #3b82f6, #6366f1); padding:24px; color:white;">
+            <h2 style="margin:0; font-size:22px;">Class Attendance Report</h2>
+            <p style="margin:6px 0 0 0; opacity:0.9; font-size:14px;">Subject: <strong>${subName || 'General'}</strong> | Date: ${new Date().toLocaleDateString('en-IN')}</p>
+          </div>
+          <div style="padding:20px; background:white;">
+            <div style="display:flex; gap:12px; margin-bottom:20px;">
+              <div style="flex:1; background:#f0fdf4; border:1px solid #bbf7d0; padding:12px; border-radius:8px; text-align:center;">
+                <div style="font-size:20px; font-weight:bold; color:#16a34a;">${presentCount}</div>
+                <div style="font-size:12px; color:#15803d;">Present</div>
+              </div>
+              <div style="flex:1; background:#fef2f2; border:1px solid #fecaca; padding:12px; border-radius:8px; text-align:center;">
+                <div style="font-size:20px; font-weight:bold; color:#dc2626;">${absentCount}</div>
+                <div style="font-size:12px; color:#b91c1c;">Absent</div>
+              </div>
+              <div style="flex:1; background:#f8fafc; border:1px solid #e2e8f0; padding:12px; border-radius:8px; text-align:center;">
+                <div style="font-size:20px; font-weight:bold; color:#3b82f6;">${totalCount}</div>
+                <div style="font-size:12px; color:#475569;">Total</div>
+              </div>
+            </div>
+            <table style="width:100%; border-collapse:collapse; text-align:left;">
+              <thead>
+                <tr style="background:#f1f5f9;">
+                  <th style="padding:10px; border-bottom:2px solid #e2e8f0; font-size:13px; color:#475569;">Student</th>
+                  <th style="padding:10px; border-bottom:2px solid #e2e8f0; font-size:13px; color:#475569; text-align:center;">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml}
+              </tbody>
+            </table>
+          </div>
+          <div style="background:#f8fafc; padding:14px; text-align:center; border-top:1px solid #e2e8f0; font-size:12px; color:#94a3b8;">
+            Sent by SmartAttend System
+          </div>
+        </div>
+      `;
+
+      try {
+        await sendEmail({
+          to: targetProfEmail,
+          subject: `SmartAttend — Attendance Report: ${subName || 'General'} (${new Date().toLocaleDateString('en-IN')})`,
+          html: htmlBody
+        });
+        await logActivity('SESSION_REPORT', `Sent attendance report for ${subName} to ${targetProfEmail}`);
+        return res.json({ status: 'success' });
+      } catch (err) {
+        console.error('Failed to send session report:', err.message);
+        return res.status(500).json({ status: 'error', message: 'Failed to send report email: ' + err.message });
+      }
     }
 
     // Fallback

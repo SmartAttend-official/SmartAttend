@@ -1367,6 +1367,7 @@
       const payload = {
         sheet: 'student',
         action: 'save_session',
+        sendEmailAlerts: localStorage.getItem('emailEnabled') === 'true',
         professorEmail: sessionStorage.getItem('userEmail'),
         classInfo: {
           subject: localStorage.getItem('activeClassSub') || 'General',
@@ -1403,11 +1404,9 @@
         const result = await response.json();
         
         if (result.status === 'success') {
-          let msg = `Attendance saved successfully.`;
-          if (result.lateCount !== undefined) {
-             msg = `Saved! Emails sent: ${result.lateCount}. Debug received: ${result.receivedLate}`;
-          } else {
-             msg = `Attendance for ${result.updated} students saved successfully! ✅`;
+          let msg = `Attendance for ${result.updated} students saved successfully! ✅`;
+          if (result.alertsSent > 0) {
+            msg += ` (${result.alertsSent} absent/late email alerts dispatched 📧)`;
           }
           showGlobalAlert(msg);
           // Optionally hide the report after saving

@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'none';">
   <title>Settings - SmartAttend</title>
+  <script src="../backend/config.js"></script>
   <script>
     if (sessionStorage.getItem('isAuthenticated') !== 'true') {
       window.location.replace('Login.html');
@@ -735,6 +736,7 @@
                 <option value="Monthly">Monthly (Last 30 Days)</option>
                 <option value="Half-Yearly">Half-Yearly (Last 182 Days)</option>
                 <option value="Yearly">Yearly (Last 365 Days)</option>
+                <option value="All">All-Time (Entire History)</option>
               </select>
             </div>
           </div>
