@@ -249,9 +249,11 @@ async function sendEmail({ to, subject, html, text }) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 35000); // 35s timeout to safely handle cold starts
 
-        const res = await fetch(gasUrl, {
+        // Use redirect: 'manual' to prevent Node's fetch from repeating POST to Google's echo endpoint.
+        // Google Apps Script redirects with 302 to script.googleusercontent.com/macros/echo, which ONLY accepts GET.
+        let res = await fetch(gasUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'text/plain' },
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
             to: cleanTo,
             subject: subject,
@@ -260,8 +262,19 @@ async function sendEmail({ to, subject, html, text }) {
             textBody: text || '',
             body: text || ''
           }),
+          redirect: 'manual',
           signal: controller.signal
         });
+
+        if (res.status >= 300 && res.status < 400) {
+          const redirectUrl = res.headers.get('location');
+          if (redirectUrl) {
+            res = await fetch(redirectUrl, {
+              method: 'GET',
+              signal: controller.signal
+            });
+          }
+        }
         clearTimeout(timeoutId);
 
         const textRes = await res.text();
