@@ -238,46 +238,54 @@ async function sendEmail({ to, subject, html, text }) {
   }
 
   const cleanTo = to.trim();
+  let lastGasError = null;
 
   // 1. Primary Engine: Google Apps Script Web App (HTTPS over port 443)
   // Bypasses cloud host SMTP blocking (Render, AWS, DigitalOcean) and sends via Gmail API
   const gasUrl = process.env.EMAIL_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwbVUxhvM4pIvjO7FqMclGLg8UXxYSCnTfmWinj655VvVPtWRrcpuCRo9yvlCwv06Kv/exec';
   if (gasUrl) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s timeout
-
-      const res = await fetch(gasUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({
-          to: cleanTo,
-          subject: subject,
-          htmlBody: html || '',
-          html: html || '',
-          textBody: text || '',
-          body: text || ''
-        }),
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
-
-      const textRes = await res.text();
-      let result = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
       try {
-        result = JSON.parse(textRes);
-      } catch (jsonErr) {
-        throw new Error(`GAS returned non-JSON response: ${textRes.slice(0, 100)}`);
-      }
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 35000); // 35s timeout to safely handle cold starts
 
-      if (result && result.status === 'success') {
-        return { status: 'success', engine: 'GAS' };
-      } else {
-        throw new Error((result && result.message) || 'GAS reported failure');
+        const res = await fetch(gasUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({
+            to: cleanTo,
+            subject: subject,
+            htmlBody: html || '',
+            html: html || '',
+            textBody: text || '',
+            body: text || ''
+          }),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        const textRes = await res.text();
+        let result = null;
+        try {
+          result = JSON.parse(textRes);
+        } catch (jsonErr) {
+          throw new Error(`GAS returned non-JSON response: ${textRes.slice(0, 100)}`);
+        }
+
+        if (result && result.status === 'success') {
+          return { status: 'success', engine: 'GAS' };
+        } else {
+          throw new Error((result && result.message) || 'GAS reported failure');
+        }
+      } catch (gasErr) {
+        lastGasError = gasErr;
+        console.warn(`[sendEmail] GAS delivery attempt ${attempt} failed for ${cleanTo} (${gasErr.message})`);
+        if (attempt === 1) {
+          await new Promise(r => setTimeout(r, 1000)); // Brief 1s delay before retry
+        }
       }
-    } catch (gasErr) {
-      console.warn(`[sendEmail] GAS delivery failed for ${cleanTo} (${gasErr.message}), falling back to SMTP...`);
     }
+    console.warn(`[sendEmail] All GAS attempts failed for ${cleanTo} (${lastGasError ? lastGasError.message : 'Unknown'}), falling back to SMTP...`);
   }
 
   // 2. Fallback Engine: Nodemailer SMTP
@@ -292,7 +300,7 @@ async function sendEmail({ to, subject, html, text }) {
     return { status: 'success', engine: 'SMTP', messageId: info.messageId };
   } catch (smtpErr) {
     console.error(`[sendEmail] SMTP fallback failed for ${cleanTo}:`, smtpErr.message);
-    throw smtpErr;
+    throw new Error(`Email delivery failed (GAS: ${lastGasError ? lastGasError.message : 'failed'}, SMTP: ${smtpErr.message})`);
   }
 }
 
