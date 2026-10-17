@@ -238,26 +238,18 @@ async function sendEmail({ to, subject, html, text }) {
   }
 
   const cleanTo = to.trim();
-  const PRIMARY_GAS_URL = 'https://script.google.com/macros/s/AKfycbwbVUxhvM4pIvjO7FqMclGLg8UXxYSCnTfmWinj655VvVPtWRrcpuCRo9yvlCwv06Kv/exec';
-  const urlsToTry = Array.from(new Set([
-    process.env.EMAIL_SCRIPT_URL,
-    PRIMARY_GAS_URL
-  ].filter(u => u && u.startsWith('https://script.google.com/macros/s/'))));
 
   // 1. Primary Engine: Google Apps Script Web App (HTTPS over port 443)
-  for (const gasUrl of urlsToTry) {
+  // Bypasses cloud host SMTP blocking (Render, AWS, DigitalOcean) and sends via Gmail API
+  const gasUrl = process.env.EMAIL_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwbVUxhvM4pIvjO7FqMclGLg8UXxYSCnTfmWinj655VvVPtWRrcpuCRo9yvlCwv06Kv/exec';
+  if (gasUrl) {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s timeout
 
       const res = await fetch(gasUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': '*/*'
-        },
-        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({
           to: cleanTo,
           subject: subject,
@@ -275,7 +267,7 @@ async function sendEmail({ to, subject, html, text }) {
       try {
         result = JSON.parse(textRes);
       } catch (jsonErr) {
-        throw new Error(`GAS returned non-JSON (HTTP ${res.status}): ${textRes.slice(0, 100)}`);
+        throw new Error(`GAS returned non-JSON response: ${textRes.slice(0, 100)}`);
       }
 
       if (result && result.status === 'success') {
@@ -284,8 +276,7 @@ async function sendEmail({ to, subject, html, text }) {
         throw new Error((result && result.message) || 'GAS reported failure');
       }
     } catch (gasErr) {
-      console.warn(`[sendEmail] GAS delivery failed for ${cleanTo} on ${gasUrl.slice(0, 45)}: ${gasErr.message}`);
-      await logActivity('GAS_ERROR', `GAS failed for ${cleanTo}: ${gasErr.message}`);
+      console.warn(`[sendEmail] GAS delivery failed for ${cleanTo} (${gasErr.message}), falling back to SMTP...`);
     }
   }
 
@@ -308,7 +299,11 @@ async function sendEmail({ to, subject, html, text }) {
 // Helper: Log activities in AuditLogs table
 async function logActivity(action, details) {
   try {
-    await supabase.from('AuditLogs').insert([{ Type: action, Details: details }]);
+    await supabase.from('AuditLogs').insert([{
+      Timestamp: new Date().toISOString(),
+      Type: action,
+      Details: details
+    }]);
   } catch (e) {
     console.error('Logging activity failed:', e.message);
   }
@@ -1388,45 +1383,6 @@ app.get('/', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error("GET API Error:", err);
     return res.status(500).json({ status: 'error', message: err.message });
-  }
-});
-
-// Diagnostic Health Check for Email Engine (Public GET for verification)
-app.get('/debug-email', async (req, res) => {
-  const PRIMARY_GAS_URL = 'https://script.google.com/macros/s/AKfycbwbVUxhvM4pIvjO7FqMclGLg8UXxYSCnTfmWinj655VvVPtWRrcpuCRo9yvlCwv06Kv/exec';
-  const testUrl = req.query.url || process.env.EMAIL_SCRIPT_URL || PRIMARY_GAS_URL;
-  try {
-    const t0 = Date.now();
-    const gasRes = await fetch(testUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      },
-      redirect: 'follow',
-      body: JSON.stringify({
-        to: 'smartattend.official@gmail.com',
-        subject: 'SmartAttend Diagnostic Test',
-        htmlBody: '<p>Diagnostic Test</p>'
-      })
-    });
-    const status = gasRes.status;
-    const text = await gasRes.text();
-    return res.json({
-      status: 'ok',
-      timeMs: Date.now() - t0,
-      httpStatus: status,
-      rawResponse: text.slice(0, 300),
-      testedUrl: testUrl.slice(0, 45) + '...',
-      envScriptUrlSet: !!process.env.EMAIL_SCRIPT_URL
-    });
-  } catch (err) {
-    return res.json({
-      status: 'error',
-      message: err.message,
-      testedUrl: testUrl.slice(0, 45) + '...',
-      envScriptUrlSet: !!process.env.EMAIL_SCRIPT_URL
-    });
   }
 });
 
