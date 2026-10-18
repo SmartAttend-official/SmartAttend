@@ -170,7 +170,7 @@ function authenticateToken(req, res, next) {
   const action = req.query.action || (req.body && req.body.action);
   const sheet = req.query.sheet || (req.body && req.body.sheet);
   
-  if (action === 'login' || action === 'send_otp' || action === 'verify_otp' || action === 'verify_otp_only' || action === 'verify_student_email' || action === 'get_encoding' || action === 'save_encoding' || (!action && !sheet)) {
+  if (action === 'login' || action === 'send_otp' || action === 'verify_otp' || action === 'verify_otp_only' || action === 'verify_student_email' || action === 'get_encoding' || action === 'save_encoding' || action === 'debug_email' || (!action && !sheet)) {
     return next();
   }
 
@@ -242,18 +242,30 @@ async function sendEmail({ to, subject, html, text }) {
 
   // 1. Primary Engine: Google Apps Script Web App (HTTPS over port 443)
   // Bypasses cloud host SMTP blocking (Render, AWS, DigitalOcean) and sends via Gmail API
-  const gasUrl = process.env.EMAIL_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwbVUxhvM4pIvjO7FqMclGLg8UXxYSCnTfmWinj655VvVPtWRrcpuCRo9yvlCwv06Kv/exec';
-  if (gasUrl) {
+  const defaultGasUrl = 'https://script.google.com/macros/s/AKfycbwbVUxhvM4pIvjO7FqMclGLg8UXxYSCnTfmWinj655VvVPtWRrcpuCRo9yvlCwv06Kv/exec';
+  const rawEnvUrl = (process.env.EMAIL_SCRIPT_URL || '').trim();
+  const urlsToTry = Array.from(new Set([
+    defaultGasUrl,
+    rawEnvUrl
+  ])).filter(u => u && u.startsWith('https://script.google.com/'));
+
+  const browserHeaders = {
+    'Content-Type': 'text/plain;charset=utf-8',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'Accept': '*/*'
+  };
+
+  for (const gasUrl of urlsToTry) {
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 35000); // 35s timeout to safely handle cold starts
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout to fit well within cloud reverse proxy limits
 
         // Use redirect: 'manual' to prevent Node's fetch from repeating POST to Google's echo endpoint.
         // Google Apps Script redirects with 302 to script.googleusercontent.com/macros/echo, which ONLY accepts GET.
         let res = await fetch(gasUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          headers: browserHeaders,
           body: JSON.stringify({
             to: cleanTo,
             subject: subject,
@@ -266,14 +278,19 @@ async function sendEmail({ to, subject, html, text }) {
           signal: controller.signal
         });
 
-        if (res.status >= 300 && res.status < 400) {
-          const redirectUrl = res.headers.get('location');
-          if (redirectUrl) {
-            res = await fetch(redirectUrl, {
-              method: 'GET',
-              signal: controller.signal
-            });
-          }
+        // Follow redirect chain using GET
+        let hops = 0;
+        while (res.status >= 300 && res.status < 400 && hops < 5) {
+          const loc = res.headers.get('location');
+          if (!loc) break;
+          const targetUrl = loc.startsWith('/') ? 'https://script.google.com' + loc : loc;
+          res = await fetch(targetUrl, {
+            method: 'GET',
+            headers: browserHeaders,
+            redirect: 'manual',
+            signal: controller.signal
+          });
+          hops++;
         }
         clearTimeout(timeoutId);
 
@@ -282,7 +299,7 @@ async function sendEmail({ to, subject, html, text }) {
         try {
           result = JSON.parse(textRes);
         } catch (jsonErr) {
-          throw new Error(`GAS returned non-JSON response: ${textRes.slice(0, 100)}`);
+          throw new Error(`GAS returned non-JSON response (status ${res.status}): ${textRes.slice(0, 100)}`);
         }
 
         if (result && result.status === 'success') {
@@ -292,14 +309,14 @@ async function sendEmail({ to, subject, html, text }) {
         }
       } catch (gasErr) {
         lastGasError = gasErr;
-        console.warn(`[sendEmail] GAS delivery attempt ${attempt} failed for ${cleanTo} (${gasErr.message})`);
+        console.warn(`[sendEmail] GAS delivery attempt ${attempt} via ${gasUrl.slice(0, 50)}... failed for ${cleanTo}: ${gasErr.message}`);
         if (attempt === 1) {
-          await new Promise(r => setTimeout(r, 1000)); // Brief 1s delay before retry
+          await new Promise(r => setTimeout(r, 800));
         }
       }
     }
-    console.warn(`[sendEmail] All GAS attempts failed for ${cleanTo} (${lastGasError ? lastGasError.message : 'Unknown'}), falling back to SMTP...`);
   }
+  console.warn(`[sendEmail] All GAS attempts failed for ${cleanTo} (${lastGasError ? lastGasError.message : 'Unknown'}), falling back to SMTP...`);
 
   // 2. Fallback Engine: Nodemailer SMTP
   try {
@@ -828,6 +845,22 @@ app.get('/', authenticateToken, async (req, res) => {
     // Health Check Ping for Render
     if (!action && !sheet && Object.keys(req.query).length === 0) {
       return res.json({ status: 'ok', message: 'SmartAttend Server is running.' });
+    }
+
+    // Debug Email Dispatch Tester for Cloud Diagnostics
+    if (action === 'debug_email') {
+      const targetEmail = (req.query.to || 'aman70dz@gmail.com').trim();
+      try {
+        const sendResult = await sendEmail({
+          to: targetEmail,
+          subject: 'SmartAttend Diagnostic Delivery Test',
+          html: '<h2>SmartAttend Cloud Diagnostic</h2><p>Email delivery is fully operational on Render.</p>',
+          text: 'SmartAttend Diagnostic: Email delivery operational.'
+        });
+        return res.json({ status: 'success', engine: sendResult.engine, recipient: targetEmail });
+      } catch (err) {
+        return res.status(500).json({ status: 'error', message: err.message, recipient: targetEmail });
+      }
     }
 
     // ── ACTIVE CODE SCANS FOR LIVE GRID ──

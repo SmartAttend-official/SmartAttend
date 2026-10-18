@@ -247,7 +247,7 @@
       <div class="header-content">
         <i class="fa-solid fa-shield-halved header-icon" style="color:#3b82f6; background:rgba(59,130,246,0.1);"></i>
         <h3>Recover Password</h3>
-        <p>Enter your registered email address and we'll send a secure 5-digit OTP to reset your password.</p>
+        <p>Enter your registered email address and we'll send a secure 6-digit OTP to reset your password.</p>
       </div>
 
       <div class="msg error" id="step1-error"><i class="fa-solid fa-circle-xmark"></i><span></span></div>
@@ -274,7 +274,7 @@
       <div class="header-content">
         <i class="fa-solid fa-envelope-open-text header-icon" style="color:#3b82f6; background:rgba(59,130,246,0.1);"></i>
         <h3>Check Your Email</h3>
-        <p>We've sent a 5-digit OTP to your email. Enter it below to continue.</p>
+        <p>We've sent a 6-digit OTP to your email. Enter it below to continue.</p>
       </div>
 
       <div class="msg error" id="step2-error"><i class="fa-solid fa-circle-xmark"></i><span></span></div>
@@ -283,6 +283,7 @@
         Enter OTP Code <span class="required-asterisk">*</span>
       </label>
       <div class="otp-inputs" id="otpInputs">
+        <input type="text" maxlength="1" inputmode="numeric">
         <input type="text" maxlength="1" inputmode="numeric">
         <input type="text" maxlength="1" inputmode="numeric">
         <input type="text" maxlength="1" inputmode="numeric">

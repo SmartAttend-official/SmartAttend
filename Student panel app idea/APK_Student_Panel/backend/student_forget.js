@@ -61,8 +61,8 @@ async function handleVerifyOTP() {
   const inputs = document.querySelectorAll('#otpInputs input');
   const otp = Array.from(inputs).map(i => i.value).join('');
 
-  if (otp.length < 5) {
-    showError('step2-error', 'Please enter the complete 5-digit OTP.');
+  if (otp.length < 6) {
+    showError('step2-error', 'Please enter the complete 6-digit OTP.');
     return;
   }
 

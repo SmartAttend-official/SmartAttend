@@ -387,7 +387,7 @@
         <i class="fa-solid fa-envelope-open-text header-icon"
           style="color:#10b981; background:rgba(16,185,129,0.1);"></i>
         <h3>Identity Verification</h3>
-        <p>Please enter the 5-digit OTP that was sent to your email by the Admin.</p>
+        <p>Please enter the 6-digit OTP that was sent to your email.</p>
       </div>
 
       <div class="msg error" id="step2-error"><i class="fa-solid fa-circle-xmark"></i><span></span></div>
@@ -396,6 +396,7 @@
         Enter OTP Code <span class="required-asterisk">*</span>
       </label>
       <div class="otp-inputs" id="otpInputs">
+        <input type="text" maxlength="1" inputmode="numeric">
         <input type="text" maxlength="1" inputmode="numeric">
         <input type="text" maxlength="1" inputmode="numeric">
         <input type="text" maxlength="1" inputmode="numeric">
