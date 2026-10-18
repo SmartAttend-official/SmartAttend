@@ -289,6 +289,106 @@
 				max-width: 450px;
 			}
 		}
+
+		/* OTP Panel styles */
+		.otp-panel {
+			display: none;
+			flex-direction: column;
+			gap: 16px;
+			animation: slideInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+		}
+
+		@keyframes slideInUp {
+			from { opacity: 0; transform: translateY(20px); }
+			to { opacity: 1; transform: translateY(0); }
+		}
+
+		.otp-header {
+			text-align: center;
+			margin-bottom: 8px;
+		}
+
+		.otp-icon {
+			width: 64px;
+			height: 64px;
+			border-radius: 50%;
+			background: linear-gradient(135deg, #3b82f6, #6366f1);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			font-size: 28px;
+			margin: 0 auto 16px;
+			box-shadow: 0 0 30px rgba(59, 130, 246, 0.4);
+		}
+
+		.otp-inputs {
+			display: flex;
+			gap: 10px;
+			justify-content: center;
+			margin: 16px 0;
+		}
+
+		.otp-digit {
+			width: 48px;
+			height: 56px;
+			text-align: center;
+			font-size: 22px;
+			font-weight: 700;
+			font-family: 'Outfit', monospace;
+			background: rgba(15, 23, 42, 0.6);
+			border: 2px solid var(--glass-border);
+			border-radius: 12px;
+			color: white;
+			outline: none;
+			transition: all 0.2s;
+			caret-color: var(--accent-color);
+		}
+
+		.otp-digit:focus {
+			border-color: var(--accent-color);
+			box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+			background: rgba(15, 23, 42, 0.9);
+		}
+
+		.otp-digit.filled {
+			border-color: rgba(59, 130, 246, 0.6);
+			background: rgba(59, 130, 246, 0.1);
+		}
+
+		.otp-hint {
+			color: var(--text-muted);
+			font-size: 13px;
+			text-align: center;
+			margin: 0;
+		}
+
+		.resend-link {
+			color: var(--accent-color);
+			cursor: pointer;
+			text-decoration: none;
+			font-size: 14px;
+			text-align: center;
+			margin-top: 4px;
+			display: block;
+			transition: color 0.2s;
+		}
+
+		.resend-link:hover { color: var(--accent-hover); }
+		.resend-link:disabled, .resend-link[aria-disabled="true"] { color: var(--text-muted); cursor: not-allowed; }
+
+		.back-link {
+			color: var(--text-muted);
+			cursor: pointer;
+			font-size: 13px;
+			text-align: center;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 6px;
+			transition: color 0.2s;
+		}
+
+		.back-link:hover { color: var(--text-main); }
 	</style>
 </head>
 
@@ -311,7 +411,7 @@
 			</div>
 
 			<!-- Role Selection Tabs -->
-			<div class="role-tabs">
+			<div class="role-tabs" id="roleTabs">
 				<!-- The 'active' class tells the CSS to highlight this specific tab, showing the user they are currently on the Professor page -->
 				<div class="role-tab active">Professor</div>
 				<div class="role-tab" onclick="window.location.href='student_login.html'">Student</div>
@@ -321,6 +421,7 @@
 			<!-- This is an empty, invisible bucket. If a login fails, the JavaScript file (login.js) finds this ID and injects the actual text of the error message directly into it to make it visible. -->
 			<div id="loginError" class="error-msg"></div>
 
+			<!-- Credential Login Form -->
 			<form id="loginForm">
 				<div class="form-group">
 					<label>University Email Address</label>
@@ -344,7 +445,37 @@
 				</button>
 			</form>
 
-			<div class="form-footer">
+			<!-- 2FA OTP Panel (hidden by default) -->
+			<div id="otpPanel" class="otp-panel">
+				<div class="otp-header">
+					<div class="otp-icon">🔐</div>
+					<h3 style="margin: 0 0 8px 0; font-size: 22px; font-weight: 600;">Two-Factor Authentication</h3>
+					<p style="color: var(--text-muted); font-size: 14px; margin: 0;" id="otpEmailHint">Enter the 6-digit OTP sent to your email.</p>
+				</div>
+
+				<div id="otpError" class="error-msg"></div>
+
+				<div class="otp-inputs" id="otpInputs">
+					<input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp0" autocomplete="off">
+					<input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp1" autocomplete="off">
+					<input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp2" autocomplete="off">
+					<input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp3" autocomplete="off">
+					<input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp4" autocomplete="off">
+					<input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp5" autocomplete="off">
+				</div>
+
+				<p class="otp-hint" id="otpTimer">OTP valid for <strong>10:00</strong></p>
+
+				<button type="button" id="verifyOtpBtn" class="login-btn" onclick="verify2FAOTP()">
+					<span id="verifyBtnText">Verify OTP</span>
+					<i id="verifyBtnIcon" class="fa-solid fa-shield-halved"></i>
+				</button>
+
+				<span class="resend-link" id="resendLink" onclick="resendOTP()">Resend OTP</span>
+				<span class="back-link" onclick="backToLogin()"><i class="fa-solid fa-arrow-left"></i> Back to Login</span>
+			</div>
+
+			<div class="form-footer" id="formFooter">
 				<a href="forget.html">Forgot Password?</a>
 			</div>
 		</div>

@@ -77,6 +77,18 @@
 
                             // Cache the fresh name
                             sessionStorage.setItem('userName', name);
+
+                            // Load 2FA state from DB
+                            const toggle2fa = document.getElementById('twoFaToggle');
+                            if (toggle2fa) {
+                                toggle2fa.checked = p.TwoFactorEnabled === true;
+                                const statusText = document.getElementById('twoFaStatusText');
+                                if (statusText) {
+                                    statusText.innerText = p.TwoFactorEnabled === true
+                                        ? '✅ Enabled — OTP required on every login.'
+                                        : 'Require an OTP on your email every time you log in.';
+                                }
+                            }
                         }
                     }
                 })
@@ -732,6 +744,7 @@
                                 style="width: 100%; margin-top: 8px;">Update Password</button>
                         </form>
 
+
                         <div style="margin-top: 32px; border-top: 1px solid var(--glass-border); padding-top: 24px;">
                             <h4 style="margin: 0 0 16px 0; font-size: 15px; color: var(--text-muted);">Active Sessions
                             </h4>
@@ -835,6 +848,28 @@
                                     <span class="slider"></span>
                                 </label>
                             </div>
+
+                            <!-- Divider -->
+                            <div style="border-top: 1px solid var(--glass-border); margin: 4px 0;"></div>
+
+                            <!-- Two-Factor Authentication Toggle -->
+                            <div class="list-item" id="twoFaListItem" style="background: rgba(59, 130, 246, 0.05); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 12px;">
+                                <div class="list-info">
+                                    <h4 style="display:flex; align-items:center; gap:8px;">
+                                        <i class="fa-solid fa-shield-halved" style="color: var(--accent-color); font-size: 14px;"></i>
+                                        Two-Factor Authentication
+                                    </h4>
+                                    <p id="twoFaStatusText">Require an OTP on your email every time you log in.</p>
+                                </div>
+                                <label class="toggle-switch" title="Toggle Two-Factor Authentication">
+                                    <input type="checkbox" id="twoFaToggle" onchange="handle2FAToggle(this)">
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <p id="twoFaNote" style="color: var(--text-muted); font-size: 12px; margin: 6px 4px 0; line-height: 1.6;">
+                                <i class="fa-solid fa-circle-info" style="color: var(--accent-color); margin-right: 4px;"></i>
+                                When enabled, an OTP will be sent to your registered email after entering your password on every login. You can turn this off anytime.
+                            </p>
                         </div>
                     </div>
 

@@ -155,9 +155,61 @@ async function updatePassword(event) {
   }
 }
 
-// Handle Toggle Changes
+// Handle Generic Toggle Changes (non-2FA)
 function handleToggle() {
   showAlert("Preferences updated");
+}
+
+// Handle Two-Factor Authentication Toggle
+async function handle2FAToggle(checkbox) {
+  const enable = checkbox.checked;
+  const email = sessionStorage.getItem('userEmail');
+  const statusText = document.getElementById('twoFaStatusText');
+  const listItem = document.getElementById('twoFaListItem');
+
+  // Optimistically update UI
+  if (statusText) {
+    statusText.innerText = enable
+      ? '✅ Enabled — OTP required on every login.'
+      : 'Require an OTP on your email every time you log in.';
+  }
+  if (listItem) {
+    listItem.style.borderColor = enable ? 'rgba(16, 185, 129, 0.4)' : 'rgba(59, 130, 246, 0.2)';
+    listItem.style.background = enable ? 'rgba(16, 185, 129, 0.05)' : 'rgba(59, 130, 246, 0.05)';
+  }
+
+  try {
+    const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
+    const response = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      mode: 'cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'toggle_2fa',
+        email: email,
+        enable: enable
+      })
+    });
+
+    const result = await response.json();
+
+    if (result.status === 'success') {
+      showAlert(enable
+        ? '🔐 Two-Factor Authentication enabled! You will now receive an OTP on every login.'
+        : '🔓 Two-Factor Authentication disabled.');
+    } else {
+      // Revert toggle on failure
+      checkbox.checked = !enable;
+      if (statusText) statusText.innerText = !enable ? '✅ Enabled — OTP required on every login.' : 'Require an OTP on your email every time you log in.';
+      showAlert(result.message || 'Failed to update 2FA setting.', true);
+    }
+  } catch (err) {
+    console.error('2FA toggle error:', err);
+    // Revert on error
+    checkbox.checked = !enable;
+    if (statusText) statusText.innerText = !enable ? '✅ Enabled — OTP required on every login.' : 'Require an OTP on your email every time you log in.';
+    showAlert('Network error while updating 2FA setting.', true);
+  }
 }
 
 // Toggle Password Visibility
