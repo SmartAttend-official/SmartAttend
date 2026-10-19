@@ -1568,6 +1568,13 @@ async function renderAdminProfile() {
                             <small>System usage logs</small>
                         </div>
                     </div>
+                    <div class="p-nav-item" onclick="switchProfileTab('2fa')">
+                        <div class="p-nav-icon"><i class="fa-solid fa-shield-halved"></i></div>
+                        <div class="p-nav-text">
+                            <span>Two-Factor Auth</span>
+                            <small>Login OTP security</small>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Main Content Column -->
@@ -1679,6 +1686,36 @@ async function renderAdminProfile() {
                             </div>
                             <span class="chart-label">Weekly Activity Intensity</span>
                         </div>
+                    </div>
+
+                    <!-- 2FA Panel -->
+                    <div id="panel-2fa" class="glass-panel" style="display:none;">
+                        <div class="panel-header">
+                            <h3><i class="fa-solid fa-shield-halved"></i> Two-Factor Authentication</h3>
+                            <p>Require an OTP code every time you sign in as Admin.</p>
+                        </div>
+
+                        <div class="twofa-card">
+                            <div class="twofa-icon-wrap">
+                                <i class="fa-solid fa-envelope-open-text"></i>
+                            </div>
+                            <div class="twofa-info">
+                                <strong>Email OTP Verification</strong>
+                                <span id="twofa-status-text">Checking status...</span>
+                            </div>
+                            <div class="twofa-toggle-wrap">
+                                <div class="twofa-toggle" id="admin2faToggle" onclick="handleAdmin2FAToggle()">
+                                    <div class="twofa-thumb"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="twofa-desc">
+                            <i class="fa-solid fa-circle-info"></i>
+                            When enabled, after entering your password you will receive a one-time code at your registered email. You must enter it to complete sign-in.
+                        </div>
+
+                        <div id="twofa-feedback" class="twofa-feedback" style="display:none;"></div>
                     </div>
 
                 </div>
@@ -1881,6 +1918,77 @@ async function renderAdminProfile() {
             .p-stat-icon { font-size: 24px; color: var(--primary-color); }
             .p-stat-data h4 { margin: 0; font-size: 20px; }
             .p-stat-data span { font-size: 11px; color: var(--text-muted); }
+
+            /* 2FA Toggle Panel */
+            .twofa-card {
+                display: flex;
+                align-items: center;
+                gap: 20px;
+                background: rgba(245, 158, 11, 0.05);
+                border: 1px solid rgba(245, 158, 11, 0.15);
+                border-radius: 20px;
+                padding: 28px;
+                margin-bottom: 24px;
+                transition: background 0.3s;
+            }
+            .twofa-card:hover { background: rgba(245, 158, 11, 0.08); }
+            .twofa-icon-wrap {
+                width: 56px; height: 56px;
+                border-radius: 16px;
+                background: linear-gradient(135deg, #f59e0b, #d97706);
+                display: flex; align-items: center; justify-content: center;
+                font-size: 24px; color: #0f172a; flex-shrink: 0;
+            }
+            .twofa-info { flex: 1; }
+            .twofa-info strong { display: block; font-size: 16px; font-weight: 700; margin-bottom: 5px; }
+            .twofa-info span { font-size: 13px; color: var(--text-muted); }
+            .twofa-info span.enabled { color: #10b981; }
+            .twofa-info span.disabled { color: #94a3b8; }
+            .twofa-toggle-wrap { flex-shrink: 0; }
+            .twofa-toggle {
+                width: 60px; height: 32px;
+                background: rgba(255,255,255,0.1);
+                border-radius: 100px;
+                position: relative;
+                cursor: pointer;
+                transition: background 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+                border: 2px solid rgba(255,255,255,0.08);
+            }
+            .twofa-toggle.on { background: linear-gradient(135deg, #f59e0b, #d97706); border-color: rgba(245,158,11,0.4); }
+            .twofa-thumb {
+                position: absolute;
+                top: 3px; left: 3px;
+                width: 22px; height: 22px;
+                background: white;
+                border-radius: 50%;
+                transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+                box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            }
+            .twofa-toggle.on .twofa-thumb { transform: translateX(28px); }
+            .twofa-toggle.loading { opacity: 0.5; pointer-events: none; }
+            .twofa-desc {
+                display: flex;
+                gap: 12px;
+                align-items: flex-start;
+                background: rgba(255,255,255,0.02);
+                border: 1px solid var(--border-color);
+                border-radius: 14px;
+                padding: 18px 22px;
+                font-size: 13px;
+                color: var(--text-muted);
+                line-height: 1.6;
+            }
+            .twofa-desc i { color: #f59e0b; margin-top: 2px; flex-shrink: 0; }
+            .twofa-feedback {
+                margin-top: 18px;
+                padding: 14px 18px;
+                border-radius: 12px;
+                font-size: 14px;
+                font-weight: 500;
+                text-align: center;
+            }
+            .twofa-feedback.success { background: rgba(16,185,129,0.1); color: #10b981; border: 1px solid rgba(16,185,129,0.2); }
+            .twofa-feedback.error { background: rgba(239,68,68,0.1); color: #f87171; border: 1px solid rgba(239,68,68,0.2); }
         </style>
     `;
 
@@ -1896,6 +2004,84 @@ async function renderAdminProfile() {
         if (panel) {
             panel.style.display = 'block';
             panel.style.animation = 'slideInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1)';
+        }
+
+        // Auto-load 2FA status when tab is opened
+        if (tab === '2fa') loadAdmin2FAStatus();
+    };
+
+    // ── Load 2FA Current Status ──
+    window.loadAdmin2FAStatus = async () => {
+        const toggle = document.getElementById('admin2faToggle');
+        const statusText = document.getElementById('twofa-status-text');
+        if (!toggle || !statusText) return;
+
+        toggle.classList.add('loading');
+        statusText.className = '';
+        statusText.innerText = 'Checking status...';
+
+        try {
+            const resp = await fetch(`${SCRIPT_URL}?action=get_admin_2fa_status&email=${adminEmail}`);
+            const data = await resp.json();
+            const isEnabled = data.twofa_enabled === true || data.twofa_enabled === 'true' || data.twofa_enabled === 'TRUE';
+
+            toggle.classList.toggle('on', isEnabled);
+            toggle.dataset.state = isEnabled ? 'on' : 'off';
+            statusText.className = isEnabled ? 'enabled' : 'disabled';
+            statusText.innerText = isEnabled ? '✓ Enabled — OTP required on login' : 'Disabled — Direct login (no OTP)';
+        } catch (e) {
+            console.error('Failed to load 2FA status:', e);
+            statusText.innerText = 'Unable to load status.';
+        } finally {
+            toggle.classList.remove('loading');
+        }
+    };
+
+    // ── Toggle 2FA On/Off ──
+    window.handleAdmin2FAToggle = async () => {
+        const toggle = document.getElementById('admin2faToggle');
+        const statusText = document.getElementById('twofa-status-text');
+        const feedback = document.getElementById('twofa-feedback');
+        if (!toggle || toggle.classList.contains('loading')) return;
+
+        const currentlyOn = toggle.dataset.state === 'on';
+        const newState = !currentlyOn;
+
+        toggle.classList.add('loading');
+        feedback.style.display = 'none';
+
+        try {
+            const resp = await fetch(SCRIPT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'toggle_admin_2fa', email: adminEmail, enable: newState })
+            });
+            const result = await resp.json();
+
+            if (result.status === 'success') {
+                toggle.classList.toggle('on', newState);
+                toggle.dataset.state = newState ? 'on' : 'off';
+                statusText.className = newState ? 'enabled' : 'disabled';
+                statusText.innerText = newState ? '✓ Enabled — OTP required on login' : 'Disabled — Direct login (no OTP)';
+
+                feedback.className = 'twofa-feedback success';
+                feedback.innerText = newState
+                    ? '✅ Two-Factor Authentication enabled. You will receive an OTP at next login.'
+                    : '🔓 Two-Factor Authentication disabled.';
+                feedback.style.display = 'block';
+                setTimeout(() => { feedback.style.display = 'none'; }, 4000);
+            } else {
+                feedback.className = 'twofa-feedback error';
+                feedback.innerText = result.message || 'Failed to update 2FA setting. Please try again.';
+                feedback.style.display = 'block';
+            }
+        } catch (e) {
+            console.error('Toggle 2FA error:', e);
+            feedback.className = 'twofa-feedback error';
+            feedback.innerText = 'Network error. Please try again.';
+            feedback.style.display = 'block';
+        } finally {
+            toggle.classList.remove('loading');
         }
     };
 
