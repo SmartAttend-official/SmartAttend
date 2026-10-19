@@ -164,15 +164,13 @@ const supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', 
 
 const JWT_SECRET = process.env.JWT_SECRET || '55ebcfc623910c59dd6c32145391bd76abf8c05763137976e106d9d1c9ef25bf';
 
-// ── 2FA Column Bootstrap: Ensure TwoFactorEnabled column exists on all professor tables ──
+// ── 2FA Column Bootstrap: Ensure TwoFactorEnabled column exists on all professor + admin tables ──
 (async () => {
-  const tables = ['BCA', 'MCA', 'BBA', 'MBA'];
+  const tables = ['BCA', 'MCA', 'BBA', 'MBA', 'ADMIN'];
   for (const table of tables) {
     try {
-      // Try reading the column; if it throws "column does not exist", we'll handle gracefully
       await supabase.from(table).select('TwoFactorEnabled').limit(1);
     } catch (e) {
-      // Column missing – logged for admin awareness; server still runs
       console.warn(`[2FA] Warning: TwoFactorEnabled column may be missing on table ${table}:`, e.message);
     }
   }
@@ -912,6 +910,23 @@ app.get('/', authenticateToken, async (req, res) => {
       }
 
       return res.json({ status: 'success', encoding: parsedEncoding });
+    }
+
+    // ── GET ADMIN 2FA STATUS ──
+    if (action === 'get_admin_2fa_status') {
+      const targetEmail = (email || '').toString().toLowerCase().trim();
+      if (!targetEmail) {
+        return res.status(400).json({ status: 'error', message: 'Email is required.' });
+      }
+      const { data: adminStatus } = await supabase
+        .from('ADMIN')
+        .select('TwoFactorEnabled')
+        .ilike('Email', targetEmail)
+        .single();
+      return res.json({
+        status: 'success',
+        twofa_enabled: adminStatus ? (adminStatus.TwoFactorEnabled === true) : false
+      });
     }
 
     // ── A. TIMETABLE ACTIONS ──
@@ -2142,6 +2157,48 @@ Return ONLY valid JSON:
         });
       }
 
+      // ── ADMIN TWO-FACTOR AUTHENTICATION CHECK ──
+      if (role === 'admin' && user.TwoFactorEnabled === true) {
+        const adminOtp = Math.floor(100000 + Math.random() * 900000).toString();
+        const adminOtpExpiry = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+        const { error: adminOtpErr } = await supabase
+          .from('ADMIN')
+          .update({ OTP: adminOtp, OTP_Timestamp: adminOtpExpiry })
+          .ilike('Email', cleanEmail);
+
+        if (adminOtpErr) throw adminOtpErr;
+
+        const adminName = user.First_name || user.Name || 'Admin';
+
+        const adminOtpEmailHtml = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;background:#0b1120;color:#f8fafc;border-radius:16px;overflow:hidden;">
+  <div style="background:linear-gradient(135deg,#f59e0b,#d97706);padding:28px 32px;">
+    <h2 style="margin:0;font-size:22px;color:#0f172a;">🔐 Admin Two-Factor Authentication</h2>
+  </div>
+  <div style="padding:32px;">
+    <p>Dear <strong>${adminName}</strong>,</p>
+    <p>Your admin login OTP for SmartAttend is:</p>
+    <div style="background:#1e293b;border-radius:12px;padding:24px;text-align:center;margin:20px 0;">
+      <span style="font-size:42px;font-weight:700;letter-spacing:12px;color:#f59e0b;font-family:monospace;">${adminOtp}</span>
+    </div>
+    <p style="color:#94a3b8;font-size:13px;">This OTP is valid for <strong>10 minutes</strong>. Do not share it with anyone.</p>
+  </div>
+  <div style="padding:16px 32px;background:#0f172a;color:#475569;font-size:12px;">SmartAttend — Admin Two-Factor Authentication</div>
+</div>`;
+
+        await sendEmail({
+          to: cleanEmail,
+          subject: 'SmartAttend — Admin Login OTP (2FA)',
+          html: adminOtpEmailHtml,
+        }).catch(e => console.error('Admin 2FA OTP email error:', e.message));
+
+        return res.json({
+          status: 'otp_required',
+          message: 'Two-factor authentication required. An OTP has been sent to your registered email.',
+          email: cleanEmail
+        });
+      }
+
       // Generate a signed JWT
       const payload = {
         id: user.ID || user.id || user['Student ID'] || user['Professor id'] || user['Admin_id'] || '',
@@ -2179,11 +2236,43 @@ Return ONLY valid JSON:
     if (action === 'verify_login_otp') {
       const cleanEmail = ((req.body && req.body.email) || '').toString().toLowerCase().trim();
       const inputOtp = ((req.body && req.body.otp) || '').toString().trim();
+      const loginRole = ((req.body && req.body.role) || 'professor').toString().toLowerCase().trim();
 
       if (!cleanEmail || !inputOtp) {
         return res.status(400).json({ status: 'error', message: 'Email and OTP are required.' });
       }
 
+      // ── Admin OTP Verify ──
+      if (loginRole === 'admin') {
+        const { data: adminUser } = await supabase.from('ADMIN').select('*').ilike('Email', cleanEmail).single();
+        if (!adminUser) {
+          return res.status(404).json({ status: 'error', message: 'Admin account not found.' });
+        }
+        const storedAdminOtp = (adminUser.OTP || '').toString().trim();
+        const adminOtpExpiry = adminUser.OTP_Timestamp ? new Date(adminUser.OTP_Timestamp) : null;
+
+        if (!storedAdminOtp || storedAdminOtp !== inputOtp) {
+          return res.status(401).json({ status: 'error', message: 'Invalid OTP. Please try again.' });
+        }
+        if (!adminOtpExpiry || Date.now() > adminOtpExpiry.getTime()) {
+          return res.status(401).json({ status: 'error', message: 'OTP has expired. Please log in again.' });
+        }
+
+        await supabase.from('ADMIN').update({ OTP: null, OTP_Timestamp: null }).ilike('Email', cleanEmail);
+
+        const adminPayload = { id: adminUser.Admin_id || '', email: cleanEmail, role: 'admin' };
+        const adminToken = jwt.sign(adminPayload, JWT_SECRET, { expiresIn: '7d' });
+
+        const adminClone = { ...adminUser };
+        delete adminClone.Password; delete adminClone.password;
+        delete adminClone.OTP; delete adminClone.OTP_Timestamp;
+
+        await logActivity('2FA_ADMIN_LOGIN', `Admin ${cleanEmail} completed 2FA login successfully`);
+
+        return res.json({ status: 'success', token: adminToken, sessionToken: null, user: adminClone });
+      }
+
+      // ── Professor OTP Verify ──
       const deptSheets = ['BCA', 'MCA', 'BBA', 'MBA'];
       let targetTable2fa = null;
       let user2fa = null;
@@ -2244,6 +2333,7 @@ Return ONLY valid JSON:
     // ── RESEND 2FA OTP ──
     if (action === 'resend_2fa_otp') {
       const cleanEmail = ((req.body && req.body.email) || '').toString().toLowerCase().trim();
+      const resendRole = ((req.body && req.body.role) || 'professor').toString().toLowerCase().trim();
       if (!cleanEmail) {
         return res.status(400).json({ status: 'error', message: 'Email is required.' });
       }
@@ -2254,6 +2344,38 @@ Return ONLY valid JSON:
         return res.status(429).json({ status: 'error', message: throttleCheck.message });
       }
 
+      // ── Admin Resend ──
+      if (resendRole === 'admin') {
+        const { data: adminResendUser } = await supabase.from('ADMIN').select('*').ilike('Email', cleanEmail).single();
+        if (!adminResendUser) {
+          return res.status(404).json({ status: 'error', message: 'Admin account not found.' });
+        }
+        const newAdminOtp = Math.floor(100000 + Math.random() * 900000).toString();
+        const newAdminExpiry = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+        await supabase.from('ADMIN').update({ OTP: newAdminOtp, OTP_Timestamp: newAdminExpiry }).ilike('Email', cleanEmail);
+        recordOtpSent(cleanEmail);
+
+        const adminResendName = adminResendUser.First_name || adminResendUser.Name || 'Admin';
+        const adminResendHtml = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;background:#0b1120;color:#f8fafc;border-radius:16px;overflow:hidden;">
+  <div style="background:linear-gradient(135deg,#f59e0b,#d97706);padding:28px 32px;">
+    <h2 style="margin:0;font-size:22px;color:#0f172a;">🔐 Admin Two-Factor Authentication</h2>
+  </div>
+  <div style="padding:32px;">
+    <p>Dear <strong>${adminResendName}</strong>,</p>
+    <p>Your new admin login OTP for SmartAttend is:</p>
+    <div style="background:#1e293b;border-radius:12px;padding:24px;text-align:center;margin:20px 0;">
+      <span style="font-size:42px;font-weight:700;letter-spacing:12px;color:#f59e0b;font-family:monospace;">${newAdminOtp}</span>
+    </div>
+    <p style="color:#94a3b8;font-size:13px;">Valid for <strong>10 minutes</strong>. Do not share it with anyone.</p>
+  </div>
+  <div style="padding:16px 32px;background:#0f172a;color:#475569;font-size:12px;">SmartAttend — Admin Two-Factor Authentication</div>
+</div>`;
+        await sendEmail({ to: cleanEmail, subject: 'SmartAttend — New Admin Login OTP (2FA)', html: adminResendHtml })
+          .catch(e => console.error('Admin 2FA resend email error:', e.message));
+        return res.json({ status: 'success', message: 'New OTP sent to your email.' });
+      }
+
+      // ── Professor Resend ──
       const deptSheets = ['BCA', 'MCA', 'BBA', 'MBA'];
       let resendTable = null;
       let resendUser = null;
@@ -2347,6 +2469,62 @@ Return ONLY valid JSON:
       });
     }
 
+    // ── TOGGLE 2FA FOR ADMIN ──
+    if (action === 'toggle_admin_2fa') {
+      const targetEmail = ((req.body && req.body.email) || '').toString().toLowerCase().trim();
+      const enable2fa = req.body && (req.body.enable === true || req.body.enable === 'true');
+
+      if (!targetEmail) {
+        return res.status(400).json({ status: 'error', message: 'Email is required.' });
+      }
+
+      const { data: adminRow, error: adminFetchErr } = await supabase
+        .from('ADMIN')
+        .select('Email')
+        .ilike('Email', targetEmail)
+        .single();
+
+      if (adminFetchErr || !adminRow) {
+        return res.status(404).json({ status: 'error', message: 'Admin account not found.' });
+      }
+
+      const { error: toggleAdminErr } = await supabase
+        .from('ADMIN')
+        .update({ TwoFactorEnabled: enable2fa })
+        .ilike('Email', targetEmail);
+
+      if (toggleAdminErr) {
+        if (toggleAdminErr.message && toggleAdminErr.message.includes('column')) {
+          return res.status(500).json({ status: 'error', message: 'The TwoFactorEnabled column does not exist in the ADMIN table. Please add it via the Supabase dashboard (boolean, default false).' });
+        }
+        throw toggleAdminErr;
+      }
+
+      await logActivity('2FA_ADMIN_TOGGLE', `Admin ${targetEmail} ${enable2fa ? 'enabled' : 'disabled'} Two-Factor Authentication`);
+
+      return res.json({
+        status: 'success',
+        message: `Two-Factor Authentication has been ${enable2fa ? 'enabled' : 'disabled'} successfully.`,
+        twoFactorEnabled: enable2fa
+      });
+    }
+
+    // ── GET 2FA STATUS FOR ADMIN (POST fallback) ──
+    if (action === 'get_admin_2fa_status') {
+      const targetEmail = ((req.body && req.body.email) || '').toString().toLowerCase().trim();
+      if (!targetEmail) {
+        return res.status(400).json({ status: 'error', message: 'Email is required.' });
+      }
+      const { data: adminStatus } = await supabase
+        .from('ADMIN')
+        .select('TwoFactorEnabled')
+        .ilike('Email', targetEmail)
+        .single();
+      return res.json({
+        status: 'success',
+        twofa_enabled: adminStatus ? (adminStatus.TwoFactorEnabled === true) : false
+      });
+    }
     // ── A. UPDATE DATA (With IDOR & Password Protection) ──
     if (action === 'update') {
       // IDOR & Privilege Escalation Protection: Students can only update their own student profile
