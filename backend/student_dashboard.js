@@ -366,8 +366,7 @@ document.getElementById('leaveForm').addEventListener('submit', async (e) => {
     }
 
     const rawDate = e.target.querySelector('input[type="date"]').value;
-    const dateParts = rawDate.split('-');
-    const date = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`; // Convert YYYY-MM-DD to DD/MM/YYYY
+    const date = rawDate; // Standard YYYY-MM-DD for database
     const reason = e.target.querySelector('textarea').value;
     
     // Read files as base64
@@ -475,7 +474,7 @@ async function renderLeaveHistory() {
   if (dateFilter) {
     const [y, m, d] = dateFilter.split('-');
     const formattedFilter = `${d}/${m}/${y}`;
-    myRequests = allRequests.filter(req => req.date === formattedFilter);
+    myRequests = allRequests.filter(req => req.date === dateFilter || req.date === formattedFilter);
   }
 
   if (myRequests.length === 0) {
@@ -498,10 +497,16 @@ async function renderLeaveHistory() {
       statusBg = 'rgba(239, 68, 68, 0.15)';
     }
 
+    let displayDate = req.date || 'N/A';
+    if (req.date && req.date.includes('-')) {
+      const p = req.date.split('-');
+      if (p.length === 3) displayDate = `${p[2]}/${p[1]}/${p[0]}`;
+    }
+
     return `
       <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--glass-border); border-radius: 12px; padding: 16px; display: flex; justify-content: space-between; align-items: center;">
         <div>
-          <div style="font-weight: 600; color: white; margin-bottom: 2px;">Requested Date: ${req.date}</div>
+          <div style="font-weight: 600; color: white; margin-bottom: 2px;">Requested Date: ${displayDate}</div>
           <div style="font-size: 11px; color: #60a5fa; margin-bottom: 6px;"><i class="fa-solid fa-clock"></i> Submitted: ${req.submittedAt || 'N/A'}</div>
           <div style="font-size: 13px; color: var(--text-muted);">To Professor: ${req.targetProfessor}</div>
           <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Reason: ${req.reason.substring(0, 60)}${req.reason.length > 60 ? '...' : ''}</div>

@@ -2788,12 +2788,33 @@ Return ONLY valid JSON:
         if (std && std.Name) studentName = std.Name;
       }
 
+      // Normalize date to YYYY-MM-DD for PostgreSQL DATE column
+      let normalizedDate = date;
+      if (date && typeof date === 'string') {
+        const trimmed = date.trim();
+        if (trimmed.includes('/')) {
+          const parts = trimmed.split('/');
+          if (parts.length === 3) {
+            if (parts[2].length === 4) {
+              // DD/MM/YYYY -> YYYY-MM-DD
+              normalizedDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+            } else if (parts[0].length === 4) {
+              // YYYY/MM/DD -> YYYY-MM-DD
+              normalizedDate = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+            }
+          }
+        }
+      }
+      if (!normalizedDate) {
+        normalizedDate = new Date().toISOString().split('T')[0];
+      }
+
       const leaveRecord = {
         id: rawId ? (isNaN(Number(rawId)) ? Date.now() : Number(rawId)) : Date.now(),
         studentId: studentId,
         studentName: studentName || 'Student',
         targetProfessor: (targetProfessor || '').trim(),
-        date: date || new Date().toLocaleDateString('en-CA'),
+        date: normalizedDate,
         reason: reason || '',
         image: image || null,
         pdf: pdf || null,

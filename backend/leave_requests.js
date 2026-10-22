@@ -41,11 +41,11 @@ async function renderRequests() {
     return;
   }
 
-  // Client-side date filter if needed (though backend handles profEmail)
+  // Client-side date filter if needed (handles both YYYY-MM-DD and DD/MM/YYYY)
   if (dateFilter) {
     const [y, m, d] = dateFilter.split('-');
     const formattedFilter = `${d}/${m}/${y}`;
-    requests = requests.filter(req => req.date === formattedFilter);
+    requests = requests.filter(req => req.date === dateFilter || req.date === formattedFilter);
   }
 
   if (requests.length === 0) {
@@ -118,6 +118,12 @@ async function renderRequests() {
       actionsHTML = `<div style="margin-top: 16px; font-size: 13px; color: var(--text-muted); font-style: italic; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px;">Processed</div>`;
     }
 
+    let displayDate = req.date || 'N/A';
+    if (req.date && req.date.includes('-')) {
+      const p = req.date.split('-');
+      if (p.length === 3) displayDate = `${p[2]}/${p[1]}/${p[0]}`;
+    }
+
     card.innerHTML = `
       <div class="request-header">
         <div class="student-info">
@@ -127,7 +133,7 @@ async function renderRequests() {
         <span class="status-badge" style="background: ${statusBadgeColor}22; color: ${statusBadgeColor}; border: 1px solid ${statusBadgeColor}44;">${req.status}</span>
       </div>
       <div class="request-body">
-        <div class="date">Requested Date: ${req.date}</div>
+        <div class="date">Requested Date: ${displayDate}</div>
         <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;"><i class="fa-solid fa-clock"></i> Submitted: ${req.submittedAt || 'N/A'}</div>
         <p class="reason">${req.reason}</p>
         ${attachmentsHTML}
