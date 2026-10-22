@@ -1587,7 +1587,7 @@ app.post('/', authenticateToken, async (req, res) => {
 
       // Student & Administrator Actions
       'submit_leave': ['student', 'admin'],
-      'verify_leave_proof': ['student', 'admin']
+      'verify_leave_proof': ['professor', 'student', 'admin']
     };
 
     if (action && RBAC_RULES[action]) {

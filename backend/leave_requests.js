@@ -159,7 +159,7 @@ async function analyzeDocWithAI(reqId) {
   resultDiv.style.display = 'block';
   resultDiv.innerHTML = '<div style="font-size: 12px; color: var(--text-muted); text-align: center; padding: 12px; background: rgba(139, 92, 246, 0.1); border-radius: 8px; border: 1px dashed rgba(139, 92, 246, 0.4);"><i class="fa-solid fa-brain fa-spin"></i> SmartAttend AI is analyzing document authenticity & OCR text...</div>';
 
-  const token = sessionStorage.getItem('token');
+  const token = sessionStorage.getItem('smartattend_token') || sessionStorage.getItem('token') || '';
   const serverUrl = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
 
   try {
