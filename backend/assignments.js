@@ -377,10 +377,19 @@ function renderHistory(list) {
 
         // Check if there is a file attachment
         let attachmentHtml = '';
-        if (a.AttachmentURL && a.AttachmentURL.startsWith('http')) {
+        const fileId = a.FileID || a.ID;
+        const fileName = (a.AttachmentName || 'Attachment.pdf').trim();
+        if (fileId && (a.AttachmentName || a.FileContent || (a.AttachmentURL && a.AttachmentURL.includes('/files/')))) {
+            const fileHref = `${SCRIPT_URL}/files/${encodeURIComponent(fileId)}?download=true`;
             attachmentHtml = `
-                <a href="${a.AttachmentURL}" target="_blank" class="attachment-link" title="${a.AttachmentName || 'Open Attachment'}">
-                    <i class="fa-solid fa-paperclip"></i> ${a.AttachmentName || 'Download Attachment'}
+                <a href="${fileHref}" target="_blank" download="${fileName}" class="attachment-link" title="${fileName}">
+                    <i class="fa-solid fa-paperclip"></i> ${fileName}
+                </a>
+            `;
+        } else if (a.AttachmentURL && a.AttachmentURL.startsWith('http') && !a.AttachmentURL.includes('localhost')) {
+            attachmentHtml = `
+                <a href="${a.AttachmentURL}" target="_blank" download="${fileName}" class="attachment-link" title="${fileName}">
+                    <i class="fa-solid fa-paperclip"></i> ${fileName}
                 </a>
             `;
         } else {

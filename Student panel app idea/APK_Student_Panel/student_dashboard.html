@@ -442,6 +442,33 @@
       line-height: 1.5;
     }
 
+    /* Custom Scrollbar for Assignments */
+    #studentAssignmentsList::-webkit-scrollbar {
+      width: 6px;
+    }
+    #studentAssignmentsList::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 4px;
+    }
+    #studentAssignmentsList::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      transition: background 0.3s;
+    }
+    #studentAssignmentsList::-webkit-scrollbar-thumb:hover {
+      background: var(--accent-color);
+    }
+    .student-assignment-filters {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      margin-bottom: 20px;
+    }
+
     /* =========================================
        MOBILE-FIRST RESPONSIVENESS OVERRIDES
        ========================================= */
@@ -673,6 +700,58 @@
         <div id="studentTimetableContainer" style="padding:20px; border-radius:12px; background:rgba(0,0,0,0.2); border:1px solid rgba(255,255,255,0.05); text-align:center; max-width: 600px; margin: 0 auto;">
             <i class="fa-solid fa-circle-notch fa-spin" style="font-size:32px; color:var(--primary-color); margin-bottom:12px;"></i>
             <p style="color:var(--text-muted); margin:0;">Loading your timetable...</p>
+        </div>
+      </div>
+
+      <!-- Class Assignments Card -->
+      <div class="card" style="grid-column: 1 / -1; margin-top: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+          <h3 style="margin: 0; display: flex; align-items: center; gap: 12px;">
+            <i class="fa-solid fa-book-open"></i>
+            Class Assignments
+          </h3>
+        </div>
+
+        <!-- Filter Bar -->
+        <div class="student-assignment-filters">
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <label style="font-size: 12px; color: var(--text-muted); font-weight: 500;">Semester</label>
+            <select id="assignmentSemFilter" style="padding: 10px 12px; background: rgba(15, 23, 42, 0.4); border: 1px solid var(--glass-border); border-radius: 8px; color: white; font-family: inherit; font-size: 13px; outline: none; width: 100%; box-sizing: border-box;">
+              <option value="">All Semesters</option>
+              <option value="1">Sem 1</option>
+              <option value="2">Sem 2</option>
+              <option value="3">Sem 3</option>
+              <option value="4">Sem 4</option>
+              <option value="5">Sem 5</option>
+              <option value="6">Sem 6</option>
+              <option value="7">Sem 7</option>
+              <option value="8">Sem 8</option>
+            </select>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <label style="font-size: 12px; color: var(--text-muted); font-weight: 500;">Subject</label>
+            <select id="assignmentSubjectFilter" style="padding: 10px 12px; background: rgba(15, 23, 42, 0.4); border: 1px solid var(--glass-border); border-radius: 8px; color: white; font-family: inherit; font-size: 13px; outline: none; width: 100%; box-sizing: border-box;">
+              <option value="">All Subjects</option>
+            </select>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <label style="font-size: 12px; color: var(--text-muted); font-weight: 500;">Given Date</label>
+            <div style="position: relative; width: 100%;">
+              <i class="fa-solid fa-calendar-days" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--accent-color); font-size: 14px;"></i>
+              <input type="date" id="assignmentDateFilter" style="padding: 10px 12px 10px 35px; background: rgba(15, 23, 42, 0.4); border: 1px solid var(--glass-border); border-radius: 8px; color: white; font-family: inherit; font-size: 13px; outline: none; width: 100%; box-sizing: border-box;">
+            </div>
+          </div>
+        </div>
+
+        <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px;">
+          All assignments issued by your professors for your department.
+        </p>
+
+        <div id="studentAssignmentsList" style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding-right: 8px;">
+          <div style="text-align: center; color: var(--text-muted); padding: 40px;">
+            <i class="fa-solid fa-spinner fa-spin" style="font-size: 24px; margin-bottom: 8px;"></i>
+            <p style="margin: 0;">Loading assignments...</p>
+          </div>
         </div>
       </div>
 

@@ -169,13 +169,18 @@ document.addEventListener('DOMContentLoaded', async () => {
           
           if (ttData.status === 'success' && ttData.data) {
             const t = ttData.data;
+            const fileId = t.FileID;
+            const viewUrl = fileId ? `${SCRIPT_URL}/timetables/file/${encodeURIComponent(fileId)}` : (t.ViewURL || '#');
+            const downloadUrl = fileId ? `${SCRIPT_URL}/timetables/file/${encodeURIComponent(fileId)}?download=true` : (t.DownloadURL || viewUrl);
+            const fileName = `${t.Department || 'Class'}_${t.Semester || 'Semester'}_Timetable.pdf`;
+
             ttContainer.innerHTML = `
               <i class="fa-solid fa-calendar-check" style="font-size:32px; color:#10b981; margin-bottom:16px;"></i>
               <h3 style="margin:0 0 8px 0;">Timetable Found</h3>
               <p style="color:var(--text-muted); font-size:14px; margin-bottom:20px;">Uploaded: ${t.UploadedAt || 'Recently'}</p>
-              <div style="display:flex; gap:12px; justify-content:center;">
-                <a href="${t.ViewURL}" target="_blank" class="btn" style="text-decoration:none; background:#10b981; color:white;"><i class="fa-solid fa-eye"></i> View Online</a>
-                <a href="${t.DownloadURL}" target="_blank" class="btn" style="text-decoration:none; background:#10b981; color:white;"><i class="fa-solid fa-download"></i> Download PDF</a>
+              <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
+                <a href="${viewUrl}" target="_blank" class="btn" style="text-decoration:none; background:rgba(16, 185, 129, 0.15); border:1px solid #10b981; color:#34d399; padding:8px 16px; border-radius:8px; display:inline-flex; align-items:center; gap:8px;"><i class="fa-solid fa-eye"></i> View Online</a>
+                <a href="${downloadUrl}" target="_blank" download="${fileName}" class="btn" style="text-decoration:none; background:#10b981; color:white; padding:8px 16px; border-radius:8px; display:inline-flex; align-items:center; gap:8px;"><i class="fa-solid fa-download"></i> Download PDF</a>
               </div>
             `;
           } else {
@@ -623,6 +628,7 @@ window.submitLabCode = async function() {
 
 // ── RENDER STUDENT ASSIGNMENTS ────────────────────────────────
 window.renderStudentAssignments = function() {
+  const SCRIPT_URL = (window.SMART_ATTEND_CONFIG && window.SMART_ATTEND_CONFIG.SCRIPT_URL) || 'https://smartattend-o2te.onrender.com';
   const container = document.getElementById('studentAssignmentsList');
   if (!container) return;
 
@@ -684,12 +690,28 @@ window.renderStudentAssignments = function() {
       }
     } catch(e) {}
 
-    // Download link
+    // Download and View links
     let downloadHtml = '';
-    if (a.AttachmentURL && a.AttachmentURL.startsWith('http')) {
+    const fileId = a.FileID || a.ID;
+    const fileName = (a.AttachmentName || 'Assignment.pdf').trim();
+    if (fileId && (a.AttachmentName || a.FileContent || (a.AttachmentURL && a.AttachmentURL.includes('/files/')))) {
+      const viewUrl = `${SCRIPT_URL}/files/${encodeURIComponent(fileId)}`;
+      const downloadUrl = `${SCRIPT_URL}/files/${encodeURIComponent(fileId)}?download=true`;
+
       downloadHtml = `
-        <a href="${a.AttachmentURL}" target="_blank" class="btn btn-outline" style="padding: 6px 12px; border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; width: fit-content; transition: all 0.3s;" onmouseover="this.style.background='rgba(16, 185, 129, 0.1)';" onmouseout="this.style.background='transparent';">
-          <i class="fa-solid fa-download"></i> Download Assignment (${a.AttachmentName || 'File'})
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <a href="${viewUrl}" target="_blank" class="btn btn-outline" style="padding: 6px 12px; border: 1px solid rgba(16, 185, 129, 0.4); color: #34d399; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; border-radius: 6px; transition: all 0.3s;" onmouseover="this.style.background='rgba(16, 185, 129, 0.1)';" onmouseout="this.style.background='transparent';">
+            <i class="fa-solid fa-eye"></i> View Assignment
+          </a>
+          <a href="${downloadUrl}" target="_blank" download="${fileName}" class="btn" style="padding: 6px 12px; background: #10b981; color: white; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; border-radius: 6px; transition: all 0.3s;" onmouseover="this.style.background='#059669';" onmouseout="this.style.background='#10b981';">
+            <i class="fa-solid fa-download"></i> Download (${fileName})
+          </a>
+        </div>
+      `;
+    } else if (a.AttachmentURL && a.AttachmentURL.startsWith('http') && !a.AttachmentURL.includes('localhost')) {
+      downloadHtml = `
+        <a href="${a.AttachmentURL}" target="_blank" download="${fileName}" class="btn btn-outline" style="padding: 6px 12px; border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; width: fit-content; transition: all 0.3s;">
+          <i class="fa-solid fa-download"></i> Download Assignment (${fileName})
         </a>
       `;
     } else {

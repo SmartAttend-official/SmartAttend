@@ -164,8 +164,77 @@ const supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', 
 
 const JWT_SECRET = process.env.JWT_SECRET || '55ebcfc623910c59dd6c32145391bd76abf8c05763137976e106d9d1c9ef25bf';
 
-// ── 2FA Column Bootstrap: Ensure TwoFactorEnabled column exists on all professor + admin tables ──
+// ── 2FA Column Bootstrap: Auto-add missing columns to ADMIN table on startup ──
 (async () => {
+  // Helper: run raw SQL via Supabase's pg REST endpoint (service role required)
+  const runSQL = async (sql) => {
+    try {
+      const resp = await fetch(`${supabaseUrl}/rest/v1/`, {
+        method: 'POST',
+        headers: {
+          'apikey': supabaseServiceKey,
+          'Authorization': `Bearer ${supabaseServiceKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify({ query: sql })
+      });
+    } catch (e) { /* silent */ }
+  };
+
+  // Directly patch columns via UPDATE with IF NOT EXISTS by checking first
+  const ensureAdminColumns = async () => {
+    // Check if TwoFactorEnabled column already exists
+    const { data: sample, error: sampleErr } = await supabase
+      .from('ADMIN')
+      .select('TwoFactorEnabled, OTP, OTP_Timestamp')
+      .limit(1);
+
+    if (!sampleErr) {
+      // All columns exist
+      console.log('[2FA Bootstrap] ADMIN table columns OK.');
+      return;
+    }
+
+    // Columns missing — use Supabase SQL Editor API
+    console.log('[2FA Bootstrap] Adding missing columns to ADMIN table...');
+    const migrations = [
+      `ALTER TABLE "ADMIN" ADD COLUMN IF NOT EXISTS "TwoFactorEnabled" boolean NOT NULL DEFAULT false`,
+      `ALTER TABLE "ADMIN" ADD COLUMN IF NOT EXISTS "OTP" text`,
+      `ALTER TABLE "ADMIN" ADD COLUMN IF NOT EXISTS "OTP_Timestamp" text`,
+    ];
+
+    for (const sql of migrations) {
+      try {
+        // Try Supabase SQL API (requires SUPABASE_PROJECT_REF env var)
+        const projectRef = (supabaseUrl || '').replace('https://', '').split('.')[0];
+        const sqlResp = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${supabaseServiceKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ query: sql })
+        });
+        const sqlData = await sqlResp.json().catch(() => ({}));
+        if (sqlResp.ok) {
+          console.log(`[2FA Bootstrap] ✅ Ran: ${sql}`);
+        } else {
+          console.warn(`[2FA Bootstrap] SQL API returned: ${JSON.stringify(sqlData)}`);
+        }
+      } catch (e) {
+        console.warn('[2FA Bootstrap] Migration error:', e.message);
+      }
+    }
+  };
+
+  try {
+    await ensureAdminColumns();
+  } catch (e) {
+    console.warn('[2FA Bootstrap] Bootstrap error:', e.message);
+  }
+
+  // Verify all tables have the column accessible
   const tables = ['BCA', 'MCA', 'BBA', 'MBA', 'ADMIN'];
   for (const table of tables) {
     try {
@@ -795,6 +864,7 @@ function getParentLateAlertTemplate(studentName, className, attendanceDate, late
 app.get('/files/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const isDownload = req.query.download === 'true' || req.query.download === '1';
     const { data, error } = await supabase
       .from('StudentAssignments')
       .select('AttachmentName, FileContent')
@@ -806,12 +876,14 @@ app.get('/files/:id', async (req, res) => {
     }
 
     const base64Data = data.FileContent;
-    const mimeType = base64Data.split(';')[0].split(':')[1];
-    const base64Str = base64Data.split(',')[1];
+    const mimeType = (base64Data.split(';')[0].split(':')[1]) || 'application/octet-stream';
+    const base64Str = base64Data.split(',')[1] || '';
     const fileBuffer = Buffer.from(base64Str, 'base64');
+    const safeFileName = (data.AttachmentName || 'Assignment.pdf').replace(/["\r\n]/g, '');
 
+    const disposition = isDownload ? 'attachment' : 'inline';
     res.setHeader('Content-Type', mimeType);
-    res.setHeader('Content-Disposition', `inline; filename="${data.AttachmentName}"`);
+    res.setHeader('Content-Disposition', `${disposition}; filename="${safeFileName}"`);
     return res.send(fileBuffer);
   } catch (err) {
     console.error('File serving error:', err);
@@ -823,6 +895,7 @@ app.get('/files/:id', async (req, res) => {
 app.get('/timetables/file/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const isDownload = req.query.download === 'true' || req.query.download === '1';
     const { data, error } = await supabase
       .from('Timetables')
       .select('Department, Semester, FileContent')
@@ -834,12 +907,14 @@ app.get('/timetables/file/:id', async (req, res) => {
     }
 
     const base64Data = data.FileContent;
-    const mimeType = base64Data.split(';')[0].split(':')[1];
-    const base64Str = base64Data.split(',')[1];
+    const mimeType = (base64Data.split(';')[0].split(':')[1]) || 'application/pdf';
+    const base64Str = base64Data.split(',')[1] || '';
     const fileBuffer = Buffer.from(base64Str, 'base64');
+    const safeFileName = `${data.Department || 'Class'}_${data.Semester || 'Semester'}_Timetable.pdf`.replace(/["\r\n]/g, '');
 
+    const disposition = isDownload ? 'attachment' : 'inline';
     res.setHeader('Content-Type', mimeType);
-    res.setHeader('Content-Disposition', `inline; filename="${data.Department}_${data.Semester}_Timetable.pdf"`);
+    res.setHeader('Content-Disposition', `${disposition}; filename="${safeFileName}"`);
     return res.send(fileBuffer);
   } catch (err) {
     console.error('Timetable serving error:', err);
@@ -3051,7 +3126,12 @@ Return ONLY valid JSON:
       const dateStr = new Date().toISOString().split('T')[0];
       const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
       
-      const fileUrl = fileBase64 ? `http://localhost:${PORT}/files/${id}` : '';
+      const reqHost = req.get('host');
+      const reqProto = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+      const serverBaseUrl = (reqHost && !reqHost.includes('localhost'))
+        ? `${reqProto}://${reqHost}`
+        : (process.env.PUBLIC_URL || (reqHost ? `${reqProto}://${reqHost}` : 'https://smartattend-o2te.onrender.com'));
+      const fileUrl = fileBase64 ? `${serverBaseUrl}/files/${id}` : '';
       
       const { error } = await supabase
         .from('StudentAssignments')
@@ -3194,8 +3274,13 @@ Return ONLY valid JSON:
       }
 
       const fileId = 'TT' + Math.floor(100000 + Math.random() * 899999);
-      const viewUrl = `http://localhost:${PORT}/timetables/file/${fileId}`;
-      const downloadUrl = `http://localhost:${PORT}/timetables/file/${fileId}`;
+      const reqHost = req.get('host');
+      const reqProto = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+      const serverBaseUrl = (reqHost && !reqHost.includes('localhost'))
+        ? `${reqProto}://${reqHost}`
+        : (process.env.PUBLIC_URL || (reqHost ? `${reqProto}://${reqHost}` : 'https://smartattend-o2te.onrender.com'));
+      const viewUrl = `${serverBaseUrl}/timetables/file/${fileId}`;
+      const downloadUrl = `${serverBaseUrl}/timetables/file/${fileId}?download=true`;
       const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
 
       // First, delete existing timetable for same course

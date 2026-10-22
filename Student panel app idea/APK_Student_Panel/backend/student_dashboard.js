@@ -169,13 +169,18 @@ document.addEventListener('DOMContentLoaded', async () => {
           
           if (ttData.status === 'success' && ttData.data) {
             const t = ttData.data;
+            const fileId = t.FileID;
+            const viewUrl = fileId ? `${SCRIPT_URL}/timetables/file/${encodeURIComponent(fileId)}` : (t.ViewURL || '#');
+            const downloadUrl = fileId ? `${SCRIPT_URL}/timetables/file/${encodeURIComponent(fileId)}?download=true` : (t.DownloadURL || viewUrl);
+            const fileName = `${t.Department || 'Class'}_${t.Semester || 'Semester'}_Timetable.pdf`;
+
             ttContainer.innerHTML = `
               <i class="fa-solid fa-calendar-check" style="font-size:32px; color:#10b981; margin-bottom:16px;"></i>
               <h3 style="margin:0 0 8px 0;">Timetable Found</h3>
               <p style="color:var(--text-muted); font-size:14px; margin-bottom:20px;">Uploaded: ${t.UploadedAt || 'Recently'}</p>
-              <div style="display:flex; gap:12px; justify-content:center;">
-                <a href="${t.ViewURL}" target="_blank" class="btn" style="text-decoration:none; background:#10b981; color:white;"><i class="fa-solid fa-eye"></i> View Online</a>
-                <a href="${t.DownloadURL}" target="_blank" class="btn" style="text-decoration:none; background:#10b981; color:white;"><i class="fa-solid fa-download"></i> Download PDF</a>
+              <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
+                <a href="${viewUrl}" target="_blank" class="btn" style="text-decoration:none; background:rgba(16, 185, 129, 0.15); border:1px solid #10b981; color:#34d399; padding:8px 16px; border-radius:8px; display:inline-flex; align-items:center; gap:8px;"><i class="fa-solid fa-eye"></i> View Online</a>
+                <a href="${downloadUrl}" target="_blank" download="${fileName}" class="btn" style="text-decoration:none; background:#10b981; color:white; padding:8px 16px; border-radius:8px; display:inline-flex; align-items:center; gap:8px;"><i class="fa-solid fa-download"></i> Download PDF</a>
               </div>
             `;
           } else {
@@ -199,6 +204,68 @@ document.addEventListener('DOMContentLoaded', async () => {
             <p style="color:var(--text-muted); margin:0;">Error loading timetable.</p>
           `;
         }
+      }
+
+      // ── FEATURE 6: CLASS ASSIGNMENTS ──────────────────────────────
+      try {
+        const dept = s.DEPARTMENT || s.Department || s.dept || '';
+        const sem = s.SEMESTER || s.Semester || s.sem || '';
+        
+        if (dept && sem) {
+          // Fetch both assignments and subjects
+          const [assignResp, subjectsResp] = await Promise.all([
+            fetch(`${SCRIPT_URL}?sheet=student_assignments`),
+            fetch(`${SCRIPT_URL}?sheet=subjects`)
+          ]);
+          const allAssignments = await assignResp.json();
+          window.allRegisteredSubjects = await subjectsResp.json();
+          window.studentDept = dept;
+          
+          if (Array.isArray(allAssignments)) {
+            const sSemStr = sem.toString().toLowerCase().trim().replace(/[^0-9]/g, '');
+
+            window.studentAssignments = allAssignments.filter(a => {
+              const aDept = a.Department || '';
+              return isDeptMatchLocal(aDept, dept);
+            });
+
+            // Set the default Semester filter value to the student's current semester
+            const semFilterSelect = document.getElementById('assignmentSemFilter');
+            if (semFilterSelect) {
+              semFilterSelect.value = sSemStr;
+            }
+
+            // Populate Subject filter dropdown dynamically based on student's dept and current selected semester
+            if (window.populateSubjectFilter) {
+              window.populateSubjectFilter(dept, sSemStr);
+            }
+
+            // Initialize rendering
+            renderStudentAssignments();
+          } else {
+            document.getElementById('studentAssignmentsList').innerHTML = `
+              <div style="text-align: center; color: var(--text-muted); padding: 30px;">
+                <i class="fa-solid fa-circle-xmark" style="font-size: 28px; color: #ef4444; margin-bottom: 8px;"></i>
+                <p style="margin: 0;">Error loading assignments.</p>
+              </div>
+            `;
+          }
+        } else {
+          document.getElementById('studentAssignmentsList').innerHTML = `
+            <div style="text-align: center; color: var(--text-muted); padding: 30px;">
+              <i class="fa-solid fa-triangle-exclamation" style="font-size: 28px; color: #f59e0b; margin-bottom: 8px;"></i>
+              <p style="margin: 0;">Incomplete profile. Cannot load assignments.</p>
+            </div>
+          `;
+        }
+      } catch (err) {
+        console.error('Failed to load assignments', err);
+        document.getElementById('studentAssignmentsList').innerHTML = `
+          <div style="text-align: center; color: var(--text-muted); padding: 30px;">
+            <i class="fa-solid fa-circle-xmark" style="font-size: 28px; color: #ef4444; margin-bottom: 8px;"></i>
+            <p style="margin: 0;">Failed to load assignments.</p>
+          </div>
+        `;
       }
 
     }
@@ -363,7 +430,7 @@ document.getElementById('leaveForm').addEventListener('submit', async (e) => {
         e.target.reset();
         document.getElementById('leaveFileName').innerText = 'No file selected';
         document.getElementById('medicalFileName').innerText = 'No file selected';
-        if (typeof renderLeaveHistory === 'function') renderLeaveHistory();
+        renderLeaveHistory(); // Refresh after submission
       }
     }, 3000);
 
@@ -456,29 +523,40 @@ document.addEventListener('DOMContentLoaded', () => {
   if (dateFilter) {
     dateFilter.addEventListener('change', () => renderLeaveHistory());
   }
+
+  // Add listener for assignments date filter
+  const assignDateFilter = document.getElementById('assignmentDateFilter');
+  if (assignDateFilter) {
+    assignDateFilter.addEventListener('change', () => renderStudentAssignments());
+  }
+
+  // Add listener for semester filter
+  const assignSemFilter = document.getElementById('assignmentSemFilter');
+  if (assignSemFilter) {
+    assignSemFilter.addEventListener('change', () => {
+      if (window.populateSubjectFilter && window.studentDept) {
+        window.populateSubjectFilter(window.studentDept, assignSemFilter.value);
+      }
+      renderStudentAssignments();
+    });
+  }
+
+  // Add listener for subject filter
+  const assignSubjectFilter = document.getElementById('assignmentSubjectFilter');
+  if (assignSubjectFilter) {
+    assignSubjectFilter.addEventListener('change', () => renderStudentAssignments());
+  }
 });
 
 // ── LAB ATTENDANCE SUBMISSION ───────────────────────
-async function getDeviceFingerprint() {
-  // Simple deterministic hash based on device properties to prevent multi-device proxying
-  const components = [
-    navigator.userAgent,
-    screen.height,
-    screen.width,
-    screen.colorDepth,
-    new Date().getTimezoneOffset(),
-    navigator.hardwareConcurrency || 'unknown',
-    navigator.deviceMemory || 'unknown',
-    navigator.platform
-  ];
-  const str = components.join('|');
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit int
+async function getDeviceId() {
+  // LocalStorage UUID (Primary Device ID to prevent identical phone collisions)
+  let deviceId = localStorage.getItem('smart_attend_device_id');
+  if (!deviceId) {
+    deviceId = crypto.randomUUID ? crypto.randomUUID() : 'id_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+    localStorage.setItem('smart_attend_device_id', deviceId);
   }
-  return Math.abs(hash).toString(16);
+  return deviceId;
 }
 
 window.submitLabCode = async function() {
@@ -507,7 +585,7 @@ window.submitLabCode = async function() {
   msgEl.style.display = 'none';
 
   try {
-    const fingerprint = await getDeviceFingerprint();
+    const deviceId = await getDeviceId();
     const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
     
     const payload = {
@@ -515,7 +593,7 @@ window.submitLabCode = async function() {
       action: 'verify_lab_code',
       studentId: studentId,
       code: code,
-      fingerprint: fingerprint
+      deviceId: deviceId
     };
 
     const res = await fetch(SCRIPT_URL, {
@@ -548,3 +626,189 @@ window.submitLabCode = async function() {
   }
 };
 
+// ── RENDER STUDENT ASSIGNMENTS ────────────────────────────────
+window.renderStudentAssignments = function() {
+  const SCRIPT_URL = (window.SMART_ATTEND_CONFIG && window.SMART_ATTEND_CONFIG.SCRIPT_URL) || 'https://smartattend-o2te.onrender.com';
+  const container = document.getElementById('studentAssignmentsList');
+  if (!container) return;
+
+  const semFilter = document.getElementById('assignmentSemFilter')?.value; // e.g. "2"
+  const subjectFilter = document.getElementById('assignmentSubjectFilter')?.value; // e.g. "relational database management system (rdbms)"
+  const dateFilter = document.getElementById('assignmentDateFilter')?.value; // yyyy-mm-dd
+  
+  const assignments = window.studentAssignments || [];
+  
+  let filtered = assignments;
+
+  // 1. Filter by Semester if specified
+  if (semFilter) {
+    filtered = filtered.filter(a => {
+      const aSem = (a.Semester || '').toString().toLowerCase().trim().replace(/[^0-9]/g, '');
+      return aSem === semFilter;
+    });
+  }
+
+  // 2. Filter by Subject if specified
+  if (subjectFilter) {
+    filtered = filtered.filter(a => {
+      const aSub = (a.Subject || '').toLowerCase().trim();
+      return aSub === subjectFilter;
+    });
+  }
+
+  // 3. Filter by Date if specified
+  if (dateFilter) {
+    filtered = filtered.filter(a => a.Date === dateFilter);
+  }
+
+  if (filtered.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; color: var(--text-muted); padding: 50px;">
+        <i class="fa-solid fa-folder-open" style="font-size: 28px; margin-bottom: 8px;"></i>
+        <p style="margin: 0;">No assignments found${dateFilter ? ' for this date' : ''}.</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = filtered.map(a => {
+    // Format Date given
+    let dateStr = a.Date || 'N/A';
+    try {
+      if (a.Date && a.Date.includes('-')) {
+        const parts = a.Date.split('-');
+        if (parts.length === 3) dateStr = `${parts[2]}/${parts[1]}/${parts[0]}`;
+      }
+    } catch(e) {}
+    
+    // Format Due Date
+    let dueDateStr = a.DueDate || 'N/A';
+    try {
+      if (a.DueDate && a.DueDate.includes('-')) {
+        const parts = a.DueDate.split('-');
+        if (parts.length === 3) dueDateStr = `${parts[2]}/${parts[1]}/${parts[0]}`;
+      }
+    } catch(e) {}
+
+    // Download and View links
+    let downloadHtml = '';
+    const fileId = a.FileID || a.ID;
+    const fileName = (a.AttachmentName || 'Assignment.pdf').trim();
+    if (fileId && (a.AttachmentName || a.FileContent || (a.AttachmentURL && a.AttachmentURL.includes('/files/')))) {
+      const viewUrl = `${SCRIPT_URL}/files/${encodeURIComponent(fileId)}`;
+      const downloadUrl = `${SCRIPT_URL}/files/${encodeURIComponent(fileId)}?download=true`;
+
+      downloadHtml = `
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <a href="${viewUrl}" target="_blank" class="btn btn-outline" style="padding: 6px 12px; border: 1px solid rgba(16, 185, 129, 0.4); color: #34d399; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; border-radius: 6px; transition: all 0.3s;" onmouseover="this.style.background='rgba(16, 185, 129, 0.1)';" onmouseout="this.style.background='transparent';">
+            <i class="fa-solid fa-eye"></i> View Assignment
+          </a>
+          <a href="${downloadUrl}" target="_blank" download="${fileName}" class="btn" style="padding: 6px 12px; background: #10b981; color: white; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; border-radius: 6px; transition: all 0.3s;" onmouseover="this.style.background='#059669';" onmouseout="this.style.background='#10b981';">
+            <i class="fa-solid fa-download"></i> Download (${fileName})
+          </a>
+        </div>
+      `;
+    } else if (a.AttachmentURL && a.AttachmentURL.startsWith('http') && !a.AttachmentURL.includes('localhost')) {
+      downloadHtml = `
+        <a href="${a.AttachmentURL}" target="_blank" download="${fileName}" class="btn btn-outline" style="padding: 6px 12px; border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; width: fit-content; transition: all 0.3s;">
+          <i class="fa-solid fa-download"></i> Download Assignment (${fileName})
+        </a>
+      `;
+    } else {
+      downloadHtml = `<span style="font-size:12px; color:var(--text-muted); font-style:italic;">No attachment file</span>`;
+    }
+
+    // Due Date Red Box styling
+    let dueDateBox = `
+      <div style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 6px 12px; font-weight: 700; color: #ef4444; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; width: fit-content;">
+        <i class="fa-solid fa-clock"></i> Due: ${dueDateStr}
+      </div>
+    `;
+
+    return `
+      <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--glass-border); border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 12px; transition: all 0.3s;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px;">
+          <div>
+            <h4 style="margin: 0 0 4px 0; font-size: 16px; color: white;">${a.Title || 'No Title'}</h4>
+            <div style="font-size: 12px; color: var(--text-muted); display: flex; gap: 8px; align-items: center;">
+              <span><i class="fa-solid fa-book"></i> ${a.Subject || 'Subject'}</span>
+              <span>•</span>
+              <span><i class="fa-solid fa-user-tie"></i> Professor: ${a.ProfessorEmail || 'N/A'}</span>
+              <span>•</span>
+              <span><i class="fa-solid fa-calendar"></i> Given: ${dateStr}</span>
+            </div>
+          </div>
+          ${dueDateBox}
+        </div>
+        <p style="margin: 0; font-size: 13px; color: var(--text-muted); line-height: 1.5; white-space: pre-wrap;">${a.Description || 'No description provided.'}</p>
+        <div style="display: flex; align-items: center; margin-top: 4px;">
+          ${downloadHtml}
+        </div>
+      </div>
+    `;
+  }).join('');
+};
+
+// Helper for robust department matching
+function isDeptMatchLocal(d1, d2) {
+  if (!d1 || !d2) return false;
+  const a = d1.toString().toLowerCase().trim().replace(/[\s_]/g, '');
+  const b = d2.toString().toLowerCase().trim().replace(/[\s_]/g, '');
+  if (a === b) return true;
+  
+  // check abbreviations
+  const abbrev = (str) => str.split(/[\s_]+/).map(w => w[0]).join('');
+  const aAbbrev = abbrev(d1.toString().toLowerCase().trim());
+  const bAbbrev = abbrev(d2.toString().toLowerCase().trim());
+  if (aAbbrev === b && bAbbrev === a) return true;
+  if (a.indexOf(b) !== -1 || b.indexOf(a) !== -1) return true;
+  
+  const maps = {
+    "bca": "bachelorofcomputerapplication",
+    "bba": "bachelorofbusinessadministration",
+    "mca": "masterofcomputerapplication",
+    "mba": "masterofbusinessadministration"
+  };
+  if (maps[a] === b || maps[b] === a) return true;
+  return false;
+}
+
+// Populate Subject filter dropdown dynamically based on registered subjects, department, and semester
+window.populateSubjectFilter = function(deptCode, selectedSemNum) {
+  const subjectFilterSelect = document.getElementById('assignmentSubjectFilter');
+  if (!subjectFilterSelect) return;
+
+  subjectFilterSelect.innerHTML = '<option value="">All Subjects</option>';
+  
+  if (!window.allRegisteredSubjects || !Array.isArray(window.allRegisteredSubjects)) return;
+
+  // Filter registered subjects by student's department and selected semester (if any)
+  const filteredSubjects = window.allRegisteredSubjects.filter(sub => {
+    // Dept match
+    const sDept = sub.DeptCode || sub.Department || '';
+    const deptMatch = isDeptMatchLocal(sDept, deptCode);
+    if (!deptMatch) return false;
+
+    // Sem match (if sem selected)
+    if (selectedSemNum) {
+      // Format selected semester number to match database schema (e.g. "3" -> "3rd sem")
+      const formattedSem = selectedSemNum == 1 ? "1st sem" : 
+                           selectedSemNum == 2 ? "2nd sem" : 
+                           selectedSemNum == 3 ? "3rd sem" : 
+                           selectedSemNum + "th sem";
+      const sSem = (sub.Semester || '').toString().toLowerCase().trim();
+      return sSem === formattedSem;
+    }
+
+    return true;
+  });
+
+  // Extract unique subject names
+  const uniqueSubNames = [...new Set(filteredSubjects.map(sub => sub.Name).filter(Boolean))];
+  uniqueSubNames.sort().forEach(sub => {
+    const opt = document.createElement('option');
+    opt.value = sub.toLowerCase().trim();
+    opt.textContent = sub;
+    subjectFilterSelect.appendChild(opt);
+  });
+};

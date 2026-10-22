@@ -300,13 +300,19 @@ window.loadProfTimetable = async () => {
 
     if (data.status === 'success' && data.data) {
       const t = data.data;
+      const SCRIPT_URL = (window.SMART_ATTEND_CONFIG && window.SMART_ATTEND_CONFIG.SCRIPT_URL) || 'https://smartattend-o2te.onrender.com';
+      const fileId = t.FileID;
+      const viewUrl = fileId ? `${SCRIPT_URL}/timetables/file/${encodeURIComponent(fileId)}` : (t.ViewURL || '#');
+      const downloadUrl = fileId ? `${SCRIPT_URL}/timetables/file/${encodeURIComponent(fileId)}?download=true` : (t.DownloadURL || viewUrl);
+      const fileName = `${dept}_${sem}_Timetable.pdf`;
+
       resultDiv.innerHTML = `
         <i class="fa-solid fa-calendar-check" style="font-size:32px; color:#10b981; margin-bottom:16px;"></i>
         <h3 style="margin:0 0 8px 0;">Timetable Found</h3>
         <p style="color:var(--text-muted); font-size:14px; margin-bottom:20px;">Uploaded: ${t.UploadedAt || 'Recently'}</p>
-        <div style="display:flex; gap:12px; justify-content:center;">
-          <a href="${t.ViewURL}" target="_blank" class="btn" style="text-decoration:none; background:#10b981; color:white;"><i class="fa-solid fa-eye"></i> View Online</a>
-          <a href="${t.DownloadURL}" target="_blank" class="btn" style="text-decoration:none; background:#10b981; color:white;"><i class="fa-solid fa-download"></i> Download PDF</a>
+        <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
+          <a href="${viewUrl}" target="_blank" class="btn" style="text-decoration:none; background:rgba(16, 185, 129, 0.15); border:1px solid #10b981; color:#34d399; padding:8px 16px; border-radius:8px; display:inline-flex; align-items:center; gap:8px;"><i class="fa-solid fa-eye"></i> View Online</a>
+          <a href="${downloadUrl}" target="_blank" download="${fileName}" class="btn" style="text-decoration:none; background:#10b981; color:white; padding:8px 16px; border-radius:8px; display:inline-flex; align-items:center; gap:8px;"><i class="fa-solid fa-download"></i> Download PDF</a>
         </div>
       `;
     } else {
