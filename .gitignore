@@ -28,4 +28,5 @@ Thumbs.db
 # Generated Documents and PDFs (Keep in local folder only)
 PDF/*.pdf
 *.pdf
+*.traineddata
 scratch/
