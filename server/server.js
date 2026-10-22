@@ -869,6 +869,77 @@ function getParentLateAlertTemplate(studentName, className, attendanceDate, late
     <p style="color:#64748b;font-size:12px;margin-bottom:0;">This is an automated notification from the SmartAttend System.</p></div>`;
 }
 
+// HTML Email Template for Approved Medical Leave (Student)
+function getLeaveApprovedStudentTemplate(studentName, studentId, leaveDate, professor, reason) {
+  return `<div style="font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;max-width:540px;margin:auto;background:#0b1120;color:#f8fafc;border-radius:16px;overflow:hidden;border:1px solid #1e293b;box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+    <div style="background:linear-gradient(135deg,#10b981,#059669);padding:26px 30px;text-align:left;">
+      <h2 style="margin:0;font-size:22px;color:#ffffff;font-weight:700;">Medical Leave Approved</h2>
+      <p style="margin:6px 0 0 0;color:#d1fae5;font-size:13px;">SmartAttend Academic Leave Management</p>
+    </div>
+    <div style="padding:28px 30px;">
+      <p style="color:#f8fafc;font-size:15px;margin-top:0;">Dear <strong>${studentName}</strong>,</p>
+      <p style="color:#cbd5e1;font-size:14px;line-height:1.5;">Your medical leave request has been reviewed and <strong style="color:#10b981;">Approved</strong> by your professor.</p>
+      <table style="width:100%;border-collapse:collapse;margin:18px 0;font-size:13px;border-radius:8px;overflow:hidden;">
+        <tr><td style="padding:10px 14px;background:#1e293b;color:#94a3b8;width:38%;">Student</td><td style="padding:10px 14px;background:#1e293b;color:#f8fafc;font-weight:600;">${studentName} (${studentId})</td></tr>
+        <tr><td style="padding:10px 14px;background:#0f172a;color:#94a3b8;">Leave Date</td><td style="padding:10px 14px;background:#0f172a;color:#f8fafc;font-weight:600;">${leaveDate}</td></tr>
+        <tr><td style="padding:10px 14px;background:#1e293b;color:#94a3b8;">Reviewed By</td><td style="padding:10px 14px;background:#1e293b;color:#f8fafc;font-weight:600;">${professor}</td></tr>
+        <tr><td style="padding:10px 14px;background:#0f172a;color:#94a3b8;">Stated Reason</td><td style="padding:10px 14px;background:#0f172a;color:#cbd5e1;">${reason}</td></tr>
+        <tr><td style="padding:10px 14px;background:#1e293b;color:#94a3b8;">Status</td><td style="padding:10px 14px;background:#1e293b;color:#10b981;font-weight:700;">APPROVED</td></tr>
+      </table>
+      <div style="background:rgba(16,185,129,0.1);border-left:4px solid #10b981;padding:12px 14px;border-radius:4px;color:#a7f3d0;font-size:13px;line-height:1.4;">
+        Your attendance record will reflect this approved medical leave. We hope you have recovered well.
+      </div>
+    </div>
+    <div style="padding:14px 30px;background:#0f172a;color:#64748b;font-size:12px;border-top:1px solid #1e293b;">
+      SmartAttend — Automated Academic Notification
+    </div>
+  </div>`;
+}
+
+// HTML Email Template for Approved Medical Leave (Parent)
+function getLeaveApprovedParentTemplate(studentName, studentId, leaveDate, professor, reason) {
+  return `<div style="font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;padding:26px;border:1px solid #e2e8f0;border-radius:12px;background:#ffffff;max-width:520px;margin:auto;box-shadow:0 4px 18px rgba(0,0,0,0.05);">
+    <h3 style="color:#059669;margin-top:0;font-size:19px;font-weight:700;">Medical Leave Approved — Parent Notification</h3>
+    <p style="color:#334155;font-size:14px;">Dear Parent,</p>
+    <p style="color:#475569;font-size:14px;line-height:1.5;">This is to inform you that the medical leave request submitted for your ward, <strong>${studentName}</strong>, has been reviewed and <strong style="color:#059669;">Approved</strong>.</p>
+    <div style="background:#f8fafc;padding:14px 16px;border-radius:8px;margin:16px 0;border-left:4px solid #10b981;font-size:13px;line-height:1.6;color:#334155;">
+      <div><strong>Student Name:</strong> ${studentName} (ID: ${studentId})</div>
+      <div><strong>Date of Leave:</strong> ${leaveDate}</div>
+      <div><strong>Status:</strong> <span style="color:#059669;font-weight:700;">Approved</span></div>
+      <div><strong>Approved By:</strong> ${professor}</div>
+      <div><strong>Reason:</strong> ${reason}</div>
+    </div>
+    <p style="color:#64748b;font-size:12px;margin-bottom:0;">This is an official automated notification from the SmartAttend Academic System.</p>
+  </div>`;
+}
+
+// HTML Email Template for Rejected Medical Leave (Student Only)
+function getLeaveRejectedStudentTemplate(studentName, studentId, leaveDate, professor, reason) {
+  return `<div style="font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;max-width:540px;margin:auto;background:#0b1120;color:#f8fafc;border-radius:16px;overflow:hidden;border:1px solid #1e293b;box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+    <div style="background:linear-gradient(135deg,#ef4444,#dc2626);padding:26px 30px;text-align:left;">
+      <h2 style="margin:0;font-size:22px;color:#ffffff;font-weight:700;">Medical Leave Request Update</h2>
+      <p style="margin:6px 0 0 0;color:#fee2e2;font-size:13px;">SmartAttend Academic Leave Management</p>
+    </div>
+    <div style="padding:28px 30px;">
+      <p style="color:#f8fafc;font-size:15px;margin-top:0;">Dear <strong>${studentName}</strong>,</p>
+      <p style="color:#cbd5e1;font-size:14px;line-height:1.5;">Your medical leave request has been reviewed and <strong style="color:#ef4444;">Rejected</strong> by your professor.</p>
+      <table style="width:100%;border-collapse:collapse;margin:18px 0;font-size:13px;border-radius:8px;overflow:hidden;">
+        <tr><td style="padding:10px 14px;background:#1e293b;color:#94a3b8;width:38%;">Student</td><td style="padding:10px 14px;background:#1e293b;color:#f8fafc;font-weight:600;">${studentName} (${studentId})</td></tr>
+        <tr><td style="padding:10px 14px;background:#0f172a;color:#94a3b8;">Leave Date</td><td style="padding:10px 14px;background:#0f172a;color:#f8fafc;font-weight:600;">${leaveDate}</td></tr>
+        <tr><td style="padding:10px 14px;background:#1e293b;color:#94a3b8;">Reviewed By</td><td style="padding:10px 14px;background:#1e293b;color:#f8fafc;font-weight:600;">${professor}</td></tr>
+        <tr><td style="padding:10px 14px;background:#0f172a;color:#94a3b8;">Stated Reason</td><td style="padding:10px 14px;background:#0f172a;color:#cbd5e1;">${reason}</td></tr>
+        <tr><td style="padding:10px 14px;background:#1e293b;color:#94a3b8;">Status</td><td style="padding:10px 14px;background:#1e293b;color:#ef4444;font-weight:700;">REJECTED</td></tr>
+      </table>
+      <div style="background:rgba(239,68,68,0.1);border-left:4px solid #ef4444;padding:12px 14px;border-radius:4px;color:#fca5a5;font-size:13px;line-height:1.4;">
+        If you have questions or require further clarification, please contact your professor or department administration directly.
+      </div>
+    </div>
+    <div style="padding:14px 30px;background:#0f172a;color:#64748b;font-size:12px;border-top:1px solid #1e293b;">
+      SmartAttend — Automated Academic Notification
+    </div>
+  </div>`;
+}
+
 // ==========================================
 // 1. DYNAMIC FILE SERVICE ROUTE (GET)
 // ==========================================
@@ -2831,6 +2902,15 @@ Return ONLY valid JSON:
 
     if (action === 'resolve_leave') {
       const { id: leaveId, status: newStatus } = req.body;
+
+      // 1. Fetch leave request details
+      const { data: leaveRecord } = await supabase
+        .from('LeaveRequests')
+        .select('*')
+        .eq('id', leaveId)
+        .single();
+
+      // 2. Update status in database
       const { error } = await supabase
         .from('LeaveRequests')
         .update({ status: newStatus })
@@ -2838,6 +2918,69 @@ Return ONLY valid JSON:
 
       if (error) throw error;
       await logActivity('RESOLVE_LEAVE', `Resolved leave request #${leaveId} as ${newStatus}`);
+
+      // 3. Dispatch automated email notifications
+      if (leaveRecord) {
+        const studentId = (leaveRecord.studentId || '').trim();
+        let student = null;
+        if (studentId) {
+          const { data: st } = await supabase
+            .from('students')
+            .select('*')
+            .ilike('ID', studentId)
+            .single();
+          student = st;
+        }
+
+        const sEmail = (student?.Email || '').trim();
+        const pEmail = (student?.Parent_Email || student?.ParentEmail || '').trim();
+        const sName = student?.Name || leaveRecord.studentName || 'Student';
+        const sId = student?.ID || leaveRecord.studentId || studentId;
+        const leaveDate = leaveRecord.date || 'Recorded Date';
+        const profName = leaveRecord.targetProfessor || 'Professor';
+        const reasonText = leaveRecord.reason || 'Medical issue';
+
+        const emailPromises = [];
+
+        if (newStatus === 'Approved') {
+          // If approved: BOTH Student and Parent receive email notification
+          if (sEmail && sEmail.includes('@')) {
+            emailPromises.push(sendEmail({
+              to: sEmail,
+              subject: `SmartAttend — Medical Leave Request Approved (${leaveDate})`,
+              html: getLeaveApprovedStudentTemplate(sName, sId, leaveDate, profName, reasonText),
+              text: `Dear ${sName}, your medical leave request for ${leaveDate} has been Approved by Professor ${profName}.`
+            }).catch(e => console.error(`[resolve_leave] Student approval email failed for ${sEmail}:`, e.message)));
+          }
+
+          if (pEmail && pEmail.includes('@')) {
+            emailPromises.push(sendEmail({
+              to: pEmail,
+              subject: `SmartAttend — Medical Leave Approved: ${sName}`,
+              html: getLeaveApprovedParentTemplate(sName, sId, leaveDate, profName, reasonText),
+              text: `Dear Parent, the medical leave request for your ward ${sName} (${sId}) for ${leaveDate} has been Approved by Professor ${profName}.`
+            }).catch(e => console.error(`[resolve_leave] Parent approval email failed for ${pEmail}:`, e.message)));
+          }
+        } else if (newStatus === 'Rejected') {
+          // If rejected: ONLY Student receives rejection email notification
+          if (sEmail && sEmail.includes('@')) {
+            emailPromises.push(sendEmail({
+              to: sEmail,
+              subject: `SmartAttend — Medical Leave Request Update (${leaveDate})`,
+              html: getLeaveRejectedStudentTemplate(sName, sId, leaveDate, profName, reasonText),
+              text: `Dear ${sName}, your medical leave request for ${leaveDate} was Rejected by Professor ${profName}.`
+            }).catch(e => console.error(`[resolve_leave] Student rejection email failed for ${sEmail}:`, e.message)));
+          }
+        }
+
+        if (emailPromises.length > 0) {
+          Promise.allSettled(emailPromises).then(results => {
+            const delivered = results.filter(r => r.status === 'fulfilled').length;
+            console.log(`[resolve_leave] Dispatched ${delivered}/${emailPromises.length} leave decision emails for student ${sId}`);
+          });
+        }
+      }
+
       return res.json({ status: 'success' });
     }
 

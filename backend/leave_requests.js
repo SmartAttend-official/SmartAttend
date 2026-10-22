@@ -232,7 +232,7 @@ async function resolveRequest(id, decision) {
   try {
     await fetch(SCRIPT_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         action: 'resolve_leave',
         id: id,
