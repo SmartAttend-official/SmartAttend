@@ -1,0 +1,925 @@
+================================================================================
+        SMARTATTEND — TWO-FACTOR AUTHENTICATION (2FA)
+        COMPLETE GUIDE, IMPLEMENTATION DETAILS & REFERENCE
+================================================================================
+Date Created  : 18 October 2026
+Date Updated  : 19 October 2026 (Admin 2FA added)
+Feature Name  : Two-Factor Authentication (2FA)
+Feature Type  : Security — Professor Login + Admin Login
+Status        : LIVE in Production
+Server        : https://smartattend-o2te.onrender.com
+Database      : Supabase (kuqynurnkslvultxzzen.supabase.co)
+--------------------------------------------------------------------------------
+POLICY NOTE   : This file is stored LOCALLY only and is NOT pushed to GitHub.
+================================================================================
+
+
+
+================================================================================
+1. WHAT IS TWO-FACTOR AUTHENTICATION (2FA)?
+================================================================================
+
+Two-Factor Authentication (2FA) is an extra security layer added to both the
+professor login system AND the admin login system. Normally, a user only needs
+an email + password to log in. With 2FA enabled, after entering the correct
+email and password, the user must also enter a 6-digit One-Time Password (OTP)
+that is sent to their registered email address.
+
+This means even if someone steals a password, they still cannot log in without
+also having access to the registered email inbox.
+
+─── PROFESSOR 2FA ───
+
+WITHOUT 2FA:
+  Professor enters Email + Password  -->  Login Granted  -->  Dashboard
+
+WITH 2FA ENABLED:
+  Professor enters Email + Password
+      |
+      v
+  Server verifies credentials (correct)
+      |
+      v
+  Server generates 6-digit OTP  -->  Sends to professor's email
+      |
+      v
+  Login page shows OTP entry panel with countdown timer
+      |
+      v
+  Professor enters 6-digit OTP from email
+      |
+      v
+  Server verifies OTP + checks it is not expired (10-minute window)
+      |
+      v
+  JWT token issued  -->  Login Granted  -->  Professor Dashboard
+
+─── ADMIN 2FA ───
+
+WITHOUT 2FA:
+  Admin enters Email + Password  -->  Login Granted  -->  Admin Dashboard
+
+WITH 2FA ENABLED:
+  Admin enters Email + Password
+      |
+      v
+  Server verifies credentials (correct)
+      |
+      v
+  Server generates 6-digit OTP  -->  Sends to admin's email (amber styled)
+      |
+      v
+  Admin login page shows OTP entry panel (amber/gold theme)
+      |
+      v
+  Admin enters 6-digit OTP from email
+      |
+      v
+  Server verifies OTP + checks it is not expired (10-minute window)
+      |
+      v
+  JWT token issued  -->  Login Granted  -->  Admin Dashboard
+
+
+================================================================================
+2. HOW IT WORKS — PROFESSOR'S PERSPECTIVE
+================================================================================
+
+ENABLING 2FA:
+  1. Log in to SmartAttend as a professor.
+  2. Go to the Profile page (sidebar: Profile icon).
+  3. Scroll down to "Notification Preferences" card (on the right column).
+  4. Find the "Two-Factor Authentication" toggle at the bottom of that card.
+  5. Toggle it ON (it turns green with checkmark).
+  6. A confirmation message appears: "2FA enabled — OTP required on every login."
+  7. From this moment, every login will require an OTP.
+
+DISABLING 2FA:
+  1. Go to Profile page (same as above).
+  2. Find the "Two-Factor Authentication" toggle.
+  3. Toggle it OFF.
+  4. Confirmation message: "Two-Factor Authentication disabled."
+  5. From this moment, login goes back to email + password only.
+
+LOGGING IN WITH 2FA ACTIVE:
+  1. Open Login.html (Professor login page).
+  2. Enter your university email and password. Click "Sign In".
+  3. If 2FA is enabled, the login form disappears.
+  4. An OTP panel slides in showing:
+       - A shield icon and "Two-Factor Authentication" heading
+       - Your email address (masked, e.g. am***@gmail.com)
+       - Six individual digit boxes (6-digit OTP entry)
+       - A 10:00 countdown timer
+       - "Verify OTP" button
+       - "Resend OTP" link
+       - "Back to Login" link
+  5. Check your email inbox for the OTP.
+  6. Type the 6 digits (each box auto-advances to the next).
+     OR paste the entire 6-digit code — it fills all boxes automatically.
+  7. If all 6 digits are entered, it auto-submits without clicking the button.
+  8. If OTP is correct and not expired:
+       Button turns green  -->  "Access Granted"  -->  Redirects to Dashboard.
+  9. If OTP is wrong: boxes turn red, shake, clear. Try again.
+  10. If OTP expires (10 minutes passed): Click "Resend OTP" for a new one.
+  11. If you want to try a different account: Click "Back to Login".
+
+KEY BEHAVIOURS:
+  - Default State      : OFF for all professors (no 2FA unless manually enabled)
+  - Persistence        : Setting saved permanently in database. Survives logout,
+                         page refresh, and server restart.
+  - Scope              : Each professor controls their own 2FA independently.
+  - OTP Validity       : 10 minutes from time of sending.
+  - OTP Length         : 6 digits (numeric only).
+  - Auto-Submit        : OTP auto-submits when all 6 digits are entered.
+  - Resend Rate Limit  : Cannot spam resend — same anti-spam rules as password
+                         reset OTPs.
+  - Stays ON/OFF       : Once enabled, stays ON forever until professor turns it
+                         OFF manually. No auto-reset on logout.
+
+
+================================================================================
+3. DATABASE CHANGES (SUPABASE)
+================================================================================
+
+─── PROFESSOR TABLES ───
+
+A new column was added to all four professor department tables:
+
+  Column Name  : TwoFactorEnabled
+  Data Type    : BOOLEAN
+  Default      : FALSE (2FA is OFF for all existing professors by default)
+  Tables       : BCA, MCA, BBA, MBA
+
+SQL that was executed in Supabase Dashboard -> SQL Editor:
+
+  ALTER TABLE "BCA" ADD COLUMN IF NOT EXISTS "TwoFactorEnabled" BOOLEAN DEFAULT FALSE;
+  ALTER TABLE "MCA" ADD COLUMN IF NOT EXISTS "TwoFactorEnabled" BOOLEAN DEFAULT FALSE;
+  ALTER TABLE "BBA" ADD COLUMN IF NOT EXISTS "TwoFactorEnabled" BOOLEAN DEFAULT FALSE;
+  ALTER TABLE "MBA" ADD COLUMN IF NOT EXISTS "TwoFactorEnabled" BOOLEAN DEFAULT FALSE;
+
+─── ADMIN TABLE ───
+
+Three new columns were added to the ADMIN table:
+
+  Column Name  : TwoFactorEnabled
+  Data Type    : BOOLEAN NOT NULL
+  Default      : FALSE (2FA is OFF for admin by default)
+  Table        : ADMIN
+
+  Column Name  : OTP
+  Data Type    : TEXT, nullable
+  Purpose      : Stores the pending 2FA OTP during admin login flow
+  Table        : ADMIN
+
+  Column Name  : OTP_Timestamp
+  Data Type    : TEXT, nullable
+  Purpose      : Stores OTP expiry time (ISO string, 10 min from generation)
+  Table        : ADMIN
+
+SQL to run in Supabase Dashboard -> SQL Editor:
+
+  ALTER TABLE "ADMIN" ADD COLUMN IF NOT EXISTS "TwoFactorEnabled" boolean NOT NULL DEFAULT false;
+  ALTER TABLE "ADMIN" ADD COLUMN IF NOT EXISTS "OTP" text;
+  ALTER TABLE "ADMIN" ADD COLUMN IF NOT EXISTS "OTP_Timestamp" text;
+
+To verify all columns exist, run in Supabase SQL Editor:
+
+  SELECT column_name, data_type, column_default
+  FROM information_schema.columns
+  WHERE table_name IN ('BCA','MCA','BBA','MBA','ADMIN')
+  AND column_name IN ('TwoFactorEnabled','OTP','OTP_Timestamp')
+  ORDER BY table_name, column_name;
+
+This SQL file is also saved locally at:
+  TEXT FILE/add_TwoFactorEnabled_column.sql
+
+
+================================================================================
+4. FILES CHANGED IN THE CODEBASE
+================================================================================
+
+The following files were modified to implement 2FA (professor + admin):
+
+FILE 1: server/server.js
+--------------------------
+Changes made:
+  a) Added "TwoFactorEnabled", "OTP", "OTP_Timestamp" column bootstrap check
+     at server startup — now checks both professor tables (BCA/MCA/BBA/MBA)
+     AND the ADMIN table.
+  b) Added "verify_login_otp" and "resend_2fa_otp" to the public auth bypass
+     list (so these endpoints do not require JWT).
+  c) Modified the "login" action — after successful password verification:
+     PROFESSOR: if TwoFactorEnabled = true, generates OTP, stores in DB,
+       sends blue-themed 2FA email, returns { status: "otp_required" }.
+     ADMIN: if TwoFactorEnabled = true, generates OTP, stores in ADMIN table,
+       sends amber/gold-themed admin 2FA email, returns { status: "otp_required" }.
+  d) Modified action "verify_login_otp":
+     Now reads the "role" field from the request body.
+     - If role = "admin": looks up in ADMIN table, verifies OTP, clears it,
+       issues JWT with role:admin, returns { status: "success", token, user }.
+     - If role = "professor": existing professor logic (BCA/MCA/BBA/MBA lookup).
+  e) Modified action "resend_2fa_otp":
+     Now reads the "role" field from the request body.
+     - If role = "admin": generates new OTP in ADMIN table, sends amber email.
+     - If role = "professor": existing professor logic.
+  f) Added new action "toggle_admin_2fa":
+     - Takes email + enable (boolean) from request body.
+     - Finds admin in ADMIN table, updates TwoFactorEnabled column.
+     - Logs activity as 2FA_ADMIN_TOGGLE.
+     - Returns { status: "success", twoFactorEnabled: true/false }.
+  g) Added new action "get_admin_2fa_status" (GET endpoint):
+     - Takes email as query parameter.
+     - Returns { status: "success", twofa_enabled: true/false }.
+     - Called by admin dashboard when profile -> Two-Factor Auth tab is opened.
+  h) Existing action "toggle_2fa" (professor only) — unchanged.
+
+FILE 2: html/admin_login.html
+-------------------------------
+Changes made:
+  a) Added full OTP panel CSS styles (amber/gold themed to match admin design):
+       - .otp-panel, .otp-header, .otp-icon (amber gradient icon)
+       - .otp-inputs, .otp-digit (amber focus/filled borders)
+       - .otp-hint, .resend-link, .back-link
+       - @keyframes slideInUp
+  b) Added OTP panel HTML between the form and the security-note div:
+       - Lock icon (🔐) with amber gradient background
+       - Heading "Two-Factor Authentication"
+       - Masked email hint (id="otpEmailHint")
+       - Error div (id="otpError")
+       - Six digit inputs otp0–otp5
+       - Countdown timer (id="otpTimer")
+       - "Verify OTP" button (calls verifyAdmin2FAOTP)
+       - "Resend OTP" span (calls resendAdminOTP)
+       - "Back to Login" span (calls backToAdminLogin)
+
+FILE 3: backend/admin_login.js
+--------------------------------
+Complete rewrite with 2FA support. Changes:
+  a) Added _admin2fa_email and _admin2fa_timer global state variables.
+  b) In adminLoginForm submit handler: checks if status === "otp_required".
+     If yes, calls showAdmin2FAPanel(email) instead of proceeding to dashboard.
+  c) Added function showAdmin2FAPanel(email):
+       - Hides adminLoginForm, loginError.
+       - Fills masked email hint.
+       - Shows otpPanel with flex display.
+       - Calls setupAdminOTPInputs() to wire event listeners.
+       - Starts 10-minute countdown via startAdminOtpCountdown().
+       - Auto-focuses first OTP digit box.
+  d) Added function setupAdminOTPInputs():
+       - Clones inputs to remove old listeners.
+       - For each of 6 digit inputs: input, keydown (Backspace), paste events.
+       - Auto-submits (calls verifyAdmin2FAOTP) when all 6 digits filled.
+  e) Added function startAdminOtpCountdown(seconds):
+       - Counts down from 10:00 to 00:00.
+       - When reaches 0: shows red expiry warning.
+  f) Added function verifyAdmin2FAOTP():
+       - Collects 6 digits, calls POST verify_login_otp with role:"admin".
+       - On success: stores JWT, isAdminAuthenticated, adminEmail, adminName
+         in sessionStorage. Shows green "Access Granted", redirects.
+       - On failure: red borders on digit boxes, clears them, shake effect.
+  g) Added function resendAdminOTP():
+       - Calls POST resend_2fa_otp with role:"admin".
+       - Resets countdown, clears digit boxes, focuses first box.
+  h) Added function backToAdminLogin():
+       - Clears timer, resets _admin2fa_email.
+       - Hides OTP panel, shows login form, clears digit boxes.
+
+FILE 4: backend/admin_dashboard.js  (profile section)
+-------------------------------------------------------
+Changes made:
+  a) Added a new 4th tab "Two-Factor Auth" to the profile sidebar nav
+     (after Activity Analytics tab).
+  b) Added new panel (id="panel-2fa") with:
+       - Heading "Two-Factor Authentication"
+       - Description card with amber email icon, toggle, status text.
+       - Info description box explaining OTP behaviour.
+       - Feedback div for success/error messages.
+  c) Extended switchProfileTab() to call loadAdmin2FAStatus() when
+     tab === '2fa' is activated.
+  d) Added function loadAdmin2FAStatus():
+       - Calls GET ?action=get_admin_2fa_status&email=adminEmail
+       - Sets toggle to ON/OFF based on response.
+       - Updates status text: green "Enabled" or muted "Disabled".
+  e) Added function handleAdmin2FAToggle():
+       - Calls POST toggle_admin_2fa with email + enable flag.
+       - On success: animates toggle, updates status text, shows feedback.
+       - On error: shows red error feedback.
+  f) Added CSS styles for the 2FA panel:
+       - .twofa-card (amber border/background)
+       - .twofa-icon-wrap (amber gradient icon)
+       - .twofa-toggle, .twofa-toggle.on (amber toggle with smooth animation)
+       - .twofa-thumb (sliding circle)
+       - .twofa-desc (info box)
+       - .twofa-feedback.success, .twofa-feedback.error
+
+FILE 5: html/Login.html  — unchanged (professor only)
+FILE 6: backend/login.js — unchanged (professor only)
+FILE 7: html/professorProfile.html — unchanged
+FILE 8: backend/professor_profile.js — unchanged
+
+
+================================================================================
+5. NEW API ENDPOINTS
+================================================================================
+
+All endpoints are on the server: https://smartattend-o2te.onrender.com
+
+════════════════════════════════════════════════════════════════════════════════
+  PROFESSOR 2FA ENDPOINTS
+════════════════════════════════════════════════════════════════════════════════
+
+--------------------------------------------------------------------------------
+ENDPOINT 1: verify_login_otp  (Professor)
+--------------------------------------------------------------------------------
+Method     : POST
+URL        : https://smartattend-o2te.onrender.com/
+Auth       : None required (public endpoint — professor has no JWT yet)
+Purpose    : Verify the 2FA OTP entered by professor during login
+
+Request Body:
+  {
+    "action": "verify_login_otp",
+    "email": "professor@university.edu",
+    "otp": "123456"
+  }
+  (role field optional for professor — defaults to professor)
+
+Success Response (200):
+  {
+    "status": "success",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "sessionToken": "17503924821abc123xyz",
+    "user": { ...professor data without password... }
+  }
+
+Error Response — Wrong OTP (401):
+  { "status": "error", "message": "Invalid OTP. Please try again." }
+
+Error Response — Expired OTP (401):
+  { "status": "error", "message": "OTP has expired. Please log in again." }
+
+Error Response — User Not Found (404):
+  { "status": "error", "message": "User not found." }
+
+--------------------------------------------------------------------------------
+ENDPOINT 2: resend_2fa_otp  (Professor)
+--------------------------------------------------------------------------------
+Method     : POST
+URL        : https://smartattend-o2te.onrender.com/
+Auth       : None required (public endpoint)
+Purpose    : Regenerate and resend a fresh 2FA OTP to the professor's email
+
+Request Body:
+  {
+    "action": "resend_2fa_otp",
+    "email": "professor@university.edu"
+  }
+
+Success Response (200):
+  { "status": "success", "message": "New OTP sent to your email." }
+
+Rate Limited (429):
+  { "status": "error", "message": "Too many OTP requests. Please wait..." }
+
+--------------------------------------------------------------------------------
+ENDPOINT 3: toggle_2fa  (Professor)
+--------------------------------------------------------------------------------
+Method     : POST
+URL        : https://smartattend-o2te.onrender.com/
+Auth       : Required — Bearer JWT token in Authorization header
+             (auto-injected by config.js interceptor)
+Purpose    : Enable or disable 2FA for the logged-in professor
+
+Request Body:
+  {
+    "action": "toggle_2fa",
+    "email": "professor@university.edu",
+    "enable": true
+  }
+  (set "enable": false to turn 2FA off)
+
+Success Response (200):
+  {
+    "status": "success",
+    "message": "Two-Factor Authentication has been enabled successfully.",
+    "twoFactorEnabled": true
+  }
+
+Error — Wrong Role (403):
+  { "status": "error", "message": "Access Denied: Only professors can manage 2FA settings." }
+
+Error — IDOR Attempt (403):
+  { "status": "error", "message": "Access Denied: You can only modify your own 2FA settings." }
+
+Error — Column Missing (500):
+  { "status": "error", "message": "The TwoFactorEnabled column does not exist..." }
+
+════════════════════════════════════════════════════════════════════════════════
+  ADMIN 2FA ENDPOINTS
+════════════════════════════════════════════════════════════════════════════════
+
+--------------------------------------------------------------------------------
+ENDPOINT 4: verify_login_otp  (Admin)
+--------------------------------------------------------------------------------
+Method     : POST
+URL        : https://smartattend-o2te.onrender.com/
+Auth       : None required (public endpoint — admin has no JWT yet)
+Purpose    : Verify the 2FA OTP entered by admin during login
+
+Request Body:
+  {
+    "action": "verify_login_otp",
+    "email": "admin@university.edu",
+    "otp": "123456",
+    "role": "admin"
+  }
+  (role: "admin" is REQUIRED to route to admin OTP verification)
+
+Success Response (200):
+  {
+    "status": "success",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "sessionToken": null,
+    "user": { ...admin data without password/OTP... }
+  }
+
+Error Response — Wrong OTP (401):
+  { "status": "error", "message": "Invalid OTP. Please try again." }
+
+Error Response — Expired OTP (401):
+  { "status": "error", "message": "OTP has expired. Please log in again." }
+
+Error Response — Admin Not Found (404):
+  { "status": "error", "message": "Admin account not found." }
+
+--------------------------------------------------------------------------------
+ENDPOINT 5: resend_2fa_otp  (Admin)
+--------------------------------------------------------------------------------
+Method     : POST
+URL        : https://smartattend-o2te.onrender.com/
+Auth       : None required (public endpoint)
+Purpose    : Regenerate and resend a fresh 2FA OTP to the admin's email
+
+Request Body:
+  {
+    "action": "resend_2fa_otp",
+    "email": "admin@university.edu",
+    "role": "admin"
+  }
+  (role: "admin" is REQUIRED)
+
+Success Response (200):
+  { "status": "success", "message": "New OTP sent to your email." }
+
+--------------------------------------------------------------------------------
+ENDPOINT 6: toggle_admin_2fa
+--------------------------------------------------------------------------------
+Method     : POST
+URL        : https://smartattend-o2te.onrender.com/
+Auth       : Required — Bearer JWT (admin must be logged in)
+Purpose    : Enable or disable 2FA for admin login
+
+Request Body:
+  {
+    "action": "toggle_admin_2fa",
+    "email": "admin@university.edu",
+    "enable": true
+  }
+  (set "enable": false to turn admin 2FA off)
+
+Success Response (200):
+  {
+    "status": "success",
+    "message": "Two-Factor Authentication has been enabled successfully.",
+    "twoFactorEnabled": true
+  }
+
+Error — Admin Not Found (404):
+  { "status": "error", "message": "Admin account not found." }
+
+Error — Column Missing (500):
+  { "status": "error", "message": "The TwoFactorEnabled column does not exist in the ADMIN table..." }
+
+--------------------------------------------------------------------------------
+ENDPOINT 7: get_admin_2fa_status  (GET)
+--------------------------------------------------------------------------------
+Method     : GET
+URL        : https://smartattend-o2te.onrender.com/?action=get_admin_2fa_status&email=EMAIL
+Auth       : Required — Bearer JWT (admin must be logged in)
+Purpose    : Check current 2FA enabled/disabled state for admin account
+
+Query Params:
+  action=get_admin_2fa_status
+  email=admin@university.edu
+
+Success Response (200):
+  { "status": "success", "twofa_enabled": true }
+  (twofa_enabled is always a boolean: true or false)
+
+════════════════════════════════════════════════════════════════════════════════
+  MODIFIED ENDPOINT: login (action = "login")
+════════════════════════════════════════════════════════════════════════════════
+The existing login endpoint now has TWO possible success responses for BOTH
+professors and admins:
+
+Normal Login (2FA OFF):
+  {
+    "status": "success",
+    "token": "JWT...",
+    "sessionToken": "...",
+    "user": { ... }
+  }
+
+2FA Required (2FA ON — professor OR admin):
+  {
+    "status": "otp_required",
+    "message": "Two-factor authentication required...",
+    "email": "user@university.edu"
+  }
+
+
+================================================================================
+6. EMAILS SENT DURING 2FA LOGIN
+================================================================================
+
+─── PROFESSOR 2FA EMAIL ───
+
+When a professor with 2FA enabled logs in, they receive this email:
+
+  Subject : SmartAttend — Your Login OTP (2FA)
+  From    : smartattend.official@gmail.com
+  To      : professor's registered university email
+  Theme   : Blue/Indigo gradient header
+
+  Email Content:
+  ┌─────────────────────────────────────────────────────┐
+  │  🔐  Two-Factor Authentication                      │
+  ├─────────────────────────────────────────────────────┤
+  │                                                     │
+  │  Dear [Professor First Name],                       │
+  │                                                     │
+  │  Your login OTP for SmartAttend is:                 │
+  │                                                     │
+  │  ┌─────────────────────────────────────┐           │
+  │  │     1  2  3  4  5  6               │           │
+  │  └─────────────────────────────────────┘           │
+  │                                                     │
+  │  This OTP is valid for 10 minutes.                  │
+  │  Do not share it with anyone.                       │
+  │                                                     │
+  ├─────────────────────────────────────────────────────┤
+  │  SmartAttend — Two-Factor Authentication            │
+  └─────────────────────────────────────────────────────┘
+
+  OTP color in email : #60a5fa (blue)
+  OTP stored in      : professor's DB row (OTP + OTP_Timestamp columns)
+  OTP cleared        : immediately after successful verification
+
+─── ADMIN 2FA EMAIL ───
+
+When an admin with 2FA enabled logs in, they receive this email:
+
+  Subject : SmartAttend — Admin Login OTP (2FA)
+  From    : smartattend.official@gmail.com
+  To      : admin's registered email
+  Theme   : Amber/Gold gradient header (matches admin panel theme)
+
+  Email Content:
+  ┌─────────────────────────────────────────────────────┐
+  │  🔐  Admin Two-Factor Authentication  [AMBER BAR]   │
+  ├─────────────────────────────────────────────────────┤
+  │                                                     │
+  │  Dear [Admin First Name],                           │
+  │                                                     │
+  │  Your admin login OTP for SmartAttend is:           │
+  │                                                     │
+  │  ┌─────────────────────────────────────┐           │
+  │  │     1  2  3  4  5  6               │           │
+  │  └─────────────────────────────────────┘           │
+  │                                                     │
+  │  This OTP is valid for 10 minutes.                  │
+  │  Do not share it with anyone.                       │
+  │                                                     │
+  ├─────────────────────────────────────────────────────┤
+  │  SmartAttend — Admin Two-Factor Authentication      │
+  └─────────────────────────────────────────────────────┘
+
+  OTP color in email : #f59e0b (amber/gold)
+  OTP stored in      : ADMIN table (OTP + OTP_Timestamp columns)
+  OTP cleared        : immediately after successful verification
+  Resend subject     : SmartAttend — New Admin Login OTP (2FA)
+
+  Delivery Engine : SMTP Gmail (smartattend.official@gmail.com)
+
+
+================================================================================
+7. SECURITY DESIGN
+================================================================================
+
+  OTP Length          : 6 digits (1,000,000 possible combinations)
+  OTP Expiry          : 10 minutes from time of generation
+  OTP Storage (Prof)  : Stored in professor's dept table (OTP + OTP_Timestamp)
+  OTP Storage (Admin) : Stored in ADMIN table (OTP + OTP_Timestamp columns)
+  OTP Cleared On      : Successful verification (immediately cleared from DB)
+  OTP Single-Use      : After one successful use, OTP is deleted — cannot be
+                        reused (replay attack protection)
+  JWT Issuance        : JWT is only issued AFTER 2FA verification.
+                        Password alone does NOT issue a JWT when 2FA is ON.
+  Session Token       : Professor: new SessionToken generated after 2FA.
+                        Admin: sessionToken is null (admin uses simple JWT).
+  Rate Limiting       : Same per-email OTP rate limiter as password reset
+                        (prevents email bombing / OTP spam abuse).
+  IDOR Protection     : toggle_2fa (professor) compares JWT email with target.
+                        toggle_admin_2fa (admin) checks ADMIN table directly.
+  No Bypass           : When 2FA is ON, there is no way to skip the OTP step
+                        through the normal login flow.
+  Brute Force         : 10-minute expiry limits brute force attempts.
+  Role Routing        : verify_login_otp and resend_2fa_otp both accept a
+                        "role" field — routes to admin or professor logic.
+  Auth Bypass List    : verify_login_otp and resend_2fa_otp are in the public
+                        auth bypass list so users can call them before JWT.
+
+
+================================================================================
+8. TOGGLE LOCATION IN THE UI
+================================================================================
+
+─── PROFESSOR 2FA TOGGLE ───
+
+  Professor Panel
+    -> Profile (sidebar link)
+      -> Notification Preferences card (right column, 3rd card)
+        -> Below "Absentee SMS Alerts"
+        -> Separated by a thin divider line
+        -> "Two-Factor Authentication" item with shield icon
+        -> Toggle switch on the right
+
+  Toggle States:
+    OFF (default) : Grey toggle, text reads "Require an OTP on your email every time you log in."
+    ON (active)   : Green toggle, text reads "✅ Enabled — OTP required on every login."
+    Border color  : Blue when OFF, Green when ON
+
+─── ADMIN 2FA TOGGLE ───
+
+  Admin Panel
+    -> Profile (sidebar link -> My Profile)
+      -> "Two-Factor Auth" tab (4th tab in profile sidebar, after Activity Analytics)
+        -> Card: "Email OTP Verification" with amber envelope icon
+        -> Amber toggle switch on the right of the card
+        -> Status text below icon name
+
+  Toggle States:
+    OFF (default) : Grey toggle, text reads "Disabled — Direct login (no OTP)"
+    ON (active)   : Amber/gold toggle, text reads "✓ Enabled — OTP required on login"
+
+  Loading behaviour:
+    - Every time the "Two-Factor Auth" tab is clicked, the page automatically
+      calls GET get_admin_2fa_status to load the LIVE state from the database.
+    - Toggle is disabled (greyed) while the API call is in progress.
+
+  Feedback messages:
+    - Success enable  : "✅ Two-Factor Authentication enabled. You will receive
+                         an OTP at next login."
+    - Success disable : "🔓 Two-Factor Authentication disabled."
+    - Error           : Red box with error message from server.
+    - Messages auto-hide after 4 seconds.
+
+  The state is ALWAYS loaded fresh from the database every time the tab is
+  opened. So if 2FA is toggled on one device, other devices will see the
+  correct state when they next open the Two-Factor Auth tab.
+
+
+================================================================================
+9. TROUBLESHOOTING
+================================================================================
+
+─── PROFESSOR 2FA ISSUES ───
+
+PROBLEM 1: Toggle turns ON but shows error "The TwoFactorEnabled column does not exist"
+CAUSE   : The ALTER TABLE SQL was not run in Supabase yet.
+SOLUTION: Open Supabase Dashboard -> SQL Editor and run:
+          ALTER TABLE "BCA" ADD COLUMN IF NOT EXISTS "TwoFactorEnabled" BOOLEAN DEFAULT FALSE;
+          ALTER TABLE "MCA" ADD COLUMN IF NOT EXISTS "TwoFactorEnabled" BOOLEAN DEFAULT FALSE;
+          ALTER TABLE "BBA" ADD COLUMN IF NOT EXISTS "TwoFactorEnabled" BOOLEAN DEFAULT FALSE;
+          ALTER TABLE "MBA" ADD COLUMN IF NOT EXISTS "TwoFactorEnabled" BOOLEAN DEFAULT FALSE;
+
+PROBLEM 2: OTP email not received after enabling 2FA and logging in
+CAUSE   : Email delivery issue.
+SOLUTION: 1. Check spam/junk folder.
+          2. Test email delivery: open in browser:
+             https://smartattend-o2te.onrender.com/?action=debug_email&to=YOUR_EMAIL
+          3. Verify SMTP_PASS in server/.env is the correct Gmail App Password.
+
+PROBLEM 3: "OTP expired" message
+CAUSE   : More than 10 minutes passed since the OTP was sent.
+SOLUTION: Click "Resend OTP" on the login screen. A fresh OTP will be sent.
+
+PROBLEM 4: Entering correct OTP but getting "Invalid OTP" error
+CAUSE   : You may have clicked "Resend OTP" — each resend generates a NEW OTP.
+SOLUTION: Use only the most recently received OTP email.
+
+PROBLEM 5: Toggle stays OFF even after enabling it (professor)
+CAUSE   : Either the API call failed, or TwoFactorEnabled column does not exist.
+SOLUTION: Open browser DevTools -> Console -> check for error messages.
+          If column missing, run the SQL (Problem 1 fix above).
+
+─── ADMIN 2FA ISSUES ───
+
+PROBLEM 6: Admin 2FA toggle shows "The TwoFactorEnabled column does not exist in the ADMIN table"
+CAUSE   : The ALTER TABLE SQL has not been run for the ADMIN table in Supabase.
+SOLUTION: Open Supabase Dashboard -> SQL Editor and run:
+          ALTER TABLE "ADMIN" ADD COLUMN IF NOT EXISTS "TwoFactorEnabled" boolean NOT NULL DEFAULT false;
+          ALTER TABLE "ADMIN" ADD COLUMN IF NOT EXISTS "OTP" text;
+          ALTER TABLE "ADMIN" ADD COLUMN IF NOT EXISTS "OTP_Timestamp" text;
+          Direct link: https://supabase.com/dashboard/project/kuqynurnkslvultxzzen/sql/new
+
+PROBLEM 7: Admin 2FA toggle shows "Checking status..." and never updates
+CAUSE   : GET request for get_admin_2fa_status may be failing or unauthorized.
+SOLUTION: 1. Make sure you are logged into admin panel (JWT must be valid).
+          2. Check browser DevTools -> Network for the GET request.
+          3. Verify ADMIN table has TwoFactorEnabled column (Problem 6 above).
+
+PROBLEM 8: Admin logs in without OTP even though 2FA toggle is ON
+CAUSE   : Server may not have latest code, or TwoFactorEnabled not saved.
+SOLUTION: 1. Push latest code to GitHub and wait for Render to redeploy.
+          2. Verify in Supabase:
+             SELECT "Email", "TwoFactorEnabled" FROM "ADMIN" WHERE "Email" = 'admin@email.com';
+          3. Ensure value is boolean TRUE (not string "true").
+
+PROBLEM 9: "Back to Login" not visible on admin OTP screen
+CAUSE   : Screen height issue.
+SOLUTION: Scroll down on the login panel. The link is below Resend OTP.
+
+PROBLEM 10: Professor can log in without OTP even though 2FA is enabled
+CAUSE   : Server may not have the latest code deployed yet.
+SOLUTION: Push the latest code to GitHub. Render will auto-deploy.
+          Also verify TwoFactorEnabled = TRUE (boolean) in Supabase table.
+
+
+================================================================================
+10. FUTURE IMPROVEMENTS (PLANNED)
+================================================================================
+
+The following features are NOT currently implemented but are planned for future:
+
+  1. Backup Codes
+       Generate 10 single-use backup codes professors can print or save.
+       Useful if they lose access to their email.
+
+  2. Lockout on Repeated Wrong OTPs
+       After 5 consecutive wrong OTP attempts, temporarily lock the account
+       (5–15 minutes) to prevent brute force attacks.
+
+  3. Trusted Devices
+       Allow professor to mark their browser/device as "trusted for 30 days".
+       On trusted devices, the 2FA OTP step is skipped automatically.
+
+  4. TOTP / Authenticator App Support
+       Support Google Authenticator / Authy as an alternative to email OTP.
+       Professor scans QR code once and uses app-generated codes to login.
+
+  5. SMS Fallback
+       If professor cannot access email, allow OTP delivery via SMS to their
+       registered mobile number as a fallback.
+
+  6. Admin Force-Enable 2FA
+       Allow admin to force-enable 2FA for ALL professors institution-wide
+       from the admin dashboard (currently each professor decides individually).
+
+  7. 2FA Login History
+       Show professor their last 5 successful 2FA logins (timestamp + IP + device)
+       on their profile page for security awareness.
+
+  8. OTP Delivery Status
+       Show the professor a real-time delivery status when OTP is being sent
+       (e.g., "Sending..." spinner before the OTP panel appears).
+
+
+================================================================================
+11. QUICK REFERENCE SUMMARY
+================================================================================
+
+─── PROFESSOR 2FA ───
+
+  Who can use      : All professors (each controls their own setting)
+  Where to enable  : Profile Page -> Notification Preferences -> Toggle
+  Default state    : OFF (disabled for all professors)
+  OTP method       : Email (sent to registered university email)
+  OTP email theme  : Blue/Indigo gradient
+  OTP length       : 6 digits
+  OTP valid for    : 10 minutes
+  OTP resend       : Yes — rate limited (anti-spam)
+  Auto-submit      : Yes — submits when all 6 digits entered
+  Back to login    : Yes — available from OTP screen
+  Setting saved    : Yes — permanently in Supabase database
+
+  NEW DB COLUMN    : TwoFactorEnabled BOOLEAN DEFAULT FALSE
+  TABLES UPDATED   : BCA, MCA, BBA, MBA
+  NEW ENDPOINTS    : verify_login_otp, resend_2fa_otp, toggle_2fa
+  FILES CHANGED    : server/server.js, html/Login.html, backend/login.js,
+                     html/professorProfile.html, backend/professor_profile.js
+
+─── ADMIN 2FA ───
+
+  Who can use      : System Administrator (admin account)
+  Where to enable  : Admin Dashboard -> My Profile -> Two-Factor Auth tab
+  Default state    : OFF (disabled by default)
+  OTP method       : Email (sent to admin's registered email)
+  OTP email theme  : Amber/Gold gradient (matches admin panel colour)
+  OTP length       : 6 digits
+  OTP valid for    : 10 minutes
+  OTP resend       : Yes — rate limited (anti-spam)
+  Auto-submit      : Yes — submits when all 6 digits entered
+  Back to login    : Yes — available from OTP screen
+  Setting saved    : Yes — permanently in Supabase ADMIN table
+
+  NEW DB COLUMNS   : TwoFactorEnabled BOOLEAN DEFAULT false
+                     OTP TEXT nullable
+                     OTP_Timestamp TEXT nullable
+  TABLE UPDATED    : ADMIN
+  NEW ENDPOINTS    : toggle_admin_2fa (POST), get_admin_2fa_status (GET)
+  MODIFIED ENDPTS  : verify_login_otp (now role-aware)
+                     resend_2fa_otp (now role-aware)
+  FILES CHANGED    : server/server.js, html/admin_login.html,
+                     backend/admin_login.js, backend/admin_dashboard.js
+
+─── GIT COMMITS ───
+
+  Professor 2FA    : feat(security): implement Two-Factor Authentication (2FA)
+                     Commit: 5a3caa6
+
+  Admin 2FA        : feat: integrate 2FA into admin panel (login + profile toggle)
+                     Commit: 9ce43b6
+
+  Admin 2FA fix    : fix: add admin 2FA backend handlers (toggle, verify, resend, status)
+                     Commit: 41e5805
+
+  GitHub Repo      : SmartAttend-official/SmartAttend (main branch)
+
+
+================================================================================
+12. ADMIN 2FA — STEP-BY-STEP HOW IT WORKS
+================================================================================
+
+ENABLING ADMIN 2FA:
+  1. Log in to the Admin Dashboard.
+  2. Click "My Profile" in the sidebar (or profile dropdown at top right).
+  3. The Profile page opens. Click the "Two-Factor Auth" tab
+     (4th tab in the left nav, after Activity Analytics).
+  4. The tab loads and automatically fetches your current 2FA status.
+  5. You will see the card: "Email OTP Verification" with a toggle.
+  6. Click the amber toggle to turn it ON.
+  7. A success message appears: "Two-Factor Authentication enabled."
+  8. From this moment, every admin login will require an email OTP.
+
+DISABLING ADMIN 2FA:
+  1. Go to Admin Dashboard -> My Profile -> Two-Factor Auth tab.
+  2. Click the amber toggle to turn it OFF.
+  3. Success message: "Two-Factor Authentication disabled."
+  4. Admin login goes back to email + password only.
+
+LOGGING IN AS ADMIN WITH 2FA ACTIVE:
+  1. Open admin_login.html.
+  2. Enter your admin email and password. Click "Verify & Enter".
+  3. If 2FA is enabled, the login form disappears.
+  4. An amber-themed OTP panel slides in showing:
+       - Lock icon (🔐) with amber gradient background
+       - "Two-Factor Authentication" heading
+       - Your email address (masked, e.g. ad***@gmail.com)
+       - Six individual digit boxes (6-digit OTP entry)
+       - A 10:00 countdown timer
+       - "Verify OTP" button
+       - "Resend OTP" link
+       - "Back to Login" link
+  5. Check your email inbox for the OTP (amber-styled admin email).
+  6. Type the 6 digits (each box auto-advances).
+     OR paste the entire 6-digit code.
+  7. If all 6 digits filled, it auto-submits.
+  8. If OTP is correct and not expired:
+       Button turns green --> "Access Granted" --> Admin Dashboard.
+  9. If OTP wrong: boxes turn red, shake, clear. Try again.
+  10. If OTP expires: Click "Resend OTP" for a new one.
+  11. Click "Back to Login" to use a different account.
+
+DIFFERENCES FROM PROFESSOR 2FA:
+  ┌──────────────────────┬───────────────────────┬───────────────────────┐
+  │ Feature              │ Professor 2FA         │ Admin 2FA             │
+  ├──────────────────────┼───────────────────────┼───────────────────────┤
+  │ OTP panel theme      │ Blue/Indigo           │ Amber/Gold            │
+  │ Email header colour  │ #3b82f6 (blue)        │ #f59e0b (amber)       │
+  │ OTP digit colour     │ #60a5fa (blue)        │ #f59e0b (amber)       │
+  │ Toggle location      │ Profile > Notif Prefs │ Profile > 2FA tab     │
+  │ Toggle colour ON     │ Green                 │ Amber/Gold            │
+  │ DB table             │ BCA / MCA / BBA / MBA │ ADMIN                 │
+  │ Session token        │ New token generated   │ null (JWT only)       │
+  │ IDOR protection      │ JWT email must match  │ Email from DB check   │
+  │ Backend action       │ toggle_2fa            │ toggle_admin_2fa      │
+  │ Status action        │ N/A (loaded on load)  │ get_admin_2fa_status  │
+  └──────────────────────┴───────────────────────┴───────────────────────┘
+
+
+================================================================================
+END OF DOCUMENT
+NOTE: This file is stored LOCALLY only. Do NOT push to GitHub.
+      If 2FA breaks in future, refer to this file for all implementation details.
+================================================================================

@@ -1,0 +1,423 @@
+================================================================================
+SMARTATTEND EMAIL NOTIFICATION SYSTEM — COMPLETE ARCHITECTURE & TROUBLESHOOTING GUIDE
+================================================================================
+Document Type  : Permanent System Documentation & Troubleshooting Reference
+Created On     : October 18, 2026
+System Status  : OPERATIONAL & VERIFIED (Production Render Backend)
+Target File    : server/server.js (Lines 219 - 335, 602 - 778, 850 - 864)
+Frontend Files : html/forget.html, html/student_forget.html, html/dashboard1.html,
+                 html/Lab_Attendance.html, backend/forget.js, backend/student_forget.js
+================================================================================
+
+TABLE OF CONTENTS
+-----------------
+1. Executive Summary & Core Architecture
+2. The Dual-Engine Dispatch Architecture (GAS HTTPS + Nodemailer SMTP)
+3. Inventory of All Email Notifications in SmartAttend
+4. Complete Log of All Root Causes Identified & Fixes Applied
+5. The Google Apps Script (GAS) Web App Setup & Full Source Code
+6. SMTP & Environment Variables Configuration Guide
+7. The 6-Digit OTP Synchronization Fix Across All UI Interfaces
+8. Step-by-Step Future Troubleshooting Runbook
+9. Verification Commands & Health Check Procedures
+
+
+================================================================================
+1. EXECUTIVE SUMMARY & CORE ARCHITECTURE
+================================================================================
+Email delivery in modern cloud environments (Render, AWS EC2, DigitalOcean, Heroku)
+presents a known obstacle: free-tier and standard cloud hosting providers
+firewall-block outbound traffic on standard SMTP ports (25, 465, and 587) to
+prevent automated spam abuse.
+
+If an application exclusively relies on Nodemailer SMTP, outbound emails will hang
+and eventually crash with "ETIMEDOUT: Connection timeout".
+
+To guarantee 100% email delivery uptime, SmartAttend implements a resilient
+Dual-Engine Architecture:
+  * Engine 1 (Primary): Google Apps Script (GAS) Web App via HTTPS (Port 443).
+    Port 443 is standard secure web traffic and is NEVER blocked by cloud hosts.
+    Google Apps Script executes natively inside Google's infrastructure and sends
+    emails via the official Gmail API (MailApp.sendEmail).
+  * Engine 2 (Secondary Fallback): Nodemailer SMTP via smtp.gmail.com.
+    Acts as an instant fallback when running on local development machines,
+    paid cloud tiers, or if Google Apps Script is momentarily unreachable.
+
+
+================================================================================
+2. THE DUAL-ENGINE DISPATCH ARCHITECTURE (GAS HTTPS + NODEMAILER SMTP)
+================================================================================
+Location: server/server.js (Lines 234 - 335)
+
+HOW sendEmail({ to, subject, html, text }) OPERATES:
+-----------------------------------------------------
+Step 1: Input Sanitization
+  Validates recipient string, ensures it contains an '@', trims whitespace.
+  Rejects invalid inputs immediately to avoid wasting network round-trips.
+
+Step 2: GAS Web App HTTPS Call
+  Attempts delivery to the active production Google Apps Script endpoint:
+  https://script.google.com/macros/s/AKfycbwbVUxhvM4pIvjO7FqMclGLg8UXxYSCnTfmWinj655VvVPtWRrcpuCRo9yvlCwv06Kv/exec
+
+  Special Technical Safeguards:
+  a) 'redirect: manual': Google Apps Script handles POST requests by returning
+     an HTTP 302 Found redirect with a 'Location' header pointing to:
+     https://script.googleusercontent.com/macros/echo?user_content_key=...
+     By setting 'redirect: manual', Node's fetch avoids incorrectly repeating
+     the POST body to Google's echo endpoint (which strictly requires GET).
+  b) GET Redirect Follow Chain: A while-loop captures the redirect Location
+     and follows up to 5 consecutive hops using HTTP GET.
+  c) Browser Emulation Headers: Passes 'User-Agent: Mozilla/5.0...' and
+     'Accept: */*' to prevent Google's cloud WAF from flagging the data center
+     IP as an automated bot.
+  d) 15-Second AbortController Timeout: Prevents the request from exceeding
+     Render's 30-second reverse proxy gateway limit.
+
+Step 3: Nodemailer SMTP Fallback
+  If Google Apps Script encounters an issue, the system logs a descriptive
+  warning and immediately attempts direct delivery via Nodemailer using the
+  configured Gmail App Password.
+
+
+================================================================================
+3. INVENTORY OF ALL EMAIL NOTIFICATIONS IN SMARTATTEND
+================================================================================
+
+1. PROFESSOR PASSWORD RECOVERY OTP
+   - Trigger: User clicks "Send Recovery OTP" on html/forget.html
+   - Route: GET /?sheet=professor&action=send_otp&email=<email>
+   - Code: Generates 6-digit random code, sets 10-minute expiry in Supabase.
+   - Template: getOtpEmailTemplate(otp, profName)
+   - Verification: action=verify_otp_only (step 2) and action=verify_otp (step 3).
+
+2. STUDENT PASSWORD RECOVERY OTP
+   - Trigger: User clicks "Verify Email" on html/student_forget.html
+   - Route: GET /?sheet=student&action=verify_student_email&email=<email>
+   - Code: Generates 6-digit random code, sets 10-minute expiry in Supabase.
+   - Template: getOtpEmailTemplate(otp, studentName)
+   - Verification: action=verify_otp_only (step 2) and action=verify_otp (step 3).
+
+3. ABSENT STUDENT & PARENT NOTIFICATIONS
+   - Triggers:
+     a) Automated on Session Save: POST / with action='save_session'
+        (server/server.js lines 2470-2525) automatically scans the session list
+        and fires asynchronous background alert emails for every absent student.
+     b) Manual Professor Alert: Professor clicks "Alert Students" on
+        html/dashboard1.html or html/Lab_Attendance.html -> POST action='email_students'.
+   - Dual-Routing Channels:
+     * Student receives getStudentAlertTemplate (detailed subject, date, attendance %).
+     * Parent receives getParentAbsentAlertTemplate (formal notice sent to Parent_Email).
+
+4. LATE STUDENT & PARENT NOTIFICATIONS
+   - Triggers:
+     a) Automated on Session Save: POST / with action='save_session'
+     b) Manual Professor Alert: Professor clicks "Send Late Alerts" ->
+        POST action='email_late_students'.
+   - Dual-Routing Channels:
+     * Student receives getLateAlertTemplate (minutes late, class, date).
+     * Parent receives getParentLateAlertTemplate (formal late notification).
+
+5. NEW STUDENT WELCOME ONBOARDING EMAIL
+   - Trigger: Administrator adds student in html/admin_dashboard.html ->
+     POST action='add_student' (server/server.js lines 2218-2224).
+   - Recipient: Newly created student email.
+   - Content: Login credentials, Student ID, and temporary access password.
+   - Template: getWelcomeEmailTemplate(Name, ID, Password).
+
+6. ASSIGNMENT UPLOAD & RETRACTION NOTIFICATIONS
+   - Trigger: Professor uploads assignment (action='upload_assignment') or deletes
+     assignment (action='delete_assignment').
+   - Recipient: All enrolled students matching the department and semester.
+   - Template: getAssignmentEmailTemplate & getAssignmentRetractionEmailTemplate.
+
+7. ATTENDANCE ANALYTIC & SESSION REPORTS
+   - Trigger: Professor clicks "Send Report" or finishes a lecture session.
+   - Route: POST action='send_session_report' or POST action='generate_report'.
+   - Recipient: Logged-in professor's official email address.
+   - Content: Rich HTML table displaying Total Students, Present, Late, Absent,
+     and overall attendance rate.
+
+8. CLOUD DIAGNOSTIC DELIVERY TEST PING
+   - Route: GET /?action=debug_email&to=<target_email>
+   - Purpose: Zero-auth public diagnostic test to immediately confirm that Render
+     and the email engine are operational.
+
+9. MEDICAL LEAVE APPROVAL & REJECTION NOTIFICATIONS
+   - Trigger: Professor clicks "Approve" or "Reject" on a student's medical leave
+     card in html/Leave_Requests.html -> backend/leave_requests.js (resolveRequest)
+     invokes POST / with action='resolve_leave', passing { id, status }.
+   - Dual-Routing Decision Rules:
+     * When APPROVED (status === 'Approved'):
+       1. Student Notification: Sent to student's primary email address (sEmail).
+          Subject: "SmartAttend — Medical Leave Request Approved (<date>)"
+          Template: getLeaveApprovedStudentTemplate(studentName, studentId, leaveDate, professor, reason).
+       2. Parent Notification: Sent to Parent_Email registered in students table.
+          Subject: "SmartAttend — Medical Leave Approved: <studentName>"
+          Template: getLeaveApprovedParentTemplate(studentName, studentId, leaveDate, professor, reason).
+     * When REJECTED (status === 'Rejected'):
+       1. Student ONLY Notification: Sent strictly to the student's email (sEmail).
+          Subject: "SmartAttend — Medical Leave Request Update (<date>)"
+          Template: getLeaveRejectedStudentTemplate(studentName, studentId, leaveDate, professor, reason).
+       2. Parent Notification: OMITTED. Per system policy, parents are NOT notified
+          when medical leave is rejected.
+
+
+================================================================================
+4. COMPLETE LOG OF ALL ROOT CAUSES IDENTIFIED & FIXES APPLIED
+================================================================================
+
+PROBLEM 1: Outbound SMTP Connection Timeouts on Cloud Hosting (Render)
+  * Root Cause: Render's free tier firewall blocks outbound TCP connections on
+    ports 25, 465, and 587. Traditional Nodemailer SMTP hung for 8 seconds and
+    failed with ETIMEDOUT.
+  * Fix: Built the primary HTTPS Google Apps Script bridge over port 443. Port 443
+    is standard web traffic and is never blocked.
+
+PROBLEM 2: GAS 302 Redirect Failure ("GAS returned non-JSON response")
+  * Root Cause: Google Apps Script Web App responds to POST requests with an
+    HTTP 302 redirect to a script.googleusercontent.com echo endpoint. Node's
+    built-in fetch default behavior followed the redirect by re-sending the
+    POST payload, causing Google to return an internal HTML error page
+    containing "window['ppConfig']".
+  * Fix: Used 'redirect: manual', inspected res.status (300-399), extracted the
+    Location header, and followed up to 5 redirect hops strictly using GET.
+
+PROBLEM 3: Cloud Reverse Proxy Timeout (Past 30 Seconds)
+  * Root Cause: Original timeout was 35s with 2 retries = up to 70s. Render's
+    reverse proxy drops connections after 30s.
+  * Fix: Reduced timeout to 15s per attempt with an 800ms backoff, safely
+    completing well within cloud hosting request boundaries.
+
+PROBLEM 4: Priority of Verified Production Endpoint
+  * Root Cause: process.env.EMAIL_SCRIPT_URL on cloud dashboards can become stale
+    or contain typos. If checked first, it delayed or failed the delivery.
+  * Fix: In server.js line 245, defaultGasUrl is placed FIRST in urlsToTry:
+    urlsToTry = Array.from(new Set([defaultGasUrl, rawEnvUrl]))
+    ensuring the verified active endpoint is always attempted first.
+
+PROBLEM 5: The 5-Box UI vs 6-Digit OTP Mismatch
+  * Root Cause: server.js generates a 6-digit OTP:
+    Math.floor(100000 + Math.random() * 900000).toString()
+    and sends: "Please use the following 6-digit One-Time Password".
+    However, html/forget.html, html/student_forget.html, and the APK Student Panel
+    only had 5 <input> boxes and JS checking 'otp.length < 5'.
+    Students and professors received 6 digits but could only type 5, causing
+    verification to fail 100% of the time.
+  * Fix:
+    1. Added the 6th <input> element to html/forget.html, html/student_forget.html,
+       and Student panel app idea/APK_Student_Panel/student_forget.html.
+    2. Updated backend/forget.js, backend/student_forget.js, and APK backend to
+       require and validate 6-digit codes (otp.length < 6).
+
+PROBLEM 6: 401 Session Expired on Diagnostic Route
+  * Root Cause: authenticateToken middleware blocked /?action=debug_email because
+    it was not whitelisted.
+  * Fix: Added action === 'debug_email' to the public bypass list in
+    server/server.js line 173.
+
+PROBLEM 7: Medical Leave Decisions Missing Automated Email Notifications
+  * Root Cause: When professors approved or rejected a medical leave request in
+    the Professor Panel (html/Leave_Requests.html), the action='resolve_leave'
+    endpoint in server/server.js only executed an SQL update query on the
+    LeaveRequests table and logged an audit entry. It had no email dispatch
+    logic or templates implemented, leaving students and parents unaware of
+    leave acceptance or rejection.
+  * Fix:
+    1. Built three responsive, branded HTML email templates in server/server.js:
+       - getLeaveApprovedStudentTemplate(studentName, studentId, leaveDate, professor, reason)
+       - getLeaveApprovedParentTemplate(studentName, studentId, leaveDate, professor, reason)
+       - getLeaveRejectedStudentTemplate(studentName, studentId, leaveDate, professor, reason)
+    2. Enhanced action='resolve_leave' in server/server.js to fetch the original
+       leave record and query the students table by studentId to retrieve the
+       registered student Email and Parent_Email.
+    3. Implemented policy-strict dispatching:
+       - If Approved: Dispatches approval emails to BOTH student and parent.
+       - If Rejected: Dispatches rejection email ONLY to student (parents are
+         strictly omitted as per system requirements).
+    4. Updated backend/leave_requests.js (resolveRequest) to send standard
+       'Content-Type': 'application/json' for seamless request handling.
+
+
+================================================================================
+5. THE GOOGLE APPS SCRIPT (GAS) WEB APP SETUP & FULL SOURCE CODE
+================================================================================
+
+Active Endpoint:
+https://script.google.com/macros/s/AKfycbwbVUxhvM4pIvjO7FqMclGLg8UXxYSCnTfmWinj655VvVPtWRrcpuCRo9yvlCwv06Kv/exec
+
+If you ever need to deploy a fresh Google Apps Script in Google Drive:
+1. Open https://script.google.com -> Click "New Project".
+2. Paste the following exact source code:
+
+--------------------------------------------------------------------------------
+function doPost(e) {
+  try {
+    var raw = e.postData ? e.postData.contents : "";
+    var data = {};
+    if (raw) {
+      try { data = JSON.parse(raw); } catch(err) { data = {}; }
+    }
+    
+    var to = data.to || (e.parameter ? e.parameter.to : "");
+    var subject = data.subject || (e.parameter ? e.parameter.subject : "SmartAttend Notification");
+    var htmlBody = data.htmlBody || data.html || (e.parameter ? e.parameter.htmlBody : "");
+    var textBody = data.textBody || data.body || (e.parameter ? e.parameter.textBody : "");
+
+    if (!to) {
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "error",
+        message: "Missing 'to' recipient email"
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var options = {};
+    if (htmlBody) options.htmlBody = htmlBody;
+    if (textBody) options.body = textBody;
+
+    MailApp.sendEmail({
+      to: to,
+      subject: subject,
+      body: textBody || "SmartAttend Notification",
+      htmlBody: htmlBody || textBody
+    });
+
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "success",
+      recipient: to
+    })).setMimeType(ContentService.MimeType.JSON);
+
+  } catch(err) {
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "error",
+      message: err.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function doGet(e) {
+  return ContentService.createTextOutput(JSON.stringify({
+    status: "ok",
+    message: "SmartAttend Mail Service is Active"
+  })).setMimeType(ContentService.MimeType.JSON);
+}
+--------------------------------------------------------------------------------
+
+3. Click "Deploy" -> "New deployment".
+4. Select type: "Web app".
+5. Configuration:
+   - Description: "SmartAttend Mail Dispatcher"
+   - Execute as: "Me" (your Google account)
+   - Who has access: "Anyone" (CRITICAL: Must be "Anyone", NOT "Only myself")
+6. Click "Deploy" and copy the Web App URL into EMAIL_SCRIPT_URL in server/.env.
+
+
+================================================================================
+6. SMTP & ENVIRONMENT VARIABLES CONFIGURATION GUIDE
+================================================================================
+Location: server/.env
+
+Key Variables:
+--------------------------------------------------------------------------------
+# Primary HTTPS Email Engine (Google Apps Script)
+EMAIL_SCRIPT_URL=https://script.google.com/macros/s/AKfycbwbVUxhvM4pIvjO7FqMclGLg8UXxYSCnTfmWinj655VvVPtWRrcpuCRo9yvlCwv06Kv/exec
+
+# Secondary SMTP Fallback Engine (Nodemailer)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=smartattend.official@gmail.com
+SMTP_PASS=kufw zxfu zxik bcvc
+--------------------------------------------------------------------------------
+
+IMPORTANT NOTE ON SMTP_PASS:
+- Gmail requires a dedicated 16-character "App Password", NOT your personal
+  Google account password.
+- If the App Password ever expires or is revoked:
+  1. Go to https://myaccount.google.com/security
+  2. Enable 2-Step Verification (if not already enabled)
+  3. Search for "App Passwords"
+  4. Create a new App Password named "SmartAttend Server"
+  5. Copy the 16-character code into SMTP_PASS in server/.env and on Render.
+
+
+================================================================================
+7. THE 6-DIGIT OTP SYNCHRONIZATION FIX ACROSS ALL UI INTERFACES
+================================================================================
+All password recovery interfaces are now strictly synchronized to 6 digits:
+
+1. Professor Forget Password (html/forget.html):
+   - Lines 285-292: 6 input fields with auto-advance and backspace handling.
+   - backend/forget.js: Validates otp.length === 6 before submitting.
+
+2. Student Forget Password (html/student_forget.html):
+   - Lines 380-387: 6 input fields with auto-advance and backspace handling.
+   - backend/student_forget.js: Validates otp.length === 6 before submitting.
+
+3. Mobile APK Student Forget Password:
+   - Student panel app idea/APK_Student_Panel/student_forget.html (6 input fields).
+   - Student panel app idea/APK_Student_Panel/backend/student_forget.js (6 digits).
+
+
+================================================================================
+8. STEP-BY-STEP FUTURE TROUBLESHOOTING RUNBOOK
+================================================================================
+
+If an email fails to deliver in the future, follow this 4-step checklist:
+
+STEP 1: Run the Public Diagnostic URL in your browser:
+  Open: https://smartattend-o2te.onrender.com/?action=debug_email&to=your_email@gmail.com
+  - If you get: {"status":"success","engine":"GAS"}, email sending is working.
+    Check the recipient's Spam/Junk folder.
+  - If you get: {"status":"error", ...}, proceed to Step 2.
+
+STEP 2: Test the Google Apps Script Web App Directly:
+  Run this command in the terminal inside the server/ directory:
+    node -e "fetch('https://script.google.com/macros/s/AKfycbwbVUxhvM4pIvjO7FqMclGLg8UXxYSCnTfmWinj655VvVPtWRrcpuCRo9yvlCwv06Kv/exec',{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({to:'smartattend.official@gmail.com',subject:'Test',htmlBody:'<p>Test</p>'})}).then(r=>r.text()).then(console.log);"
+  - If it returns {"status":"success"}, GAS is completely healthy.
+  - If it returns an HTML error or quota message, check Step 3.
+
+STEP 3: Check Google Daily Sending Limits:
+  - Free personal Gmail accounts have a quota of 100 emails per 24-hour window
+    for Google Apps Script (MailApp.sendEmail).
+  - Google Workspace accounts (e.g. university domains) have a limit of 1,500
+    emails per day.
+  - If the daily quota was reached during bulk testing, the service automatically
+    resets at midnight Pacific Time (PT).
+
+STEP 4: Test Local SMTP Fallback:
+  Inside the server/ directory, run:
+    node test_email.js
+  - If Nodemailer succeeds locally, your SMTP credentials (SMTP_USER & SMTP_PASS)
+    are 100% valid.
+
+
+================================================================================
+9. VERIFICATION COMMANDS & HEALTH CHECK PROCEDURES
+================================================================================
+
+1. Ping Health Check:
+   curl -s "https://smartattend-o2te.onrender.com/"
+   Expected output: {"status":"ok","message":"SmartAttend Server is running."}
+
+2. Test Live Email Dispatch:
+   curl -s "https://smartattend-o2te.onrender.com/?action=debug_email&to=smartattend.official@gmail.com"
+   Expected output: {"status":"success","engine":"GAS","recipient":"smartattend.official@gmail.com"}
+
+3. Test Professor OTP Trigger:
+   curl -s "https://smartattend-o2te.onrender.com/?sheet=professor&action=send_otp&email=aman70dz@gmail.com"
+   Expected output: {"status":"success","message":"OTP sent to your email."}
+
+4. Test Student OTP Trigger:
+   curl -s "https://smartattend-o2te.onrender.com/?sheet=student&action=verify_student_email&email=aman7474ak@gmail.com"
+   Expected output: {"status":"success","message":"Email verified and OTP sent."}
+
+5. Test Medical Leave Resolution Trigger:
+   curl -X POST "https://smartattend-o2te.onrender.com/" \
+     -H "Content-Type: application/json" \
+     -H "Authorization: Bearer <jwt_token>" \
+     -d '{"action":"resolve_leave","id":1792693007534,"status":"Approved"}'
+   Expected output: {"status":"success"}
+   (Automatically delivers approval emails to student and parent registered addresses)
+
+================================================================================
+END OF DOCUMENTATION — KEPT IN LOCAL FOLDER AS PER SYSTEM POLICY
+================================================================================

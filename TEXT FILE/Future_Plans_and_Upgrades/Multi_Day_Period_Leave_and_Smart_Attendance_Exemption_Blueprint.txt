@@ -1,0 +1,416 @@
+================================================================================
+SMARTATTEND ARCHITECTURAL BLUEPRINT: MULTI-DAY PERIOD LEAVE & SMART ATTENDANCE EXEMPTION
+================================================================================
+Document Type   : Technical Design & Future Implementation Blueprint (LOCAL ONLY)
+Target Directory: TEXT FILE/Future_Plans_and_Upgrades/
+Created On      : October 23, 2026
+System Scope    : Student Dashboard, Professor Dashboards (Face Scan & Lab), 
+                  Backend (server.js), Supabase PostgreSQL, Email Notification Engine
+Storage Policy  : LOCAL LAPTOP STORAGE ONLY (Never commit or push text/PDF files to GitHub)
+================================================================================
+
+TABLE OF CONTENTS
+-----------------
+1. Executive Overview & Problem Statement
+2. Functional Requirements Summary
+3. Database Architecture & Schema Enhancements
+4. Student Panel: Multi-Day Period Leave Request UI & Logic
+5. Automated Notification Engine: Leave Request & Duration Alerts to Parents
+6. Professor Attendance Portal: Real-Time Leave Highlighting (Face Scan & Lab)
+7. Smart Absenteeism Suppression: Blocking Absent Emails for Leave Students
+8. Attendance Record Synchronization & Statistical Integrity
+9. Edge Cases, Security & Validation Rules
+10. Phased Implementation Roadmap
+
+================================================================================
+1. EXECUTIVE OVERVIEW & PROBLEM STATEMENT
+================================================================================
+Currently, the SmartAttend leave management and attendance tracking subsystems 
+operate with two critical operational limitations:
+
+1. Single-Day Leave Restriction:
+   Students can only apply for leave on a single designated date. If a student is
+   hospitalized, has medical bed rest, or has a family emergency requiring 2, 5, 
+   7, or 10 days of absence, they are forced to submit multiple repetitive single-day
+   requests or submit a single date that fails to cover the entire absence window.
+
+2. Disconnected Attendance & False-Positive Absent Notifications:
+   When a student is legitimately on medical or approved leave (e.g., from Oct 26 
+   to Oct 31), and a professor conducts a lecture or lab session on Oct 26:
+   - The student does not appear in front of the camera or face scan and is 
+     automatically or manually flagged as "Absent".
+   - Upon saving attendance, SmartAttend's automated alert system fires an "Absenteeism
+     Notification" email to both the student and their parents.
+   - This causes panic, confusion, and administrative overhead, as parents receive 
+     absent warnings for dates their ward had already formally applied for leave.
+
+This blueprint outlines the complete end-to-end design to enable multi-day period 
+leave applications, real-time visual badges/highlights in professor attendance panels, 
+automated suppression of absent notifications for leave students, and seamless 
+attendance record synchronization.
+
+
+================================================================================
+2. FUNCTIONAL REQUIREMENTS SUMMARY
+================================================================================
+[FR-1] Multi-Day Period Leave Application:
+       Students can select a single date OR specify a date range (Start Date and 
+       End Date) or select duration in days (e.g., 2, 5, 7, 10 days). The system 
+       automatically calculates and validates the total duration.
+
+[FR-2] Comprehensive Parent Notification:
+       When a multi-day leave is submitted, the automated email sent to parents 
+       explicitly displays the full date range (e.g., "From: 26 Oct 2026 To: 31 Oct 2026")
+       and the total duration ("6 Days"), alongside the reason and medical proof status.
+
+[FR-3] Professor Roster Visual Highlighting:
+       When a professor initializes an attendance session (Face Scan, Lab Attendance, 
+       or Manual Attendance) on any date D, the system cross-references all active 
+       leaves. Any student whose leave window includes date D is visually highlighted 
+       with a prominent status badge (e.g., "ON APPROVED LEAVE: 26 Oct - 31 Oct").
+
+[FR-4] Automatic Absent Notification Suppression:
+       When the professor saves the attendance session or clicks the "Absent" button,
+       any student who is highlighted as being on approved/applied leave is strictly 
+       EXCLUDED from the absent email dispatch list. Neither the student nor the 
+       parent receives an absenteeism alert for that day.
+
+[FR-5] Attendance Synchronization:
+       The student's attendance for that session is recorded with status 'Leave' / 'Excused',
+       updating their attendance profile in real time alongside their peers without 
+       mischaracterizing their absence as an unauthorized proxy or bunk.
+
+
+================================================================================
+3. DATABASE ARCHITECTURE & SCHEMA ENHANCEMENTS
+================================================================================
+To support multi-day leave ranges while maintaining 100% backward compatibility 
+with legacy single-day records, the following modifications will be made to 
+the Supabase PostgreSQL schema.
+
+A. Enhancements to `LeaveRequests` Table:
+------------------------------------------
+Columns to Add / Standardize:
+- `startDate` (DATE, NOT NULL): The starting date of the leave period (YYYY-MM-DD).
+- `endDate`   (DATE, NOT NULL): The concluding date of the leave period (YYYY-MM-DD).
+- `durationDays` (INTEGER, NOT NULL DEFAULT 1): Number of days inclusive (endDate - startDate + 1).
+- `leaveType` (VARCHAR(50) DEFAULT 'Medical'): 'Medical', 'Academic', 'Personal', 'Emergency'.
+- `date`      (DATE): Retained for backward compatibility (maps directly to startDate).
+
+PostgreSQL SQL Migration:
+```sql
+ALTER TABLE "LeaveRequests" 
+  ADD COLUMN IF NOT EXISTS "startDate" DATE,
+  ADD COLUMN IF NOT EXISTS "endDate" DATE,
+  ADD COLUMN IF NOT EXISTS "durationDays" INTEGER DEFAULT 1,
+  ADD COLUMN IF NOT EXISTS "leaveType" VARCHAR(50) DEFAULT 'Medical';
+
+-- Backfill legacy records where only `date` exists
+UPDATE "LeaveRequests"
+SET "startDate" = "date",
+    "endDate" = "date",
+    "durationDays" = 1
+WHERE "startDate" IS NULL AND "date" IS NOT NULL;
+
+-- High-performance index for rapid date-range matching during attendance sessions
+CREATE INDEX IF NOT EXISTS idx_leaverequests_student_range 
+ON "LeaveRequests" ("studentId", "startDate", "endDate", "status");
+```
+
+B. Enhancements to `AttendanceHistory` Table:
+---------------------------------------------
+- Ensure the `status` column accepts `'Leave'` or `'Excused'` in addition to 
+  `'Present'`, `'Absent'`, and `'Late'`.
+- Add an optional foreign key `leaveRequestId` (BIGINT NULL) linking the attendance 
+  row directly to the approved leave record for auditable compliance.
+
+
+================================================================================
+4. STUDENT PANEL: MULTI-DAY PERIOD LEAVE REQUEST UI & LOGIC
+================================================================================
+Affected Files:
+- `html/student_dashboard.html`
+- `backend/student_dashboard.js`
+- `Student panel app idea/APK_Student_Panel/student_dashboard.html`
+
+A. UI Components:
+-----------------
+Inside the Leave Request modal / section in the Student Dashboard:
+1. Leave Mode Toggle:
+   [ Single Day ]   [ Multiple Days / Period ]
+2. Dynamic Input Fields:
+   - When "Single Day" is selected: Shows single `Leave Date` picker.
+   - When "Multiple Days" is selected:
+     - `Start Date` (Calendar Picker, min = today)
+     - `End Date`   (Calendar Picker, min = Start Date)
+     - `Duration Display` (Auto-calculated badge: "Duration: 7 Days")
+     - Optional Quick-Select Chips: [+2 Days] [+3 Days] [+5 Days] [+7 Days] [+10 Days]
+3. Reason & Document Upload:
+   - Textarea for medical or personal explanation.
+   - Medical Certificate attachment (Image/PDF up to 10MB) for AI Verification.
+
+B. Client-Side Validation Logic (in `backend/student_dashboard.js`):
+-------------------------------------------------------------------
+```javascript
+function calculateLeaveDuration() {
+    const startVal = document.getElementById('leaveStartDate').value;
+    const endVal = document.getElementById('leaveEndDate').value;
+    const durationBadge = document.getElementById('leaveDurationBadge');
+
+    if (!startVal || !endVal) {
+        durationBadge.innerText = 'Select valid dates';
+        return 0;
+    }
+
+    const start = new Date(startVal);
+    const end = new Date(endVal);
+
+    if (end < start) {
+        showToast('End date cannot be earlier than start date!', 'error');
+        document.getElementById('leaveEndDate').value = startVal;
+        return 1;
+    }
+
+    // Difference in calendar days inclusive
+    const diffTime = Math.abs(end - start);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+    durationBadge.innerHTML = `<i class="fa-solid fa-calendar-days"></i> Total Duration: <strong>${diffDays} Day(s)</strong>`;
+    return diffDays;
+}
+```
+
+C. API Payload Structure to Backend:
+------------------------------------
+```json
+{
+  "action": "submit_leave",
+  "studentId": "23BCA101",
+  "studentName": "Aarav Sharma",
+  "targetProfessor": "Dr. Ramesh Verma",
+  "startDate": "2026-10-26",
+  "endDate": "2026-10-31",
+  "durationDays": 6,
+  "date": "2026-10-26",
+  "reason": "Severe viral fever and typhoid doctor prescribed bed rest.",
+  "image": "data:image/jpeg;base64,...",
+  "pdf": null
+}
+```
+
+
+================================================================================
+5. AUTOMATED NOTIFICATION ENGINE: LEAVE REQUEST & DURATION ALERTS
+================================================================================
+Affected Files:
+- `server/server.js` (inside `action === 'submit_leave'` & `action === 'resolve_leave'`)
+
+A. Parent Notification Upon Leave Submission:
+---------------------------------------------
+When a student submits a leave request, an instant notification is dispatched to 
+the student's registered parent email address (`Parent_Email`).
+
+* Email Subject:
+  `SmartAttend — Leave Application Submitted: [Student Name] ([Duration] Days)`
+
+* Professional HTML Email Template Content:
+  - Header: SmartAttend Official Academic Notification
+  - Ward Details: Name, Roll Number, Department, Semester
+  - Leave Period: From [Start Date] to [End Date] (Formatted: "26 Oct 2026 to 31 Oct 2026")
+  - Total Duration: [X] Days
+  - Stated Reason: [Student Reason]
+  - Medical Document: [Attached / Under AI Verification]
+  - Status: "Submitted — Awaiting Professor Review"
+  - Note: "You will receive an automated confirmation as soon as the professor approves or rejects this leave request."
+
+B. Parent & Student Notification Upon Resolution:
+-------------------------------------------------
+When the professor clicks "Approve":
+- Student receives approval email.
+- Parent receives confirmation:
+  `SmartAttend — Medical Leave Approved: [Student Name] (26 Oct 2026 to 31 Oct 2026)`
+- Explicitly states: "Attendance records for lectures occurring within this 6-day window will be recorded as Authorized Leave."
+
+
+================================================================================
+6. PROFESSOR ATTENDANCE PORTAL: REAL-TIME LEAVE HIGHLIGHTING
+================================================================================
+Affected Files:
+- `html/dashboard1.html` (Manual & Face Scan Attendance)
+- `html/Lab_Attendance.html` (Lab Attendance Roster)
+- `server/server.js` (Endpoint to fetch active leaves for class)
+
+A. Data Fetching on Attendance Initialization:
+----------------------------------------------
+When a professor loads the attendance screen for Date `sessionDate`, Department `Dept`, 
+and Semester `Sem`:
+1. The frontend invokes a lightweight endpoint:
+   `GET /api/attendance/active-leaves?dept=BCA&date=2026-10-26`
+2. Backend Query in `server.js`:
+   ```javascript
+   const { data: activeLeaves } = await supabase
+     .from('LeaveRequests')
+     .select('studentId, studentName, startDate, endDate, durationDays, reason, status')
+     .eq('status', 'Approved') // or include 'Pending' based on college policy
+     .lte('startDate', sessionDate)
+     .gte('endDate', sessionDate);
+   ```
+3. An in-memory lookup map is generated in JavaScript:
+   ```javascript
+   const leaveMap = new Map();
+   activeLeaves.forEach(l => leaveMap.set(l.studentId.toUpperCase(), l));
+   ```
+
+B. Visual Highlighting in Attendance Roster:
+-------------------------------------------
+1. In Face Scan Card / Student Row:
+   - Normal Present Student: Clean dark glass card with green checkmark.
+   - Normal Absent Student: Red indicator badge.
+   - Student on Leave (Detected in `leaveMap`):
+     - Background: Glowing amber/cyan border (`border: 2px solid #f59e0b; background: rgba(245, 158, 11, 0.15);`).
+     - Badge: `<span class="badge-leave"><i class="fa-solid fa-umbrella-beach"></i> On Leave (${leave.durationDays} Days)</span>`
+     - Tooltip: Hovering shows: `"Leave Period: 26 Oct to 31 Oct | Reason: Viral Fever"`.
+     - Default Radio / Status: Auto-selected to `Leave` instead of `Absent`.
+
+2. In Lab Attendance Table:
+   - The row is highlighted with a soft warning tint.
+   - The status toggle shows: `[ Present ]  [ Absent ]  [ On Leave (Auto-Locked) ]`.
+   - Professor can still override manually if the student arrived unexpectedly.
+
+
+================================================================================
+7. SMART ABSENTEEISM SUPPRESSION: BLOCKING ABSENT EMAILS FOR LEAVE STUDENTS
+================================================================================
+Affected Files:
+- `server/server.js` (lines 3090-3150 and 3760-3840)
+
+A. The Core Problem to Solve:
+-----------------------------
+When a professor completes attendance, the backend iterates over all students marked 
+`status === 'Absent'` and triggers `sendEmail` with `getParentAbsentAlertTemplate`.
+If student `23BCA101` is marked absent, they would erroneously receive an alert.
+
+B. Backend Suppression Interceptor Logic:
+-----------------------------------------
+Inside `server.js` where absent emails are collected:
+
+```javascript
+// Step 1: Extract all student IDs initially flagged as absent
+const rawAbsentStudents = (students || []).filter(s => (s.status || '').toLowerCase() === 'absent');
+
+if (rawAbsentStudents.length > 0) {
+  const sessionDate = attendanceDate || new Date().toISOString().split('T')[0];
+
+  // Step 2: Query all active leaves covering this specific lecture date
+  const absentIds = rawAbsentStudents.map(s => String(s.id).trim().toUpperCase());
+  
+  const { data: activeLeaves } = await supabase
+    .from('LeaveRequests')
+    .select('studentId, status')
+    .in('status', ['Approved', 'Pending']) // Exempt both approved & pending leaves
+    .lte('startDate', sessionDate)
+    .gte('endDate', sessionDate);
+
+  const exemptedStudentIds = new Set(
+    (activeLeaves || []).map(l => String(l.studentId).trim().toUpperCase())
+  );
+
+  // Step 3: Filter OUT any student who has an active leave
+  const eligibleAbsentStudents = rawAbsentStudents.filter(s => {
+    const sId = String(s.id).trim().toUpperCase();
+    if (exemptedStudentIds.has(sId)) {
+      console.log(`[ALERT SUPPRESSED] Student ${sId} is on formal leave on ${sessionDate}. Suppressing absent email.`);
+      return false; // DO NOT SEND ABSENT EMAIL
+    }
+    return true; // Send standard absent alert
+  });
+
+  // Step 4: Dispatch emails ONLY to genuinely absent students
+  for (const absStudent of eligibleAbsentStudents) {
+    // Standard Parent & Student Absent Alert Dispatch...
+  }
+}
+```
+
+Key Advantage:
+- 100% Guaranteed zero false-positive emails to parents.
+- No spam or anxiety for parents whose children are recovering from illness or on permitted leave.
+
+
+================================================================================
+8. ATTENDANCE RECORD SYNCHRONIZATION & STATISTICAL INTEGRITY
+================================================================================
+When the professor saves attendance:
+
+1. Database Storage:
+   - Students present -> Recorded as `'Present'`.
+   - Students absent (unexcused) -> Recorded as `'Absent'`.
+   - Students on leave -> Recorded as `'Leave'` in `AttendanceHistory`.
+
+2. Percentage & Calculation Rule:
+   Institutions handle leave attendance in one of two standard ways (configurable in `Setting.html`):
+   - Option A (Exempt Model - Recommended): Total lectures attended = N, Total lectures conducted = (Total - Leave Days). The percentage is not penalized.
+   - Option B (Medical Duty Credit Model): Days with approved medical leave are marked with an asterisk (*) and credited towards the mandatory 75% university eligibility requirement.
+
+3. Analytics Dashboard Visibility:
+   - On the Professor and Student analytics charts, attendance splits into:
+     [ Present: 85% ]   [ Leave: 10% ]   [ Absent: 5% ]
+   - Gives professors, HoDs, and university auditors complete transparency.
+
+
+================================================================================
+9. EDGE CASES, SECURITY & VALIDATION RULES
+================================================================================
+1. Date Overlap Prevention:
+   - A student cannot submit two overlapping leave requests (e.g., submitting 26-29 Oct and then submitting 28-31 Oct). The system checks for range collisions and prompts the student to update the existing request.
+
+2. Maximum Period Limit:
+   - Set a maximum continuous leave threshold (e.g., 15 days). Leaves exceeding 15 days trigger an advisory prompt requiring HoD / Principal approval.
+
+3. Weekend & Holiday Inclusion:
+   - System displays an informational note: "Your leave includes 2 weekend days (Saturday & Sunday). Total academic lecture days affected: 5 days."
+
+4. Pending vs. Approved Leaves on Attendance Screen:
+   - Approved Leaves: Displayed with Green/Cyan badge (`[APPROVED LEAVE]`).
+   - Pending Leaves: Displayed with Amber badge (`[LEAVE PENDING REVIEW]`).
+   - Both suppress absent emails by default to prevent unfair penalization while the professor's review is pending.
+
+5. Early Return / Cancellation:
+   - If a student recovers early and attends class on Oct 28 (despite leave granted till Oct 31), when their face is recognized by the camera, the system automatically registers them as `Present` and records an early return note.
+
+
+================================================================================
+10. PHASED IMPLEMENTATION ROADMAP
+================================================================================
+When ready to execute this upgrade, the work should proceed in the following order:
+
+Phase 1: Database Migration
+- Run the SQL migration script in Supabase SQL Editor to add `startDate`, `endDate`, 
+  `durationDays`, and `leaveType` to `LeaveRequests`.
+- Backfill legacy records.
+
+Phase 2: Student Panel Multi-Day UI Upgrade
+- Add date range picker and auto-duration calculation badge to `student_dashboard.html`.
+- Update `backend/student_dashboard.js` to format and submit start/end dates.
+- Mirror changes into the APK student panel.
+
+Phase 3: Automated Parent Notification Template
+- Update `server/server.js` (`action === 'submit_leave'` and `action === 'resolve_leave'`)
+  to include the multi-day range and total days in parent notifications.
+
+Phase 4: Professor Roster Visual Badges (Face Scan & Lab Attendance)
+- Implement `GET /api/attendance/active-leaves` endpoint in `server.js`.
+- Add visual highlighting and "On Leave" badges to `html/dashboard1.html` and 
+  `html/Lab_Attendance.html`.
+
+Phase 5: Absent Notification Suppression Filter
+- Implement the `exemptedStudentIds` interceptor in `server.js` during attendance saving.
+- Test with sample students to ensure zero absent emails fire for on-leave students.
+
+Phase 6: End-to-End Verification & Documentation Update
+- Validate single-day, 2-day, 7-day, and 10-day leave flows.
+- Verify that regular attendance updates properly with 'Leave' status.
+
+================================================================================
+END OF BLUEPRINT
+================================================================================

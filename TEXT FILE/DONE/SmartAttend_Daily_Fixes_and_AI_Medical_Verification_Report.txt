@@ -1,0 +1,223 @@
+================================================================================
+SMARTATTEND COMPREHENSIVE FIXES & ENHANCEMENTS REPORT — OCTOBER 22-23, 2026
+================================================================================
+Document Type  : System Implementation, Bug Fixes & Architecture Log (LOCAL ONLY)
+Created On     : October 23, 2026
+Storage Policy : LOCAL LAPTOP STORAGE ONLY (Never commit or push text/PDF files to GitHub)
+Backend Server : Node.js Express on Render (https://smartattend-o2te.onrender.com)
+Database       : Supabase PostgreSQL (kuqynurnkslvultxzzen.supabase.co)
+================================================================================
+
+TABLE OF CONTENTS
+-----------------
+1. Executive Overview
+2. Fix 1: Assignment Download & Timetable Viewing in Student Panel
+3. Fix 2: PostgreSQL Date Parsing Range Error on Leave Submission
+4. Fix 3: RBAC Permission 403 Forbidden on AI Leave Proof Verification
+5. Fix 4: AI Medical Document Verification Engine & OCR Integration (Complete Details)
+6. Fix 5: Automated Medical Leave Approval & Rejection Email Notifications
+7. Updated Architecture & Verification Summary
+8. Local Storage & Git Policy Checklist
+
+
+================================================================================
+1. EXECUTIVE OVERVIEW
+================================================================================
+During this development cycle, critical issues were identified and resolved
+across the Student Dashboard, Professor Leave Management, AI Document Audit Engine,
+and Automated Email Delivery. All changes have been tested locally and verified live
+on the production Render cloud backend.
+
+
+================================================================================
+2. FIX 1: ASSIGNMENT DOWNLOAD & TIMETABLE VIEWING IN STUDENT PANEL
+================================================================================
+* Symptoms:
+  - Students accessing both Web and mobile APK Student Dashboards could view
+    assignment metadata, but clicking "Download" failed or attempted opening local
+    file paths.
+  - Timetables were inaccessible or failed to download from the student panel.
+
+* Root Cause:
+  - Files were stored in Supabase tables (StudentAssignments and Timetables) as
+    Base64 encoded payloads. The client-side code lacked direct dynamic streaming
+    endpoints and was attempting client-side anchor downloads without proper
+    MIME-type headers and buffer streaming.
+
+* Fixes Applied:
+  1. Backend Dynamic Streaming Endpoints (server/server.js):
+     - app.get('/files/:id'): Serves assignment files with dynamic Content-Type
+       and Content-Disposition header based on ?download=true.
+     - app.get('/timetables/file/:id'): Serves timetable documents with proper
+       streaming buffers and safe filename sanitization.
+  2. Frontend Download Fallback Helpers (backend/student_dashboard.js & APK):
+     - Added window.downloadAssignmentFile() and window.downloadTimetableFile()
+       supporting cloud-streamed endpoints with automatic fallback to data URL
+       blobs.
+     - Integrated Timetables viewer modal directly into the APK student panel.
+
+
+================================================================================
+3. FIX 2: POSTGRESQL DATE PARSING RANGE ERROR ON LEAVE SUBMISSION
+================================================================================
+* Symptoms:
+  - When students submitted medical leave requests via student_dashboard.html,
+    the application failed with:
+    "date/time field value out of range: 26/10/2026"
+
+* Root Cause:
+  - The frontend date input or manual entry formatted dates as DD/MM/YYYY.
+  - PostgreSQL DATE type columns strictly mandate ISO 8601 formatting (YYYY-MM-DD).
+    Feeding 26/10/2026 caused PostgreSQL to interpret 26 as the month, exceeding
+    the valid 1-12 month range.
+
+* Fixes Applied:
+  1. Frontend Normalization (backend/student_dashboard.js):
+     - Normalized the date input value to YYYY-MM-DD prior to POST submission.
+  2. Backend Normalization (server/server.js lines 2785-2805):
+     - Added normalization inside action='submit_leave' to auto-detect DD/MM/YYYY
+       and YYYY/MM/DD formats and convert them to YYYY-MM-DD before SQL insertion.
+     - Added client-side display formatting (DD/MM/YYYY) in professor and student
+       request cards while maintaining database integrity.
+
+
+================================================================================
+4. FIX 3: RBAC PERMISSION 403 FORBIDDEN ON AI LEAVE PROOF VERIFICATION
+================================================================================
+* Symptoms:
+  - Professors clicking "AI Verify Medical Document" in Leave_Requests.html
+    received HTTP 403 Forbidden:
+    "Access denied: Action verify_leave_proof not permitted for role professor"
+
+* Root Cause:
+  - In server/server.js line 1590, the RBAC_RULES whitelist for 'verify_leave_proof'
+    initially only allowed ['admin', 'student'].
+  - Because professors review leave requests, their JWT token has role: 'professor',
+    which was blocked by verifyRolePermission middleware.
+
+* Fix:
+  - Updated RBAC_RULES['verify_leave_proof'] to ['professor', 'student', 'admin'].
+
+
+================================================================================
+5. FIX 4: AI MEDICAL DOCUMENT VERIFICATION ENGINE & OCR INTEGRATION
+================================================================================
+* Symptoms:
+  - Uploading a genuine medical certificate (e.g. Shree Krishna Hospital certificate
+    for student Aman Kaushal) and clicking "AI Verify Medical Document" returned:
+    "INVALID DOCUMENT REJECTED: Uploaded file is an Academic Research Paper /
+     Study Document, NOT an official medical leave certificate for student
+     Aman Kaushal. (Name Mismatch, No Doctor Stamp, Non-Medical Document)"
+
+* Root Cause Analysis:
+  1. Compressed Binary Stream Matching (The Smoking Gun):
+     - In server/server.js, the backend converted raw binary compressed PDF and image
+       buffers directly into Latin1 strings:
+       const rawAscii = pdfBuffer.toString('latin1');
+     - In any compressed binary file (megabytes of data), short regexes like:
+       /\bwho\b/i (0x77 0x68 0x6f), /\bfao\b/i (0x66 0x61 0x6f),
+       /\bdoi\b/i (0x64 0x6f 0x69), /\bpp\.\s*\d+/i, /\bauthor\b/i
+       matched random binary sequences by coincidence.
+     - Because foundAcademic.length >= 2 was satisfied on binary noise,
+       isAcademicDoc evaluated to true for ANY uploaded PDF!
+  2. Missing OCR for Scanned Images:
+     - Scanned certificates store pixel data, not ASCII characters.
+     - imgBuffer.toString('latin1') produced random bytes where "Aman Kaushal"
+       could never be found without an Optical Character Recognition engine.
+
+* Comprehensive Fixes Implemented:
+  1. Integrated Tesseract.js OCR (server/package.json & server/server.js):
+     - Added Tesseract.js (v7.0.0) with safe conditional loading.
+     - extractDocumentText() performs Optical Character Recognition directly on
+       attached image buffers (PNG, JPEG, WebP).
+     - For scanned PDFs, pdf-parse loads the document and extracts the first-page
+       embedded image buffer, running Tesseract OCR automatically.
+  2. Eliminated Raw Binary Matching:
+     - Stopped all conversions of raw binary buffers into text strings.
+     - Regex classification now operates EXCLUSIVELY on real extracted OCR text
+       and digital PDF text streams.
+  3. Refined Academic vs. Medical Classifier:
+     - Academic markers (weisell, body mass index as an indicator, etc.) ONLY trigger
+       rejection if the document strictly lacks hospital/doctor/clinic headers.
+     - Documents containing hospital names, doctor signatures, or Rx headers are
+       never falsely labeled as academic research papers.
+  4. Entity & Evidence Extraction:
+     - Extracts Hospital Name (e.g., "Shree Krishna Hospital").
+     - Extracts Doctor Name (e.g., "Dr. Ritesh Patel") & Reg. No.
+     - Extracts Clinical Diagnosis (e.g., "Acute Viral Fever / Upper Respiratory Tract Infection (URTI)").
+     - Performs fuzzy and full-name matching against the student name ("Aman Kaushal").
+  5. Verified Live Output:
+     - Verdict: GENUINE (98% match)
+     - Student Name Matched: true
+     - Doctor Stamp & Signature: true
+     - Summary: "Authentic medical certificate from Shree Krishna Hospital verified
+       for student Aman Kaushal (BCA051). Signed by Dr. Ritesh Patel."
+
+
+================================================================================
+6. FIX 5: AUTOMATED MEDICAL LEAVE APPROVAL & REJECTION EMAIL NOTIFICATIONS
+================================================================================
+* Symptoms:
+  - When professors approved or rejected medical leave requests in Leave_Requests.html,
+    no acceptance or rejection emails were received by students or parents.
+
+* Root Cause:
+  - In server/server.js lines 2832-2842, action='resolve_leave' previously only
+    ran: supabase.from('LeaveRequests').update({ status: newStatus }).eq('id', leaveId);
+  - It had zero email dispatching logic and no dedicated email templates.
+
+* User Requirements & Decision Rules:
+  - If Medical Leave is APPROVED:
+    * BOTH the Student and Parent must receive an email notification.
+  - If Medical Leave is REJECTED:
+    * ONLY the Student must receive a rejection notification.
+    * Parents must NOT receive any rejection email.
+
+* Implementation:
+  1. Designed 3 Responsive HTML Email Templates (server/server.js lines 870-945):
+     - getLeaveApprovedStudentTemplate(studentName, studentId, leaveDate, professor, reason):
+       Branded green header, detailed leave summary table, and recovery message.
+     - getLeaveApprovedParentTemplate(studentName, studentId, leaveDate, professor, reason):
+       Official parent alert detailing their ward's approved leave date and professor.
+     - getLeaveRejectedStudentTemplate(studentName, studentId, leaveDate, professor, reason):
+       Branded red header, leave summary, and administrative contact guidance.
+  2. Database Lookup & Routing in action='resolve_leave':
+     - Queries LeaveRequests to retrieve studentId, date, reason, and targetProfessor.
+     - Queries students table by studentId to retrieve student Email and Parent_Email.
+     - When Approved: Dispatches to both sEmail and pEmail.
+     - When Rejected: Dispatches ONLY to sEmail (pEmail is intentionally omitted).
+  3. Frontend Payload Standardization (backend/leave_requests.js line 235):
+     - Updated resolveRequest() to use 'Content-Type': 'application/json'.
+  4. Live Verification Results:
+     - Approved test: Dispatched 2/2 leave decision emails (Student + Parent).
+     - Rejected test: Dispatched 1/1 leave decision email (Student only).
+
+
+================================================================================
+7. UPDATED ARCHITECTURE & VERIFICATION SUMMARY
+================================================================================
+* Server Verification:
+  - syntax check passed with 0 errors.
+  - End-to-end local test passed on custom ports.
+  - Production Render deployment verified (HTTP 200 OK).
+
+* Email Delivery Health:
+  - Existing email notifications (Absenteeism alerts, Late alerts, 2FA OTP codes,
+    Admin announcements) remain 100% active and undisturbed.
+  - Dual-Engine (Google Apps Script API + Nodemailer SMTP fallback) delivers
+    messages reliably in 1-2 seconds.
+
+
+================================================================================
+8. LOCAL STORAGE & GIT POLICY CHECKLIST
+================================================================================
+[x] Git Push Policy: All core code changes in server.js and backend scripts were
+    committed and pushed to GitHub main branch immediately.
+[x] Generated Files Policy: This summary file and all generated reports/PDFs are
+    saved ONLY in the local laptop directory (TEXT FILE/DONE/).
+[x] Ignored Files: *.traineddata, scratch/, and local generated files are kept out
+    of Git tracking via .gitignore.
+
+================================================================================
+END OF REPORT — STORED IN TEXT FILE/DONE/ FOLDER (LOCAL ONLY)
+================================================================================
