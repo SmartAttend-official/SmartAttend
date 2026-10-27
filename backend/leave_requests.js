@@ -41,11 +41,16 @@ async function renderRequests() {
     return;
   }
 
-  // Client-side date filter if needed (handles both YYYY-MM-DD and DD/MM/YYYY)
+  // Client-side date filter if needed (handles single date and multi-day range)
   if (dateFilter) {
     const [y, m, d] = dateFilter.split('-');
     const formattedFilter = `${d}/${m}/${y}`;
-    requests = requests.filter(req => req.date === dateFilter || req.date === formattedFilter);
+    requests = requests.filter(req => {
+      const s = req.startDate || req.date;
+      const e = req.endDate || req.date || s;
+      if (!s) return false;
+      return (dateFilter >= s && dateFilter <= e) || req.date === dateFilter || req.date === formattedFilter;
+    });
   }
 
   if (requests.length === 0) {
@@ -118,22 +123,38 @@ async function renderRequests() {
       actionsHTML = `<div style="margin-top: 16px; font-size: 13px; color: var(--text-muted); font-style: italic; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px;">Processed</div>`;
     }
 
-    let displayDate = req.date || 'N/A';
-    if (req.date && req.date.includes('-')) {
-      const p = req.date.split('-');
-      if (p.length === 3) displayDate = `${p[2]}/${p[1]}/${p[0]}`;
+    const formatReqDate = (raw) => {
+      if (!raw) return 'N/A';
+      if (raw.includes('-')) {
+        const p = raw.split('-');
+        if (p.length === 3) return `${p[2]}/${p[1]}/${p[0]}`;
+      }
+      return raw;
+    };
+
+    const sStart = req.startDate || req.date;
+    const sEnd = req.endDate || req.date || sStart;
+    const dur = req.durationDays || 1;
+    let periodHtml = '';
+
+    if (sStart && sEnd && sStart !== sEnd) {
+      periodHtml = `<div class="date" style="display: flex; align-items: center; flex-wrap: wrap; gap: 6px;"><i class="fa-solid fa-calendar-week" style="color: #60a5fa;"></i> Period: <strong>${formatReqDate(sStart)} — ${formatReqDate(sEnd)}</strong> <span style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4); padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700;">${dur} Days</span></div>`;
+    } else {
+      periodHtml = `<div class="date"><i class="fa-solid fa-calendar-day"></i> Requested Date: <strong>${formatReqDate(sStart)}</strong> (1 Day)</div>`;
     }
+
+    const typeBadge = req.leaveType ? `<span style="background: rgba(255,255,255,0.08); color: #94a3b8; border: 1px solid rgba(255,255,255,0.12); padding: 2px 7px; border-radius: 4px; font-size: 11px; margin-left: 8px;">${req.leaveType}</span>` : '';
 
     card.innerHTML = `
       <div class="request-header">
         <div class="student-info">
-          <h3>${req.studentName}</h3>
+          <h3>${req.studentName} ${typeBadge}</h3>
           <span>ID: ${req.studentId}</span>
         </div>
         <span class="status-badge" style="background: ${statusBadgeColor}22; color: ${statusBadgeColor}; border: 1px solid ${statusBadgeColor}44;">${req.status}</span>
       </div>
       <div class="request-body">
-        <div class="date">Requested Date: ${displayDate}</div>
+        ${periodHtml}
         <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;"><i class="fa-solid fa-clock"></i> Submitted: ${req.submittedAt || 'N/A'}</div>
         <p class="reason">${req.reason}</p>
         ${attachmentsHTML}

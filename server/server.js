@@ -245,6 +245,61 @@ const JWT_SECRET = process.env.JWT_SECRET || '55ebcfc623910c59dd6c32145391bd76ab
     console.warn('[2FA Bootstrap] Bootstrap error:', e.message);
   }
 
+  // ── Multi-Day Leave Schema Bootstrap ──
+  const ensureLeaveColumns = async () => {
+    try {
+      const { data: sample, error: sampleErr } = await supabase
+        .from('LeaveRequests')
+        .select('startDate, endDate, durationDays, leaveType')
+        .limit(1);
+
+      if (!sampleErr) {
+        console.log('[Leave Bootstrap] LeaveRequests table multi-day columns OK.');
+        return;
+      }
+
+      console.log('[Leave Bootstrap] Adding missing multi-day period columns to LeaveRequests table...');
+      const migrations = [
+        `ALTER TABLE "LeaveRequests" ADD COLUMN IF NOT EXISTS "startDate" DATE`,
+        `ALTER TABLE "LeaveRequests" ADD COLUMN IF NOT EXISTS "endDate" DATE`,
+        `ALTER TABLE "LeaveRequests" ADD COLUMN IF NOT EXISTS "durationDays" INTEGER DEFAULT 1`,
+        `ALTER TABLE "LeaveRequests" ADD COLUMN IF NOT EXISTS "leaveType" VARCHAR(50) DEFAULT 'Medical'`,
+        `UPDATE "LeaveRequests" SET "startDate" = "date", "endDate" = "date", "durationDays" = 1 WHERE "startDate" IS NULL AND "date" IS NOT NULL`,
+        `CREATE INDEX IF NOT EXISTS idx_leaverequests_student_range ON "LeaveRequests" ("studentId", "startDate", "endDate", "status")`
+      ];
+
+      const projectRef = (supabaseUrl || '').replace('https://', '').split('.')[0];
+      for (const sql of migrations) {
+        try {
+          const sqlResp = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${supabaseServiceKey}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ query: sql })
+          });
+          const sqlData = await sqlResp.json().catch(() => ({}));
+          if (sqlResp.ok) {
+            console.log(`[Leave Bootstrap] ✅ Ran: ${sql}`);
+          } else {
+            console.warn(`[Leave Bootstrap] SQL API returned: ${JSON.stringify(sqlData)}`);
+          }
+        } catch (mErr) {
+          console.warn('[Leave Bootstrap] Migration error:', mErr.message);
+        }
+      }
+    } catch (e) {
+      console.warn('[Leave Bootstrap] Schema check error:', e.message);
+    }
+  };
+
+  try {
+    await ensureLeaveColumns();
+  } catch (e) {
+    console.warn('[Leave Bootstrap] Error:', e.message);
+  }
+
   // Verify all tables have the column accessible
   const tables = ['BCA', 'MCA', 'BBA', 'MBA', 'ADMIN'];
   for (const table of tables) {
@@ -869,8 +924,35 @@ function getParentLateAlertTemplate(studentName, className, attendanceDate, late
     <p style="color:#64748b;font-size:12px;margin-bottom:0;">This is an automated notification from the SmartAttend System.</p></div>`;
 }
 
+// HTML Email Template for Submitted Leave Request (Parent Instant Notification)
+function getLeaveSubmittedParentTemplate(studentName, studentId, startDate, endDate, durationDays, professor, reason, leaveType) {
+  const periodText = (!endDate || startDate === endDate)
+    ? `${startDate}`
+    : `From ${startDate} to ${endDate} (${durationDays || 1} Days)`;
+
+  return `<div style="font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;padding:26px;border:1px solid #e2e8f0;border-radius:12px;background:#ffffff;max-width:520px;margin:auto;box-shadow:0 4px 18px rgba(0,0,0,0.05);">
+    <div style="background:linear-gradient(135deg,#3b82f6,#1d4ed8);padding:18px 22px;border-radius:8px;margin:-26px -26px 20px -26px;">
+      <h3 style="color:#ffffff;margin:0;font-size:18px;font-weight:700;">SmartAttend — Official Academic Leave Notice</h3>
+      <p style="margin:4px 0 0 0;color:#bfdbfe;font-size:12px;">Student Leave Application Notification</p>
+    </div>
+    <p style="color:#334155;font-size:14px;margin-top:0;">Dear Parent,</p>
+    <p style="color:#475569;font-size:14px;line-height:1.5;">This is to inform you that your ward, <strong>${studentName}</strong> (ID: <strong>${studentId}</strong>), has formally submitted a <strong>${leaveType || 'Medical'} Leave</strong> application for academic review.</p>
+    <div style="background:#f8fafc;padding:14px 16px;border-radius:8px;margin:16px 0;border-left:4px solid #3b82f6;font-size:13px;line-height:1.6;color:#334155;">
+      <div><strong>Student Name:</strong> ${studentName} (ID: ${studentId})</div>
+      <div><strong>Leave Period:</strong> <span style="color:#1d4ed8;font-weight:700;">${periodText}</span></div>
+      <div><strong>Total Duration:</strong> <strong>${durationDays || 1} Day${(durationDays || 1) > 1 ? 's' : ''}</strong></div>
+      <div><strong>Requested Professor:</strong> ${professor || 'Course Faculty'}</div>
+      <div><strong>Stated Reason:</strong> ${reason || 'Not specified'}</div>
+      <div style="margin-top:6px;"><strong>Status:</strong> <span style="display:inline-block;padding:2px 8px;border-radius:4px;background:#fef3c7;color:#b45309;font-weight:700;font-size:11px;">SUBMITTED — PENDING REVIEW</span></div>
+    </div>
+    <p style="color:#64748b;font-size:12px;line-height:1.4;">During this leave period, attendance alerts are withheld pending faculty review. You will receive an automated confirmation as soon as the professor approves or updates this request.</p>
+    <p style="color:#94a3b8;font-size:11px;margin-bottom:0;border-top:1px solid #f1f5f9;padding-top:10px;">SmartAttend Academic Attendance & Leave Management Subsystem</p>
+  </div>`;
+}
+
 // HTML Email Template for Approved Medical Leave (Student)
-function getLeaveApprovedStudentTemplate(studentName, studentId, leaveDate, professor, reason) {
+function getLeaveApprovedStudentTemplate(studentName, studentId, leavePeriodStr, professor, reason, durationDays) {
+  const durationLabel = (durationDays && durationDays > 1) ? ` (${durationDays} Days)` : '';
   return `<div style="font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;max-width:540px;margin:auto;background:#0b1120;color:#f8fafc;border-radius:16px;overflow:hidden;border:1px solid #1e293b;box-shadow:0 10px 30px rgba(0,0,0,0.5);">
     <div style="background:linear-gradient(135deg,#10b981,#059669);padding:26px 30px;text-align:left;">
       <h2 style="margin:0;font-size:22px;color:#ffffff;font-weight:700;">Medical Leave Approved</h2>
@@ -881,7 +963,7 @@ function getLeaveApprovedStudentTemplate(studentName, studentId, leaveDate, prof
       <p style="color:#cbd5e1;font-size:14px;line-height:1.5;">Your medical leave request has been reviewed and <strong style="color:#10b981;">Approved</strong> by your professor.</p>
       <table style="width:100%;border-collapse:collapse;margin:18px 0;font-size:13px;border-radius:8px;overflow:hidden;">
         <tr><td style="padding:10px 14px;background:#1e293b;color:#94a3b8;width:38%;">Student</td><td style="padding:10px 14px;background:#1e293b;color:#f8fafc;font-weight:600;">${studentName} (${studentId})</td></tr>
-        <tr><td style="padding:10px 14px;background:#0f172a;color:#94a3b8;">Leave Date</td><td style="padding:10px 14px;background:#0f172a;color:#f8fafc;font-weight:600;">${leaveDate}</td></tr>
+        <tr><td style="padding:10px 14px;background:#0f172a;color:#94a3b8;">Leave Period</td><td style="padding:10px 14px;background:#0f172a;color:#f8fafc;font-weight:600;">${leavePeriodStr}${durationLabel}</td></tr>
         <tr><td style="padding:10px 14px;background:#1e293b;color:#94a3b8;">Reviewed By</td><td style="padding:10px 14px;background:#1e293b;color:#f8fafc;font-weight:600;">${professor}</td></tr>
         <tr><td style="padding:10px 14px;background:#0f172a;color:#94a3b8;">Stated Reason</td><td style="padding:10px 14px;background:#0f172a;color:#cbd5e1;">${reason}</td></tr>
         <tr><td style="padding:10px 14px;background:#1e293b;color:#94a3b8;">Status</td><td style="padding:10px 14px;background:#1e293b;color:#10b981;font-weight:700;">APPROVED</td></tr>
@@ -897,24 +979,29 @@ function getLeaveApprovedStudentTemplate(studentName, studentId, leaveDate, prof
 }
 
 // HTML Email Template for Approved Medical Leave (Parent)
-function getLeaveApprovedParentTemplate(studentName, studentId, leaveDate, professor, reason) {
+function getLeaveApprovedParentTemplate(studentName, studentId, leavePeriodStr, professor, reason, durationDays) {
+  const durationLabel = (durationDays && durationDays > 1) ? ` (${durationDays} Days)` : '';
   return `<div style="font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;padding:26px;border:1px solid #e2e8f0;border-radius:12px;background:#ffffff;max-width:520px;margin:auto;box-shadow:0 4px 18px rgba(0,0,0,0.05);">
     <h3 style="color:#059669;margin-top:0;font-size:19px;font-weight:700;">Medical Leave Approved — Parent Notification</h3>
     <p style="color:#334155;font-size:14px;">Dear Parent,</p>
     <p style="color:#475569;font-size:14px;line-height:1.5;">This is to inform you that the medical leave request submitted for your ward, <strong>${studentName}</strong>, has been reviewed and <strong style="color:#059669;">Approved</strong>.</p>
     <div style="background:#f8fafc;padding:14px 16px;border-radius:8px;margin:16px 0;border-left:4px solid #10b981;font-size:13px;line-height:1.6;color:#334155;">
       <div><strong>Student Name:</strong> ${studentName} (ID: ${studentId})</div>
-      <div><strong>Date of Leave:</strong> ${leaveDate}</div>
+      <div><strong>Leave Period:</strong> <strong>${leavePeriodStr}${durationLabel}</strong></div>
       <div><strong>Status:</strong> <span style="color:#059669;font-weight:700;">Approved</span></div>
       <div><strong>Approved By:</strong> ${professor}</div>
       <div><strong>Reason:</strong> ${reason}</div>
+    </div>
+    <div style="background:rgba(16,185,129,0.1);padding:10px 12px;border-radius:6px;color:#065f46;font-size:12px;margin:12px 0;">
+      Attendance records for lectures occurring within this leave window will be recorded as Authorized Leave.
     </div>
     <p style="color:#64748b;font-size:12px;margin-bottom:0;">This is an official automated notification from the SmartAttend Academic System.</p>
   </div>`;
 }
 
 // HTML Email Template for Rejected Medical Leave (Student Only)
-function getLeaveRejectedStudentTemplate(studentName, studentId, leaveDate, professor, reason) {
+function getLeaveRejectedStudentTemplate(studentName, studentId, leavePeriodStr, professor, reason, durationDays) {
+  const durationLabel = (durationDays && durationDays > 1) ? ` (${durationDays} Days)` : '';
   return `<div style="font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;max-width:540px;margin:auto;background:#0b1120;color:#f8fafc;border-radius:16px;overflow:hidden;border:1px solid #1e293b;box-shadow:0 10px 30px rgba(0,0,0,0.5);">
     <div style="background:linear-gradient(135deg,#ef4444,#dc2626);padding:26px 30px;text-align:left;">
       <h2 style="margin:0;font-size:22px;color:#ffffff;font-weight:700;">Medical Leave Request Update</h2>
@@ -925,7 +1012,7 @@ function getLeaveRejectedStudentTemplate(studentName, studentId, leaveDate, prof
       <p style="color:#cbd5e1;font-size:14px;line-height:1.5;">Your medical leave request has been reviewed and <strong style="color:#ef4444;">Rejected</strong> by your professor.</p>
       <table style="width:100%;border-collapse:collapse;margin:18px 0;font-size:13px;border-radius:8px;overflow:hidden;">
         <tr><td style="padding:10px 14px;background:#1e293b;color:#94a3b8;width:38%;">Student</td><td style="padding:10px 14px;background:#1e293b;color:#f8fafc;font-weight:600;">${studentName} (${studentId})</td></tr>
-        <tr><td style="padding:10px 14px;background:#0f172a;color:#94a3b8;">Leave Date</td><td style="padding:10px 14px;background:#0f172a;color:#f8fafc;font-weight:600;">${leaveDate}</td></tr>
+        <tr><td style="padding:10px 14px;background:#0f172a;color:#94a3b8;">Leave Period</td><td style="padding:10px 14px;background:#0f172a;color:#f8fafc;font-weight:600;">${leavePeriodStr}${durationLabel}</td></tr>
         <tr><td style="padding:10px 14px;background:#1e293b;color:#94a3b8;">Reviewed By</td><td style="padding:10px 14px;background:#1e293b;color:#f8fafc;font-weight:600;">${professor}</td></tr>
         <tr><td style="padding:10px 14px;background:#0f172a;color:#94a3b8;">Stated Reason</td><td style="padding:10px 14px;background:#0f172a;color:#cbd5e1;">${reason}</td></tr>
         <tr><td style="padding:10px 14px;background:#1e293b;color:#94a3b8;">Status</td><td style="padding:10px 14px;background:#1e293b;color:#ef4444;font-weight:700;">REJECTED</td></tr>
@@ -1481,6 +1568,52 @@ app.get('/', authenticateToken, async (req, res) => {
       return res.json(data || []);
     }
 
+    // ── ACTIVE LEAVES QUERY (FOR PROFESSOR ROSTER & LEAVE BADGES) ──
+    if (sheet === 'active_leaves' || action === 'get_active_leaves') {
+      const rawDate = req.query.date || req.query.classDate;
+      let targetDate = new Date().toISOString().split('T')[0];
+      if (rawDate && typeof rawDate === 'string') {
+        const trimmed = rawDate.trim();
+        if (trimmed.includes('/')) {
+          const parts = trimmed.split('/');
+          if (parts.length === 3) {
+            if (parts[2].length === 4) targetDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+            else if (parts[0].length === 4) targetDate = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+          }
+        } else {
+          targetDate = trimmed.split('T')[0];
+        }
+      }
+
+      let query = supabase.from('LeaveRequests').select('*').in('status', ['Approved', 'Pending']);
+      if (req.query.profEmail) {
+        query = query.ilike('targetProfessor', req.query.profEmail.trim());
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        console.error("Fetch active leaves error:", error);
+        return res.status(500).json({ status: 'error', message: error.message });
+      }
+
+      const active = (data || []).filter(l => {
+        let s = l.startDate || l.date;
+        let e = l.endDate || l.date || s;
+        if (!s) return false;
+        if (typeof s === 'string' && s.includes('/')) {
+          const p = s.split('/');
+          if (p.length === 3 && p[2].length === 4) s = `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
+        }
+        if (typeof e === 'string' && e.includes('/')) {
+          const p = e.split('/');
+          if (p.length === 3 && p[2].length === 4) e = `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
+        }
+        return targetDate >= s && targetDate <= e;
+      });
+
+      return res.json({ status: 'success', activeLeaves: active });
+    }
+
     if ((sheet === 'subject_stats' || sheet === 'SubjectAttendance') && (email || studentId)) {
       let student = null;
       if (studentId) {
@@ -1669,7 +1802,8 @@ app.post('/', authenticateToken, async (req, res) => {
 
       // Student & Administrator Actions
       'submit_leave': ['student', 'admin'],
-      'verify_leave_proof': ['professor', 'student', 'admin']
+      'verify_leave_proof': ['professor', 'student', 'admin'],
+      'get_active_leaves': ['professor', 'student', 'admin']
     };
 
     if (action && RBAC_RULES[action]) {
@@ -2821,6 +2955,51 @@ Return ONLY valid JSON:
     }
 
     // ── D. LEAVE REQUEST ACTIONS ──
+    if (action === 'get_active_leaves') {
+      const rawDate = req.body.date || req.query.date;
+      let targetDate = new Date().toISOString().split('T')[0];
+      if (rawDate && typeof rawDate === 'string') {
+        const trimmed = rawDate.trim();
+        if (trimmed.includes('/')) {
+          const parts = trimmed.split('/');
+          if (parts.length === 3) {
+            if (parts[2].length === 4) targetDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+            else if (parts[0].length === 4) targetDate = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+          }
+        } else {
+          targetDate = trimmed.split('T')[0];
+        }
+      }
+
+      let query = supabase.from('LeaveRequests').select('*').in('status', ['Approved', 'Pending']);
+      if (req.body.profEmail || req.query.profEmail) {
+        query = query.ilike('targetProfessor', (req.body.profEmail || req.query.profEmail).trim());
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        console.error("Fetch active leaves error:", error);
+        return res.status(500).json({ status: 'error', message: error.message });
+      }
+
+      const active = (data || []).filter(l => {
+        let s = l.startDate || l.date;
+        let e = l.endDate || l.date || s;
+        if (!s) return false;
+        if (typeof s === 'string' && s.includes('/')) {
+          const p = s.split('/');
+          if (p.length === 3 && p[2].length === 4) s = `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
+        }
+        if (typeof e === 'string' && e.includes('/')) {
+          const p = e.split('/');
+          if (p.length === 3 && p[2].length === 4) e = `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
+        }
+        return targetDate >= s && targetDate <= e;
+      });
+
+      return res.json({ status: 'success', activeLeaves: active });
+    }
+
     if (action === 'submit_leave') {
       const leaveData = req.body.data || req.body;
       const {
@@ -2829,6 +3008,10 @@ Return ONLY valid JSON:
         studentName: rawStudentName,
         targetProfessor,
         date,
+        startDate: rawStartDate,
+        endDate: rawEndDate,
+        durationDays: rawDuration,
+        leaveType,
         reason,
         image,
         pdf
@@ -2847,39 +3030,88 @@ Return ONLY valid JSON:
         }
       }
 
-      let studentName = rawStudentName;
-      if (!studentName) {
-        const { data: std } = await supabase.from('students').select('Name').eq('ID', studentId).single();
-        if (std && std.Name) studentName = std.Name;
-      }
-
-      // Normalize date to YYYY-MM-DD for PostgreSQL DATE column
-      let normalizedDate = date;
-      if (date && typeof date === 'string') {
-        const trimmed = date.trim();
+      // Helper to format any date into YYYY-MM-DD
+      const normalizeDateString = (d) => {
+        if (!d) return null;
+        const trimmed = String(d).trim();
         if (trimmed.includes('/')) {
           const parts = trimmed.split('/');
           if (parts.length === 3) {
-            if (parts[2].length === 4) {
-              // DD/MM/YYYY -> YYYY-MM-DD
-              normalizedDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-            } else if (parts[0].length === 4) {
-              // YYYY/MM/DD -> YYYY-MM-DD
-              normalizedDate = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
-            }
+            if (parts[2].length === 4) return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+            if (parts[0].length === 4) return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
           }
         }
+        return trimmed.split('T')[0];
+      };
+
+      const todayStr = new Date().toISOString().split('T')[0];
+      let normStartDate = normalizeDateString(rawStartDate) || normalizeDateString(date) || todayStr;
+      let normEndDate = normalizeDateString(rawEndDate) || normStartDate;
+
+      // Ensure start <= end
+      if (normEndDate < normStartDate) {
+        const temp = normStartDate;
+        normStartDate = normEndDate;
+        normEndDate = temp;
       }
-      if (!normalizedDate) {
-        normalizedDate = new Date().toISOString().split('T')[0];
+
+      // Calculate duration in calendar days (inclusive)
+      const startMs = new Date(normStartDate).getTime();
+      const endMs = new Date(normEndDate).getTime();
+      const calculatedDuration = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)) + 1);
+      const durationDays = parseInt(rawDuration) || calculatedDuration;
+
+      // ── Overlap Prevention Check ──
+      try {
+        const { data: existingLeaves } = await supabase
+          .from('LeaveRequests')
+          .select('id, startDate, endDate, date, status')
+          .ilike('studentId', studentId.trim())
+          .in('status', ['Approved', 'Pending']);
+
+        if (existingLeaves && existingLeaves.length > 0) {
+          const overlap = existingLeaves.find(ex => {
+            const exStart = normalizeDateString(ex.startDate) || normalizeDateString(ex.date);
+            const exEnd = normalizeDateString(ex.endDate) || normalizeDateString(ex.date) || exStart;
+            if (!exStart) return false;
+            return (normStartDate <= exEnd && normEndDate >= exStart);
+          });
+
+          if (overlap) {
+            const oStart = overlap.startDate || overlap.date;
+            const oEnd = overlap.endDate || overlap.date || oStart;
+            return res.json({
+              status: 'error',
+              message: `You already have a ${overlap.status} leave request covering this window (${oStart} to ${oEnd}). Multiple overlapping leave requests are prohibited.`
+            });
+          }
+        }
+      } catch (overlapErr) {
+        console.warn('[submit_leave] Overlap check non-fatal error:', overlapErr.message);
+      }
+
+      let studentName = rawStudentName;
+      let parentEmail = '';
+      try {
+        const { data: std } = await supabase.from('students').select('*').ilike('ID', studentId.trim()).single();
+        if (std) {
+          if (std.Name && !studentName) studentName = std.Name;
+          parentEmail = (std.Parent_Email || std.ParentEmail || '').trim();
+        }
+      } catch (stdErr) {
+        console.warn('[submit_leave] Student lookup warning:', stdErr.message);
       }
 
       const leaveRecord = {
         id: rawId ? (isNaN(Number(rawId)) ? Date.now() : Number(rawId)) : Date.now(),
-        studentId: studentId,
+        studentId: studentId.trim(),
         studentName: studentName || 'Student',
         targetProfessor: (targetProfessor || '').trim(),
-        date: normalizedDate,
+        date: normStartDate, // Legacy column support
+        startDate: normStartDate,
+        endDate: normEndDate,
+        durationDays: durationDays,
+        leaveType: leaveType || 'Medical',
         reason: reason || '',
         image: image || null,
         pdf: pdf || null,
@@ -2887,17 +3119,45 @@ Return ONLY valid JSON:
         submittedAt: new Date().toISOString()
       };
 
-      const { error } = await supabase
-        .from('LeaveRequests')
-        .insert([leaveRecord]);
+      // Primary insertion with full multi-day schema
+      let { error } = await supabase.from('LeaveRequests').insert([leaveRecord]);
+
+      // Fallback: If new columns fail (legacy schema compatibility), insert standard fields
+      if (error && (error.message.includes('column') || error.code === '42703')) {
+        console.warn('[submit_leave] Retrying with legacy schema format...');
+        const legacyRecord = {
+          id: leaveRecord.id,
+          studentId: leaveRecord.studentId,
+          studentName: leaveRecord.studentName,
+          targetProfessor: leaveRecord.targetProfessor,
+          date: leaveRecord.date,
+          reason: `[${durationDays} Days: ${normStartDate} to ${normEndDate}] ` + (reason || ''),
+          image: leaveRecord.image,
+          pdf: leaveRecord.pdf,
+          status: 'Pending',
+          submittedAt: leaveRecord.submittedAt
+        };
+        const retryResult = await supabase.from('LeaveRequests').insert([legacyRecord]);
+        error = retryResult.error;
+      }
 
       if (error) {
         console.error("Database insert leave request error:", error);
         return res.json({ status: 'error', message: error.message });
       }
 
-      await logActivity('SUBMIT_LEAVE', `Student ${studentId} submitted leave request to professor ${targetProfessor}`);
-      return res.json({ status: 'success' });
+      // Automated instant notification to parent on leave submission
+      if (parentEmail && parentEmail.includes('@')) {
+        sendEmail({
+          to: parentEmail,
+          subject: `SmartAttend — Leave Application Submitted: ${studentName || 'Student'} (${durationDays} Days)`,
+          html: getLeaveSubmittedParentTemplate(studentName, studentId, normStartDate, normEndDate, durationDays, targetProfessor, reason, leaveType),
+          text: `Dear Parent, your ward ${studentName} (${studentId}) has submitted a leave application for ${normStartDate} to ${normEndDate} (${durationDays} days). Awaiting professor review.`
+        }).catch(e => console.error(`[submit_leave] Parent alert failed for ${parentEmail}:`, e.message));
+      }
+
+      await logActivity('SUBMIT_LEAVE', `Student ${studentId} submitted ${durationDays}-day leave request (${normStartDate} to ${normEndDate}) to professor ${targetProfessor}`);
+      return res.json({ status: 'success', durationDays, startDate: normStartDate, endDate: normEndDate });
     }
 
     if (action === 'resolve_leave') {
@@ -2936,7 +3196,12 @@ Return ONLY valid JSON:
         const pEmail = (student?.Parent_Email || student?.ParentEmail || '').trim();
         const sName = student?.Name || leaveRecord.studentName || 'Student';
         const sId = student?.ID || leaveRecord.studentId || studentId;
-        const leaveDate = leaveRecord.date || 'Recorded Date';
+
+        const sStart = leaveRecord.startDate || leaveRecord.date || 'Recorded Date';
+        const sEnd = leaveRecord.endDate || leaveRecord.date || sStart;
+        const duration = leaveRecord.durationDays || 1;
+        const leavePeriodStr = (sStart === sEnd) ? sStart : `From ${sStart} to ${sEnd}`;
+
         const profName = leaveRecord.targetProfessor || 'Professor';
         const reasonText = leaveRecord.reason || 'Medical issue';
 
@@ -2947,18 +3212,18 @@ Return ONLY valid JSON:
           if (sEmail && sEmail.includes('@')) {
             emailPromises.push(sendEmail({
               to: sEmail,
-              subject: `SmartAttend — Medical Leave Request Approved (${leaveDate})`,
-              html: getLeaveApprovedStudentTemplate(sName, sId, leaveDate, profName, reasonText),
-              text: `Dear ${sName}, your medical leave request for ${leaveDate} has been Approved by Professor ${profName}.`
+              subject: `SmartAttend — Medical Leave Request Approved (${leavePeriodStr})`,
+              html: getLeaveApprovedStudentTemplate(sName, sId, leavePeriodStr, profName, reasonText, duration),
+              text: `Dear ${sName}, your medical leave request for ${leavePeriodStr} (${duration} Days) has been Approved by Professor ${profName}.`
             }).catch(e => console.error(`[resolve_leave] Student approval email failed for ${sEmail}:`, e.message)));
           }
 
           if (pEmail && pEmail.includes('@')) {
             emailPromises.push(sendEmail({
               to: pEmail,
-              subject: `SmartAttend — Medical Leave Approved: ${sName}`,
-              html: getLeaveApprovedParentTemplate(sName, sId, leaveDate, profName, reasonText),
-              text: `Dear Parent, the medical leave request for your ward ${sName} (${sId}) for ${leaveDate} has been Approved by Professor ${profName}.`
+              subject: `SmartAttend — Medical Leave Approved: ${sName} (${duration > 1 ? `${duration} Days` : leavePeriodStr})`,
+              html: getLeaveApprovedParentTemplate(sName, sId, leavePeriodStr, profName, reasonText, duration),
+              text: `Dear Parent, the medical leave request for your ward ${sName} (${sId}) for ${leavePeriodStr} (${duration} Days) has been Approved by Professor ${profName}.`
             }).catch(e => console.error(`[resolve_leave] Parent approval email failed for ${pEmail}:`, e.message)));
           }
         } else if (newStatus === 'Rejected') {
@@ -2966,9 +3231,9 @@ Return ONLY valid JSON:
           if (sEmail && sEmail.includes('@')) {
             emailPromises.push(sendEmail({
               to: sEmail,
-              subject: `SmartAttend — Medical Leave Request Update (${leaveDate})`,
-              html: getLeaveRejectedStudentTemplate(sName, sId, leaveDate, profName, reasonText),
-              text: `Dear ${sName}, your medical leave request for ${leaveDate} was Rejected by Professor ${profName}.`
+              subject: `SmartAttend — Medical Leave Request Update (${leavePeriodStr})`,
+              html: getLeaveRejectedStudentTemplate(sName, sId, leavePeriodStr, profName, reasonText, duration),
+              text: `Dear ${sName}, your medical leave request for ${leavePeriodStr} was Rejected by Professor ${profName}.`
             }).catch(e => console.error(`[resolve_leave] Student rejection email failed for ${sEmail}:`, e.message)));
           }
         }
@@ -3069,8 +3334,12 @@ Return ONLY valid JSON:
             
             history.forEach(r => {
               const sessionKey = `${r.Date}_${r.Subject}`;
-              uniqueSessions.add(sessionKey);
-              if (['present', 'late'].includes((r.Status || '').toLowerCase().trim())) {
+              const st = (r.Status || '').toLowerCase().trim();
+              // Approved/formal leave does not penalize total class attendance ratio (Exempt model)
+              if (st !== 'leave' && st !== 'excused') {
+                uniqueSessions.add(sessionKey);
+              }
+              if (['present', 'late'].includes(st)) {
                 uniqueAttended.add(sessionKey);
               }
             });
@@ -3099,10 +3368,49 @@ Return ONLY valid JSON:
       let autoAlertsCount = 0;
       if (req.body.sendEmailAlerts) {
         try {
-          const absentStudents = (students || []).filter(s => (s.status || '').toLowerCase() === 'absent');
+          const rawAbsentStudents = (students || []).filter(s => (s.status || '').toLowerCase() === 'absent');
           const lateStudentsList = (students || []).filter(s => (parseInt(s.lateMinutes) || 0) > 0);
 
-          if (absentStudents.length > 0 || lateStudentsList.length > 0) {
+          if (rawAbsentStudents.length > 0 || lateStudentsList.length > 0) {
+            // ── Smart Absenteeism Suppression: Exempt students on active or pending leave ──
+            const sessionDate = date || new Date().toISOString().split('T')[0];
+            let exemptedStudentIds = new Set();
+            try {
+              const { data: activeLeaves } = await supabase
+                .from('LeaveRequests')
+                .select('studentId, startDate, endDate, date, status')
+                .in('status', ['Approved', 'Pending']);
+
+              exemptedStudentIds = new Set(
+                (activeLeaves || [])
+                  .filter(l => {
+                    let s = l.startDate || l.date;
+                    let e = l.endDate || l.date || s;
+                    if (!s) return false;
+                    if (typeof s === 'string' && s.includes('/')) {
+                      const p = s.split('/');
+                      if (p.length === 3 && p[2].length === 4) s = `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
+                    }
+                    if (typeof e === 'string' && e.includes('/')) {
+                      const p = e.split('/');
+                      if (p.length === 3 && p[2].length === 4) e = `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
+                    }
+                    return sessionDate >= s && sessionDate <= e;
+                  })
+                  .map(l => String(l.studentId).trim().toUpperCase())
+              );
+            } catch (leaveErr) {
+              console.warn('[save_session] Active leave suppression check warning:', leaveErr.message);
+            }
+
+            const absentStudents = rawAbsentStudents.filter(abs => {
+              const sId = String(abs.id).trim().toUpperCase();
+              if (exemptedStudentIds.has(sId)) {
+                console.log(`[ALERT SUPPRESSED] Student ${sId} is on formal leave on ${sessionDate}. Suppressing auto-absent alert.`);
+                return false;
+              }
+              return true;
+            });
             const allTargetIds = Array.from(new Set([...absentStudents, ...lateStudentsList].map(s => String(s.id).trim())));
             const idVariants = Array.from(new Set(allTargetIds.flatMap(id => [id, id.toUpperCase(), id.toLowerCase()])));
             const { data: dbStudents } = await supabase.from('students').select('*').in('ID', idVariants);
@@ -3765,16 +4073,69 @@ Return ONLY valid JSON:
     // ── EMAIL ABSENT STUDENTS ──
     if (action === 'email_students') {
       const { classInfo, students } = req.body;
-      const studentsToAlert = students || [];
-      const absentIds = studentsToAlert.map(s => String(s.id).trim()).filter(id => id !== '');
-
-      if (absentIds.length === 0) {
-        return res.json({ status: 'error', message: 'No student IDs received in alert request.' });
-      }
-
+      const rawStudentsToAlert = students || [];
       const { subject, date } = classInfo || {};
       const subjectName = subject || 'Academic Session';
       const classDate = date || new Date().toLocaleDateString('en-IN');
+
+      // ── Smart Absenteeism Suppression: Exempt students on active or pending leave ──
+      let sessionIsoDate = new Date().toISOString().split('T')[0];
+      if (date && typeof date === 'string') {
+        const trimmed = date.trim();
+        if (trimmed.includes('/')) {
+          const parts = trimmed.split('/');
+          if (parts.length === 3) {
+            if (parts[2].length === 4) sessionIsoDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+            else if (parts[0].length === 4) sessionIsoDate = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+          }
+        } else {
+          sessionIsoDate = trimmed.split('T')[0];
+        }
+      }
+
+      let exemptedStudentIds = new Set();
+      try {
+        const { data: activeLeaves } = await supabase
+          .from('LeaveRequests')
+          .select('studentId, startDate, endDate, date, status')
+          .in('status', ['Approved', 'Pending']);
+
+        exemptedStudentIds = new Set(
+          (activeLeaves || [])
+            .filter(l => {
+              let s = l.startDate || l.date;
+              let e = l.endDate || l.date || s;
+              if (!s) return false;
+              if (typeof s === 'string' && s.includes('/')) {
+                const p = s.split('/');
+                if (p.length === 3 && p[2].length === 4) s = `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
+              }
+              if (typeof e === 'string' && e.includes('/')) {
+                const p = e.split('/');
+                if (p.length === 3 && p[2].length === 4) e = `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
+              }
+              return sessionIsoDate >= s && sessionIsoDate <= e;
+            })
+            .map(l => String(l.studentId).trim().toUpperCase())
+        );
+      } catch (leaveErr) {
+        console.warn('[email_students] Active leave suppression check warning:', leaveErr.message);
+      }
+
+      const studentsToAlert = rawStudentsToAlert.filter(st => {
+        const sId = String(st.id).trim().toUpperCase();
+        if (exemptedStudentIds.has(sId)) {
+          console.log(`[ALERT SUPPRESSED] Student ${sId} is on formal leave on ${sessionIsoDate}. Suppressing manual absent alert.`);
+          return false;
+        }
+        return true;
+      });
+
+      const absentIds = studentsToAlert.map(s => String(s.id).trim()).filter(id => id !== '');
+
+      if (absentIds.length === 0) {
+        return res.json({ status: 'success', sent: 0, message: 'All absent students are excused on authorized leave.' });
+      }
 
       // Fetch all students (query case-insensitively with all variants)
       const idVariants = Array.from(new Set(absentIds.flatMap(id => [id, id.toUpperCase(), id.toLowerCase()])));

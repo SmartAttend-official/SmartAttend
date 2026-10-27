@@ -473,6 +473,26 @@
       border-color: #ef4444;
     }
 
+    .toggle-btn.leave.active {
+      background: rgba(245, 158, 11, 0.25);
+      color: #f59e0b;
+      border-color: #f59e0b;
+    }
+
+    .badge-leave {
+      background: rgba(245, 158, 11, 0.18);
+      color: #f59e0b;
+      border: 1px solid rgba(245, 158, 11, 0.45);
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      margin-left: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
     /* Face Scanning Animation */
     .scan-overlay {
       position: absolute;
@@ -996,9 +1016,29 @@
 
       // Dynamic data fetched from Google Sheets
       const API_URL = `${window.SMART_ATTEND_CONFIG.SCRIPT_URL}?sheet=student`;
+      let activeLeavesMap = new Map();
+
+      async function fetchActiveLeaves() {
+        try {
+          const today = new Date().toISOString().split('T')[0];
+          const activeDept = localStorage.getItem('activeClassDept') || '';
+          const res = await fetch(`${window.SMART_ATTEND_CONFIG.SCRIPT_URL}?sheet=active_leaves&date=${encodeURIComponent(today)}&dept=${encodeURIComponent(activeDept)}`);
+          const data = await res.json();
+          activeLeavesMap.clear();
+          const leaves = data.activeLeaves || (Array.isArray(data) ? data : []);
+          leaves.forEach(l => {
+            if (l.studentId) {
+              activeLeavesMap.set(String(l.studentId).trim().toUpperCase(), l);
+            }
+          });
+        } catch (err) {
+          console.warn('[ActiveLeaves] Failed to fetch active leaves:', err);
+        }
+      }
 
       async function fetchStudentsFromDB() {
         try {
+          await fetchActiveLeaves();
           const activeDept = localStorage.getItem('activeClassDept') || '';
           const activeSem = localStorage.getItem('activeClassSem') || '';
           const fetchUrl = `${window.SMART_ATTEND_CONFIG.SCRIPT_URL}?sheet=student&dept=${encodeURIComponent(activeDept)}&sem=${encodeURIComponent(activeSem)}`;
@@ -1012,12 +1052,20 @@
             return idA.localeCompare(idB, undefined, { numeric: true, sensitivity: 'base' });
           });
 
-          students = data.map(s => ({
-            id: s.ID || s.id || s.StudentID || s.Student_ID || s['Student ID'] || '',
-            name: s.Name || s.NAME || s['Student Name'] || s.Student_Name || s.StudentName || 'Unknown Student',
-            detected: s.Attendance_Status === 'Present',
-            rawEncoding: s.Face_Encoding // Grab encoding from the sheet column
-          }));
+          students = data.map(s => {
+            const cleanId = (s.ID || s.id || s.StudentID || s.Student_ID || s['Student ID'] || '').toString().trim();
+            const leave = activeLeavesMap.get(cleanId.toUpperCase());
+            const isPresetPresent = s.Attendance_Status === 'Present';
+            return {
+              id: cleanId,
+              name: s.Name || s.NAME || s['Student Name'] || s.Student_Name || s.StudentName || 'Unknown Student',
+              detected: isPresetPresent,
+              status: isPresetPresent ? 'present' : (leave ? 'leave' : 'absent'),
+              rawEncoding: s.Face_Encoding,
+              onLeave: Boolean(leave),
+              leaveInfo: leave || null
+            };
+          });
           populateReport();
         } catch (e) {
           console.error("Failed to fetch from Google Sheets", e);
@@ -1079,17 +1127,38 @@
         tbody.empty();
 
         students.forEach((student) => {
-          const detectedStatus = student.detected
-            ? '<span style="color: #10b981;"><i class="fa-solid fa-check"></i> Present</span>'
-            : '<span style="color: #ef4444;"><i class="fa-solid fa-xmark"></i> Absent</span>';
+          let detectedStatus = '';
+          if (student.detected) {
+            detectedStatus = '<span style="color: #10b981;"><i class="fa-solid fa-check"></i> Present' + (student.onLeave ? ' (Early Return)' : '') + '</span>';
+          } else if (student.status === 'leave' || (student.onLeave && !student.detected)) {
+            detectedStatus = '<span style="color: #f59e0b;"><i class="fa-solid fa-umbrella-beach"></i> On Leave</span>';
+          } else {
+            detectedStatus = '<span style="color: #ef4444;"><i class="fa-solid fa-xmark"></i> Absent</span>';
+          }
 
-          const presentActive = student.detected ? 'active' : '';
-          const absentActive = student.detected ? '' : 'active';
+          const isPresent = Boolean(student.detected || student.status === 'present');
+          const isLeave = !student.detected && (student.status === 'leave' || (student.onLeave && student.status !== 'absent'));
+          const isAbsent = !isPresent && !isLeave;
+
+          const presentActive = isPresent ? 'active' : '';
+          const leaveActive = isLeave ? 'active' : '';
+          const absentActive = isAbsent ? 'active' : '';
+
+          let leaveBadgeHtml = '';
+          let rowStyle = '';
+          if (student.onLeave && student.leaveInfo) {
+            const l = student.leaveInfo;
+            rowStyle = 'background-color: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b;';
+            leaveBadgeHtml = `<span class="badge-leave" title="Leave Window: ${l.startDate || l.date} to ${l.endDate || l.date} (${l.durationDays || 1}d) — Reason: ${l.reason || 'Medical'}"><i class="fa-solid fa-umbrella-beach"></i> On Leave (${l.durationDays || 1}d)</span>`;
+          }
+          if ((student.lateMinutes || 0) > 0) {
+            rowStyle = 'background-color: rgba(239, 68, 68, 0.15);';
+          }
 
           const tr = `
-            <tr id="row-${student.id}" style="${(student.lateMinutes || 0) > 0 ? 'background-color: rgba(239, 68, 68, 0.15);' : ''}">
+            <tr id="row-${student.id}" style="${rowStyle}">
               <td>${student.id}</td>
-              <td><strong>${student.name}</strong></td>
+              <td><strong>${student.name}</strong> ${leaveBadgeHtml}</td>
               <td>${detectedStatus}</td>
               <td>
                 <input type="number" min="0" value="${student.lateMinutes || 0}" class="late-minutes-input" 
@@ -1099,6 +1168,7 @@
               <td>
                 <div class="status-toggle">
                   <button class="toggle-btn present ${presentActive}" onclick="overrideStatus(this, 'present')">Present</button>
+                  <button class="toggle-btn leave ${leaveActive}" onclick="overrideStatus(this, 'leave')">Leave</button>
                   <button class="toggle-btn absent ${absentActive}" onclick="overrideStatus(this, 'absent')">Absent</button>
                 </div>
               </td>
@@ -1115,8 +1185,9 @@
       let attendanceChartInstance = null;
 
       function updateAttendanceChart() {
-        const presentCount = students.filter(s => s.detected).length;
-        const absentCount = students.filter(s => !s.detected).length;
+        const presentCount = students.filter(s => s.detected || s.status === 'present').length;
+        const leaveCount = students.filter(s => !s.detected && (s.status === 'leave' || (s.onLeave && s.status !== 'absent' && s.status !== 'present'))).length;
+        const absentCount = students.filter(s => !s.detected && (s.status === 'absent' || (!s.status && !s.onLeave))).length;
 
         const ctx = document.getElementById('attendanceChart');
         if (!ctx) return;
@@ -1127,10 +1198,10 @@
         attendanceChartInstance = new Chart(ctx, {
           type: 'doughnut',
           data: {
-            labels: ['Present', 'Absent'],
+            labels: ['Present', 'On Leave', 'Absent'],
             datasets: [{
-              data: [presentCount, absentCount],
-              backgroundColor: ['#10b981', '#ef4444'],
+              data: [presentCount, leaveCount, absentCount],
+              backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
               borderWidth: 0,
               hoverOffset: 6
             }]
@@ -1149,6 +1220,10 @@
             <div style="display:flex;align-items:center;gap:10px;">
               <div style="width:12px;height:12px;border-radius:50%;background:#10b981;"></div>
               <span style="color:#f8fafc;font-size:15px;"><strong>${presentCount}</strong> Present</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:12px;height:12px;border-radius:50%;background:#f59e0b;"></div>
+              <span style="color:#f8fafc;font-size:15px;"><strong>${leaveCount}</strong> On Leave</span>
             </div>
             <div style="display:flex;align-items:center;gap:10px;">
               <div style="width:12px;height:12px;border-radius:50%;background:#ef4444;"></div>
@@ -1312,12 +1387,15 @@
       const student = students.find(s => String(s.id).trim() === studentId);
 
       if (student) {
+        student.status = status;
         student.detected = (status === 'present');
 
         // Update the status column visually
         const statusCol = row.find('td:nth-child(3)');
         if (status === 'present') {
-          statusCol.html('<span style="color: #10b981;"><i class="fa-solid fa-check"></i> Present</span>');
+          statusCol.html('<span style="color: #10b981;"><i class="fa-solid fa-check"></i> Present' + (student.onLeave ? ' (Early Return)' : '') + '</span>');
+        } else if (status === 'leave') {
+          statusCol.html('<span style="color: #f59e0b;"><i class="fa-solid fa-umbrella-beach"></i> On Leave</span>');
         } else {
           statusCol.html('<span style="color: #ef4444;"><i class="fa-solid fa-xmark"></i> Absent</span>');
         }
@@ -1384,10 +1462,16 @@
               late = parseInt(input.value) || 0;
             }
           }
+          let finalStatus = 'Absent';
+          if (s.detected || s.status === 'present') {
+            finalStatus = 'Present';
+          } else if (s.status === 'leave' || (s.onLeave && s.status !== 'absent')) {
+            finalStatus = 'Leave';
+          }
           return {
             id: s.id,
             name: s.name,
-            status: s.detected ? 'Present' : 'Absent',
+            status: finalStatus,
             lateMinutes: late
           };
         })
@@ -1540,9 +1624,10 @@
         return;
       }
 
-      const absentStudents = students.filter(s => !s.detected);
+      // Suppress alerting students who are marked Present or are on formal Leave
+      const absentStudents = students.filter(s => !s.detected && s.status !== 'leave' && (!s.onLeave || s.status === 'absent'));
       if (absentStudents.length === 0) {
-        showGlobalAlert('No absent students to alert!');
+        showGlobalAlert('No unexcused absent students to alert! (Students on formal leave are excused)');
         return;
       }
 

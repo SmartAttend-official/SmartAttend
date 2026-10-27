@@ -285,6 +285,24 @@
       box-shadow: 0 10px 20px rgba(16, 185, 129, 0.3);
     }
 
+    /* Quick Chips for Multi-Day Leave Selection */
+    .quick-chip-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--glass-border);
+      color: #94a3b8;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .quick-chip-btn:hover {
+      background: rgba(59, 130, 246, 0.25);
+      border-color: #3b82f6;
+      color: #ffffff;
+    }
+
     /* Custom File Uploads */
     .file-upload-wrapper {
       display: flex;
@@ -661,13 +679,69 @@
             <input type="email" id="targetProfessorManual" class="form-control" placeholder="Or type professor email manually (e.g. aman70dz@gmail.com)" style="margin-top: 8px;">
             <small style="color: var(--text-muted); display: block; margin-top: 4px;">If dropdown is empty, type the professor's email directly above.</small>
           </div>
+
+          <!-- Leave Type / Category -->
           <div class="form-group">
-            <label>Requested Date</label>
-            <input type="date" class="form-control" required>
+            <label>Leave Category / Type</label>
+            <select id="leaveType" class="form-control">
+              <option value="Medical" selected>🏥 Medical Leave (Illness / Hospitalization)</option>
+              <option value="Academic">🎓 Academic Duty / College Event / Seminar</option>
+              <option value="Emergency">🚨 Family / Personal Emergency</option>
+              <option value="Other">📝 Other Excused Absence</option>
+            </select>
           </div>
+
+          <!-- Leave Duration Mode Selector -->
+          <div class="form-group">
+            <label>Leave Duration</label>
+            <div style="display: flex; gap: 10px; margin-top: 4px;">
+              <button type="button" id="btnModeSingle" onclick="setLeaveDurationMode('single')" style="flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--accent-color, #10b981); background: rgba(16, 185, 129, 0.2); color: #fff; font-weight: 600; cursor: pointer; transition: 0.2s;">
+                <i class="fa-solid fa-calendar-day"></i> Single Day
+              </button>
+              <button type="button" id="btnModeMulti" onclick="setLeaveDurationMode('multi')" style="flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--glass-border); background: rgba(255, 255, 255, 0.05); color: var(--text-muted); font-weight: 600; cursor: pointer; transition: 0.2s;">
+                <i class="fa-solid fa-calendar-week"></i> Multiple Days / Period
+              </button>
+            </div>
+          </div>
+
+          <!-- Single Day Picker -->
+          <div class="form-group" id="singleDateGroup">
+            <label>Requested Date</label>
+            <input type="date" id="leaveSingleDate" class="form-control" required>
+          </div>
+
+          <!-- Multiple Days Pickers -->
+          <div class="form-group" id="multiDateGroup" style="display: none;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div>
+                <label>Start Date</label>
+                <input type="date" id="leaveStartDate" class="form-control" onchange="calculateLeaveDuration()">
+              </div>
+              <div>
+                <label>End Date</label>
+                <input type="date" id="leaveEndDate" class="form-control" onchange="calculateLeaveDuration()">
+              </div>
+            </div>
+
+            <!-- Quick Duration Chips -->
+            <div style="display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; align-items: center;">
+              <span style="font-size: 12px; color: var(--text-muted);">Quick Duration:</span>
+              <button type="button" class="quick-chip-btn" onclick="applyQuickDuration(2)">+2 Days</button>
+              <button type="button" class="quick-chip-btn" onclick="applyQuickDuration(3)">+3 Days</button>
+              <button type="button" class="quick-chip-btn" onclick="applyQuickDuration(5)">+5 Days</button>
+              <button type="button" class="quick-chip-btn" onclick="applyQuickDuration(7)">+7 Days</button>
+              <button type="button" class="quick-chip-btn" onclick="applyQuickDuration(10)">+10 Days</button>
+            </div>
+
+            <!-- Calculated Badge -->
+            <div id="leaveDurationBadge" style="margin-top: 10px; padding: 8px 14px; border-radius: 8px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.35); font-size: 13px; color: #93c5fd; display: inline-flex; align-items: center; gap: 8px;">
+              <i class="fa-solid fa-calendar-days"></i> Total Duration: <strong>1 Day</strong>
+            </div>
+          </div>
+
           <div class="form-group">
             <label>Reason for Leave</label>
-            <textarea class="form-control" rows="2" placeholder="Explain your absence..." required></textarea>
+            <textarea class="form-control" id="leaveReason" rows="2" placeholder="Explain your absence..." required></textarea>
           </div>
           
           <div class="file-upload-wrapper">

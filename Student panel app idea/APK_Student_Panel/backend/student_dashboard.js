@@ -342,10 +342,112 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
+// ── MULTI-DAY LEAVE CONTROLLER & DURATION CALCULATION ──
+let currentLeaveMode = 'single';
+
+window.setLeaveDurationMode = function(mode) {
+  currentLeaveMode = mode;
+  const btnSingle = document.getElementById('btnModeSingle');
+  const btnMulti = document.getElementById('btnModeMulti');
+  const singleGroup = document.getElementById('singleDateGroup');
+  const multiGroup = document.getElementById('multiDateGroup');
+  const singleInput = document.getElementById('leaveSingleDate');
+  const startInput = document.getElementById('leaveStartDate');
+  const endInput = document.getElementById('leaveEndDate');
+
+  if (mode === 'single') {
+    if (btnSingle) {
+      btnSingle.style.border = '1px solid var(--accent-color, #10b981)';
+      btnSingle.style.background = 'rgba(16, 185, 129, 0.2)';
+      btnSingle.style.color = '#ffffff';
+    }
+    if (btnMulti) {
+      btnMulti.style.border = '1px solid var(--glass-border)';
+      btnMulti.style.background = 'rgba(255, 255, 255, 0.05)';
+      btnMulti.style.color = 'var(--text-muted)';
+    }
+    if (singleGroup) singleGroup.style.display = 'block';
+    if (multiGroup) multiGroup.style.display = 'none';
+    if (singleInput) singleInput.required = true;
+    if (startInput) startInput.required = false;
+    if (endInput) endInput.required = false;
+  } else {
+    if (btnMulti) {
+      btnMulti.style.border = '1px solid var(--accent-primary, #3b82f6)';
+      btnMulti.style.background = 'rgba(59, 130, 246, 0.2)';
+      btnMulti.style.color = '#ffffff';
+    }
+    if (btnSingle) {
+      btnSingle.style.border = '1px solid var(--glass-border)';
+      btnSingle.style.background = 'rgba(255, 255, 255, 0.05)';
+      btnSingle.style.color = 'var(--text-muted)';
+    }
+    if (singleGroup) singleGroup.style.display = 'none';
+    if (multiGroup) multiGroup.style.display = 'block';
+    if (singleInput) singleInput.required = false;
+    if (startInput) {
+      startInput.required = true;
+      if (!startInput.value) startInput.value = new Date().toISOString().split('T')[0];
+    }
+    if (endInput) {
+      endInput.required = true;
+      if (!endInput.value && startInput) endInput.value = startInput.value;
+    }
+    window.calculateLeaveDuration();
+  }
+};
+
+window.calculateLeaveDuration = function() {
+  const startVal = document.getElementById('leaveStartDate')?.value;
+  const endVal = document.getElementById('leaveEndDate')?.value;
+  const badge = document.getElementById('leaveDurationBadge');
+  if (!badge) return 1;
+
+  if (!startVal || !endVal) {
+    badge.innerHTML = '<i class="fa-solid fa-calendar-days"></i> Select valid start and end dates';
+    return 1;
+  }
+
+  const start = new Date(startVal);
+  const end = new Date(endVal);
+
+  if (end < start) {
+    badge.innerHTML = '<span style="color:#ef4444;"><i class="fa-solid fa-triangle-exclamation"></i> End date must be on or after start date!</span>';
+    return 0;
+  }
+
+  const diffTime = Math.abs(end - start);
+  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+  badge.innerHTML = `<i class="fa-solid fa-calendar-days"></i> Total Duration: <strong style="color:#60a5fa; margin-left: 4px;">${diffDays} Day${diffDays > 1 ? 's' : ''}</strong>`;
+  return diffDays;
+};
+
+window.applyQuickDuration = function(days) {
+  const startInput = document.getElementById('leaveStartDate');
+  const endInput = document.getElementById('leaveEndDate');
+  if (!startInput || !endInput) return;
+
+  if (!startInput.value) {
+    startInput.value = new Date().toISOString().split('T')[0];
+  }
+
+  const start = new Date(startInput.value);
+  const end = new Date(start);
+  end.setDate(start.getDate() + (days - 1));
+
+  const yyyy = end.getFullYear();
+  const mm = String(end.getMonth() + 1).padStart(2, '0');
+  const dd = String(end.getDate()).padStart(2, '0');
+  endInput.value = `${yyyy}-${mm}-${dd}`;
+
+  window.calculateLeaveDuration();
+};
+
 // Leave Form Submit Logic
 document.getElementById('leaveForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const btn = e.target.querySelector('button');
+  const btn = e.target.querySelector('button[type="submit"]');
   const original = btn.innerHTML;
   btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Submitting...';
   btn.disabled = true;
@@ -365,10 +467,41 @@ document.getElementById('leaveForm').addEventListener('submit', async (e) => {
       return;
     }
 
-    const rawDate = e.target.querySelector('input[type="date"]').value;
-    const date = rawDate; // Standard YYYY-MM-DD for database
-    const reason = e.target.querySelector('textarea').value;
-    
+    let startDate = '';
+    let endDate = '';
+    let durationDays = 1;
+
+    if (currentLeaveMode === 'single') {
+      startDate = document.getElementById('leaveSingleDate').value;
+      endDate = startDate;
+      durationDays = 1;
+    } else {
+      startDate = document.getElementById('leaveStartDate').value;
+      endDate = document.getElementById('leaveEndDate').value;
+      if (!startDate || !endDate) {
+        btn.innerHTML = original;
+        btn.disabled = false;
+        alert('Please select both start date and end date.');
+        return;
+      }
+      if (new Date(endDate) < new Date(startDate)) {
+        btn.innerHTML = original;
+        btn.disabled = false;
+        alert('End date cannot be earlier than start date.');
+        return;
+      }
+      durationDays = window.calculateLeaveDuration();
+      if (durationDays < 1) {
+        btn.innerHTML = original;
+        btn.disabled = false;
+        alert('Invalid date range.');
+        return;
+      }
+    }
+
+    const leaveType = document.getElementById('leaveType')?.value || 'Medical';
+    const reason = (document.getElementById('leaveReason')?.value || e.target.querySelector('textarea')?.value || '').trim();
+
     // Read files as base64
     const imageInput = document.getElementById('leaveImageInput');
     const pdfInput = document.getElementById('medicalPdfInput');
@@ -392,15 +525,17 @@ document.getElementById('leaveForm').addEventListener('submit', async (e) => {
       studentId: sessionStorage.getItem('studentId') || 'Unknown ID',
       studentName: sessionStorage.getItem('studentName') || 'Unknown Student',
       targetProfessor: targetProfessor,
-      date: date,
+      date: startDate, // Legacy field
+      startDate: startDate,
+      endDate: endDate,
+      durationDays: durationDays,
+      leaveType: leaveType,
       reason: reason,
       image: imageBase64,
       pdf: pdfBase64,
       status: 'Pending'
-      // submittedAt is now handled by the backend server for better accuracy
     };
 
-    // Save to Google Sheets instead of localStorage
     const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
     
     const response = await fetch(SCRIPT_URL, {
@@ -429,6 +564,7 @@ document.getElementById('leaveForm').addEventListener('submit', async (e) => {
         e.target.reset();
         document.getElementById('leaveFileName').innerText = 'No file selected';
         document.getElementById('medicalFileName').innerText = 'No file selected';
+        window.setLeaveDurationMode('single');
         renderLeaveHistory(); // Refresh after submission
       }
     }, 3000);
@@ -469,18 +605,33 @@ async function renderLeaveHistory() {
 
   const dateFilter = document.getElementById('studentLeaveDateFilter')?.value;
 
-  // Filter by date if active
+  // Filter by date if active (supports both single date & date within range)
   let myRequests = allRequests;
   if (dateFilter) {
     const [y, m, d] = dateFilter.split('-');
     const formattedFilter = `${d}/${m}/${y}`;
-    myRequests = allRequests.filter(req => req.date === dateFilter || req.date === formattedFilter);
+    myRequests = allRequests.filter(req => {
+      const s = req.startDate || req.date;
+      const e = req.endDate || req.date || s;
+      if (!s) return false;
+      return (dateFilter >= s && dateFilter <= e) || req.date === dateFilter || req.date === formattedFilter;
+    });
   }
 
   if (myRequests.length === 0) {
     container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 20px;">You haven\'t submitted any requests yet.</div>';
     return;
   }
+
+  // Helper date formatter
+  const formatFriendlyDate = (raw) => {
+    if (!raw) return 'N/A';
+    if (raw.includes('-')) {
+      const p = raw.split('-');
+      if (p.length === 3) return `${p[2]}/${p[1]}/${p[0]}`;
+    }
+    return raw;
+  };
 
   // Sort by submission date (newest first)
   myRequests.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
@@ -497,19 +648,28 @@ async function renderLeaveHistory() {
       statusBg = 'rgba(239, 68, 68, 0.15)';
     }
 
-    let displayDate = req.date || 'N/A';
-    if (req.date && req.date.includes('-')) {
-      const p = req.date.split('-');
-      if (p.length === 3) displayDate = `${p[2]}/${p[1]}/${p[0]}`;
+    const sStart = req.startDate || req.date;
+    const sEnd = req.endDate || req.date || sStart;
+    const dur = req.durationDays || 1;
+    let periodDisplay = '';
+
+    if (sStart && sEnd && sStart !== sEnd) {
+      periodDisplay = `<i class="fa-solid fa-calendar-range"></i> Period: <strong>${formatFriendlyDate(sStart)} — ${formatFriendlyDate(sEnd)}</strong> <span style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin-left: 6px;">${dur} Days</span>`;
+    } else {
+      periodDisplay = `<i class="fa-solid fa-calendar-day"></i> Date: <strong>${formatFriendlyDate(sStart)}</strong> (1 Day)`;
     }
 
+    const leaveTypeBadge = req.leaveType ? `<span style="background: rgba(255,255,255,0.08); color: #cbd5e1; border: 1px solid rgba(255,255,255,0.1); padding: 2px 7px; border-radius: 4px; font-size: 11px; margin-left: 8px;">${req.leaveType}</span>` : '';
+
     return `
-      <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--glass-border); border-radius: 12px; padding: 16px; display: flex; justify-content: space-between; align-items: center;">
+      <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--glass-border); border-radius: 12px; padding: 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
         <div>
-          <div style="font-weight: 600; color: white; margin-bottom: 2px;">Requested Date: ${displayDate}</div>
+          <div style="font-weight: 600; color: white; margin-bottom: 4px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px;">
+            ${periodDisplay} ${leaveTypeBadge}
+          </div>
           <div style="font-size: 11px; color: #60a5fa; margin-bottom: 6px;"><i class="fa-solid fa-clock"></i> Submitted: ${req.submittedAt || 'N/A'}</div>
-          <div style="font-size: 13px; color: var(--text-muted);">To Professor: ${req.targetProfessor}</div>
-          <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Reason: ${req.reason.substring(0, 60)}${req.reason.length > 60 ? '...' : ''}</div>
+          <div style="font-size: 13px; color: var(--text-muted);"><i class="fa-solid fa-chalkboard-user"></i> Professor: ${req.targetProfessor}</div>
+          <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Reason: ${req.reason ? req.reason.substring(0, 70) + (req.reason.length > 70 ? '...' : '') : 'N/A'}</div>
         </div>
         <div style="background: ${statusBg}; color: ${statusColor}; border: 1px solid ${statusColor}44; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 700; min-width: 85px; text-align: center;">
           ${req.status}
