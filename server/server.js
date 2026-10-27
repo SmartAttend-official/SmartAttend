@@ -3335,11 +3335,11 @@ Return ONLY valid JSON:
             history.forEach(r => {
               const sessionKey = `${r.Date}_${r.Subject}`;
               const st = (r.Status || '').toLowerCase().trim();
-              // Approved/formal leave does not penalize total class attendance ratio (Exempt model)
-              if (st !== 'leave' && st !== 'excused') {
-                uniqueSessions.add(sessionKey);
-              }
-              if (['present', 'late'].includes(st)) {
+              // All sessions count toward Total_Classes (leave = credited as attended)
+              uniqueSessions.add(sessionKey);
+              // 'present', 'late', AND 'leave' all count as Classes_Attended
+              // A student on approved leave is credited just like a present student
+              if (['present', 'late', 'leave'].includes(st)) {
                 uniqueAttended.add(sessionKey);
               }
             });
