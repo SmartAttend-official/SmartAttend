@@ -137,6 +137,13 @@ const generalLimiter = rateLimit({
   }
 });
 
+// ── DUPLICATE SESSION LOCK (Race-condition protection) ──────────────────────
+// Holds keys of sessions currently being saved: "date||subject||sem"
+// Prevents two simultaneous requests from both passing the DB check and
+// creating duplicate records before either one has finished writing.
+const _savingSessionLocks = new Set();
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Dynamic Rate Limiting Middleware: routes each request to its dedicated limiter
 app.use((req, res, next) => {
   // Allow OPTIONS preflight calls without rate limiting
@@ -3259,24 +3266,48 @@ Return ONLY valid JSON:
 
       const { subject, dept, sem, date } = classInfo;
 
-      // Fetch known departments to translate Code/Name
-      const { data: depts } = await supabase.from('Departments').select('*');
+      // ── STRICT DUPLICATE SESSION GUARD ─────────────────────────────────────
+      // Identity key: Date + Subject + Semester  (dept variations are irrelevant;
+      // a subject can only be taught once per day per semester).
+      const sessionLockKey = `${date}||${(subject || '').trim().toLowerCase()}||${(sem || '').trim().toLowerCase()}`;
 
-      // Check if session has already been saved today (Prevent duplicate sessions)
-      const { data: existingHist } = await supabase
+      // 1. Race-condition lock — block a concurrent request that hasn't written yet
+      if (_savingSessionLocks.has(sessionLockKey)) {
+        return res.json({
+          status: 'error',
+          duplicate: true,
+          message: `Attendance for "${subject}" on ${date} is already being saved. Please wait.`
+        });
+      }
+
+      // 2. Persistent DB check — reject if attendance was saved in a previous request
+      const { data: existingHist, error: dupCheckErr } = await supabase
         .from('AttendanceHistory')
         .select('ID')
         .eq('Date', date)
         .eq('Subject', subject)
-        .eq('Semester', sem);
+        .eq('Semester', sem)
+        .limit(1);
 
-      const alreadySaved = (existingHist || []).some(r => isDeptMatch(r.Department, dept, depts || []));
-
-      if (alreadySaved) {
-        return res.json({ status: 'error', message: 'This session has already been saved today.' });
+      if (dupCheckErr) {
+        console.warn('[save_session] Duplicate check query error:', dupCheckErr.message);
+        // Non-fatal: log and continue (don't silently skip the check)
       }
 
+      if ((existingHist || []).length > 0) {
+        return res.json({
+          status: 'error',
+          duplicate: true,
+          message: `Attendance for "${subject}" on ${date} has already been marked. You cannot mark it again.`
+        });
+      }
+
+      // 3. Acquire in-memory lock before writing
+      _savingSessionLocks.add(sessionLockKey);
+      // ───────────────────────────────────────────────────────────────────────
+
       // Record individual student history
+      try {
       for (const s of students) {
         const cleanSId = String(s.id).toLowerCase().trim();
 
@@ -3483,6 +3514,10 @@ Return ONLY valid JSON:
       }
 
       return res.json({ status: 'success', updated: students.length, alertsSent: autoAlertsCount });
+      } finally {
+        // Always release the in-memory lock so future sessions for this key are not blocked
+        _savingSessionLocks.delete(sessionLockKey);
+      }
     }
 
     // ── F. GENERAL ACADEMIC WRITES ──

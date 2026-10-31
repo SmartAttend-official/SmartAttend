@@ -1495,6 +1495,9 @@
           showGlobalAlert(msg);
           // Optionally hide the report after saving
           setTimeout(() => $("#attendanceReport").slideUp(), 2000);
+        } else if (result.duplicate) {
+          // Strict duplicate session rejection — show a clear, prominent message
+          showGlobalAlert(`⚠️ Attendance Already Marked!\n\n${result.message}\n\nOnly one attendance record is allowed per subject per day. The second attempt has been rejected — no data was changed.`);
         } else {
           showGlobalAlert('Error: ' + (result.message || 'Failed to save data.'));
         }

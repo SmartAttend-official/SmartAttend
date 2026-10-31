@@ -1178,6 +1178,11 @@
                 setTimeout(() => {
                     window.location.reload();
                 }, 2000);
+            } else if (result.duplicate) {
+                // Strict duplicate rejection — clear message, no reload
+                showAlert(`⚠️ Already Marked! ${result.message} No changes were made.`, true);
+                btn.innerHTML = originalText;
+                btn.disabled = false;
             } else {
                 showAlert(result.message || 'Error saving session', true);
             }
