@@ -544,9 +544,44 @@ async function logActivity(action, details) {
 // =========================================================================
 
 // A. Account-Level Login Lockout Engine (Mitigates distributed proxy/botnet attacks)
+// MED-5: In-memory Map is kept for speed, but lockouts are also persisted to Supabase
+// so they survive server restarts. On startup, in-memory state is hydrated from DB.
 const accountLockouts = new Map();
 const MAX_FAILED_LOGIN_ATTEMPTS = 5;
 const ACCOUNT_LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15-minute lockout
+
+// MED-5: Persist lockout to Supabase so it survives restarts
+async function persistLockoutToDb(email, state) {
+  try {
+    await supabase.from('SecurityEvents').upsert([{
+      Email: email.toLowerCase().trim(),
+      FailedAttempts: state.failedAttempts,
+      LockedUntil: state.lockedUntil || 0,
+      LastAttempt: state.lastAttempt,
+      UpdatedAt: Date.now()
+    }], { onConflict: 'Email' });
+  } catch (e) { /* silent — in-memory still works */ }
+}
+
+// MED-5: Load lockout state from Supabase on startup
+async function hydrateLockedAccountsFromDb() {
+  try {
+    const { data, error } = await supabase
+      .from('SecurityEvents')
+      .select('Email, FailedAttempts, LockedUntil, LastAttempt')
+      .gt('LockedUntil', Date.now());
+    if (error || !data) return;
+    for (const row of data) {
+      accountLockouts.set(row.Email, {
+        failedAttempts: row.FailedAttempts,
+        lockedUntil: row.LockedUntil,
+        lastAttempt: row.LastAttempt
+      });
+    }
+    if (data.length > 0) console.log(`[Startup] Hydrated ${data.length} active account lockout(s) from DB.`);
+  } catch (e) { /* silent */ }
+}
+setTimeout(hydrateLockedAccountsFromDb, 3000); // Run 3s after startup (Supabase client ready)
 
 function getAccountLockout(email) {
   if (!email) return null;
@@ -576,12 +611,16 @@ function recordFailedLogin(email) {
     logActivity('SECURITY_ALERT', `Account ${key} locked for 15 minutes due to ${state.failedAttempts} consecutive failed login attempts.`);
   }
   accountLockouts.set(key, state);
+  persistLockoutToDb(key, state); // MED-5: persist to Supabase
   return state;
 }
 
 function resetFailedLogin(email) {
   if (!email) return;
-  accountLockouts.delete(email.toLowerCase().trim());
+  const key = email.toLowerCase().trim();
+  accountLockouts.delete(key);
+  // MED-5: Clear from Supabase too
+  supabase.from('SecurityEvents').delete().eq('Email', key).then(() => {}).catch(() => {});
 }
 
 // B. Per-Email OTP Request Throttler (Stops email inbox bombing and SMTP exhaustion)
@@ -1865,8 +1904,32 @@ app.post('/', authenticateToken, async (req, res) => {
     // ── AI ASSISTANT ACTION ──
     // ── AI ASSISTANT ACTION ──
     if (action === 'ask_gemini') {
-      const prompt = req.body.prompt;
-      if (!prompt) return res.json({ status: 'error', message: 'Prompt is required.' });
+      const rawPrompt = req.body.prompt;
+      if (!rawPrompt) return res.json({ status: 'error', message: 'Prompt is required.' });
+
+      // MED-6: Prompt injection mitigations
+      // 1. Enforce maximum prompt length (prevents giant payloads that try to overflow the system prompt)
+      const MAX_PROMPT_LENGTH = 1000;
+      if (rawPrompt.length > MAX_PROMPT_LENGTH) {
+        return res.json({ status: 'error', message: `Prompt too long. Maximum ${MAX_PROMPT_LENGTH} characters allowed.` });
+      }
+      // 2. Strip common prompt injection patterns (ignore/forget/disregard system instructions etc.)
+      const INJECTION_PATTERNS = [
+        /ignore\s+(previous|above|all|prior|system)\s+(instructions?|prompts?|rules?|context)/gi,
+        /forget\s+(everything|all|previous|above|your\s+instructions?)/gi,
+        /disregard\s+(previous|all|above|prior|system)\s+(instructions?|prompts?|rules?)/gi,
+        /you\s+are\s+now\s+/gi,
+        /act\s+as\s+(if\s+you\s+are\s+)?a\s+(different|new|another|unrestricted|jailbreak|evil)/gi,
+        /\[SYSTEM\]/gi,
+        /<<SYS>>/gi,
+        /<\|system\|>/gi
+      ];
+      let prompt = rawPrompt;
+      for (const pattern of INJECTION_PATTERNS) {
+        prompt = prompt.replace(pattern, '[removed]');
+      }
+      // 3. Trim whitespace
+      prompt = prompt.trim();
 
       const apiKey = process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY.startsWith('AIzaSyBY60belKbg2wHUq') ? process.env.GEMINI_API_KEY.trim() : null;
       if (!apiKey) {

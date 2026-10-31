@@ -1508,6 +1508,10 @@
         // Save to offline queue
         let queue = [];
         try { queue = JSON.parse(localStorage.getItem('smartattend_offline_queue') || '[]'); } catch(err){}
+        // LOW-2: Purge stale entries older than 24h before pushing new ones
+        const MAX_Q_AGE_MS = 24 * 60 * 60 * 1000;
+        const nowMs = Date.now();
+        queue = queue.filter(item => item.timestamp && (nowMs - new Date(item.timestamp).getTime()) < MAX_Q_AGE_MS);
         queue.push({ payload: payload, timestamp: new Date().toISOString() });
         localStorage.setItem('smartattend_offline_queue', JSON.stringify(queue));
         showGlobalAlert('⚠️ Wi-Fi Disconnected! Attendance saved safely to device memory. It will auto-sync when connection is restored. 💾');
@@ -1521,6 +1525,22 @@
       let queue = [];
       try { queue = JSON.parse(localStorage.getItem('smartattend_offline_queue') || '[]'); } catch(e) { return; }
       if (!queue.length) return;
+
+      // LOW-2: Discard stale entries older than 24 hours — prevents indefinite accumulation
+      const MAX_QUEUE_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+      const now = Date.now();
+      const freshQueue = queue.filter(item => {
+        if (!item.timestamp) return false;
+        return (now - new Date(item.timestamp).getTime()) < MAX_QUEUE_AGE_MS;
+      });
+      if (freshQueue.length < queue.length) {
+        console.log(`[OfflineQueue] Discarded ${queue.length - freshQueue.length} stale queued item(s) older than 24h.`);
+      }
+      queue = freshQueue;
+      if (!queue.length) {
+        localStorage.setItem('smartattend_offline_queue', '[]');
+        return;
+      }
 
       const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
       const remainingQueue = [];

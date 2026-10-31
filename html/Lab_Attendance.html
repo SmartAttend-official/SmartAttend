@@ -1190,6 +1190,10 @@
             console.error("Network error while saving lab session:", e);
             let queue = [];
             try { queue = JSON.parse(localStorage.getItem('smartattend_offline_queue') || '[]'); } catch(err){}
+            // LOW-2: Purge stale entries (older than 24h) before adding new ones
+            const MAX_QUEUE_AGE_MS = 24 * 60 * 60 * 1000;
+            const now = Date.now();
+            queue = queue.filter(item => item.timestamp && (now - new Date(item.timestamp).getTime()) < MAX_QUEUE_AGE_MS);
             queue.push({ payload: payload, timestamp: new Date().toISOString() });
             localStorage.setItem('smartattend_offline_queue', JSON.stringify(queue));
             showAlert('⚠️ Wi-Fi Disconnected! Lab Attendance saved locally to device memory. Will auto-sync when restored. 💾');
