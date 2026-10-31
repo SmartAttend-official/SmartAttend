@@ -30,3 +30,6 @@ PDF/*.pdf
 *.pdf
 *.traineddata
 scratch/
+
+# Daily Change Log — LOCAL ONLY, never push to GitHub
+TEXT FILE/Daily_Change_Log/
