@@ -3292,9 +3292,11 @@ Return ONLY valid JSON:
         .limit(1);
 
       if (dupCheckErr) {
-        // Fatal — if we cannot confirm no duplicate exists, we must not proceed
-        console.error('[save_session] Duplicate check query failed:', dupCheckErr.message);
-        return res.status(500).json({ status: 'error', message: 'Could not verify duplicate session. Please try again.' });
+        // Non-fatal — log the error but do NOT block the save.
+        // The per-student skip below is the real safety net: even if this check
+        // fails due to a transient Supabase error, no existing record is ever
+        // overwritten because the per-student loop skips any record that exists.
+        console.warn('[save_session] Duplicate check query warning (non-fatal):', dupCheckErr.message);
       }
 
       if ((existingHist || []).length > 0) {
