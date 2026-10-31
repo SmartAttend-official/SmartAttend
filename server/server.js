@@ -3292,7 +3292,9 @@ Return ONLY valid JSON:
         .limit(1);
 
       if (dupCheckErr) {
-        console.warn('[save_session] Duplicate check query error:', dupCheckErr.message);
+        // Fatal — if we cannot confirm no duplicate exists, we must not proceed
+        console.error('[save_session] Duplicate check query failed:', dupCheckErr.message);
+        return res.status(500).json({ status: 'error', message: 'Could not verify duplicate session. Please try again.' });
       }
 
       if ((existingHist || []).length > 0) {
@@ -3321,34 +3323,27 @@ Return ONLY valid JSON:
           .eq('Subject', subject);
 
         if (existing && existing.length > 0) {
-          // Update it
-          const { error: updateErr } = await supabase
-            .from('AttendanceHistory')
-            .update({
-              Status: s.status || 'Present',
-              lateMinutes: s.lateMinutes || 0
-            })
-            .eq('StudentID', s.id)
-            .eq('Date', date)
-            .eq('Subject', subject);
-
-          if (updateErr) throw updateErr;
-        } else {
-          // Insert new one
-          const { error: insertErr } = await supabase
-            .from('AttendanceHistory')
-            .insert([{
-              Date: date,
-              Department: dept,
-              Semester: sem,
-              Subject: subject,
-              StudentID: s.id,
-              Status: s.status || 'Present',
-              lateMinutes: s.lateMinutes || 0
-            }]);
-
-          if (insertErr) throw insertErr;
+          // Record already exists — do NOT update. The session-level guard above
+          // should have blocked this case entirely. If we somehow reach here,
+          // silently skip to preserve the original attendance record.
+          console.warn(`[save_session] Skipping duplicate record for student ${s.id} on ${date} for ${subject}`);
+          continue;
         }
+
+        // Insert new record
+        const { error: insertErr } = await supabase
+          .from('AttendanceHistory')
+          .insert([{
+            Date: date,
+            Department: dept,
+            Semester: sem,
+            Subject: subject,
+            StudentID: s.id,
+            Status: s.status || 'Present',
+            lateMinutes: s.lateMinutes || 0
+          }]);
+
+        if (insertErr) throw insertErr;
       }
 
       // Sync overall totals for each student in the list
