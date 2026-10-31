@@ -8,6 +8,8 @@
   <title>SmartAttend Dashboard</title>
   <script src="../backend/config.js"></script>
   <script>
+    // MED-8 NOTE: isAuthenticated is a UX-only redirect guard — it is NOT a security control.
+    // Real security is enforced by JWT validation on every backend API call.
     if (sessionStorage.getItem('isAuthenticated') !== 'true') {
       window.location.replace('Login.html');
     } else {
@@ -1804,7 +1806,7 @@
     async function listModels() {
       const token = sessionStorage.getItem('token');
       if (!token) return "Error: You are not logged in.";
-      const serverUrl = window.SCRIPT_URL || "https://smartattend-o2te.onrender.com";
+      const serverUrl = window.SMART_ATTEND_CONFIG ? window.SMART_ATTEND_CONFIG.SCRIPT_URL : window.SCRIPT_URL; // HIGH-2: removed hardcoded fallback
       try {
         const response = await fetch(`${serverUrl}/`, {
           method: 'POST',
@@ -1827,7 +1829,7 @@
       const token = sessionStorage.getItem('token');
       if (!token) return "Error: You are not logged in.";
       
-      const serverUrl = window.SCRIPT_URL || "https://smartattend-o2te.onrender.com";
+      const serverUrl = window.SMART_ATTEND_CONFIG ? window.SMART_ATTEND_CONFIG.SCRIPT_URL : window.SCRIPT_URL; // HIGH-2: removed hardcoded fallback
       
       try {
         const response = await fetch(`${serverUrl}/`, {

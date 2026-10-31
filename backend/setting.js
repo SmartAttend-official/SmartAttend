@@ -300,7 +300,7 @@ window.loadProfTimetable = async () => {
 
     if (data.status === 'success' && data.data) {
       const t = data.data;
-      const SCRIPT_URL = (window.SMART_ATTEND_CONFIG && window.SMART_ATTEND_CONFIG.SCRIPT_URL) || 'https://smartattend-o2te.onrender.com';
+      const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL; // HIGH-2: removed hardcoded fallback URL
       const fileId = t.FileID;
       const viewUrl = fileId ? `${SCRIPT_URL}/timetables/file/${encodeURIComponent(fileId)}` : (t.ViewURL || '#');
       const downloadUrl = fileId ? `${SCRIPT_URL}/timetables/file/${encodeURIComponent(fileId)}?download=true` : (t.DownloadURL || viewUrl);

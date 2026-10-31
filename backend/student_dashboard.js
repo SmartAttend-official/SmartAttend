@@ -793,7 +793,7 @@ window.submitLabCode = async function() {
 
 // ── RENDER STUDENT ASSIGNMENTS ────────────────────────────────
 window.renderStudentAssignments = function() {
-  const SCRIPT_URL = (window.SMART_ATTEND_CONFIG && window.SMART_ATTEND_CONFIG.SCRIPT_URL) || 'https://smartattend-o2te.onrender.com';
+  const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL; // HIGH-2: removed hardcoded fallback URL
   const container = document.getElementById('studentAssignmentsList');
   if (!container) return;
 
