@@ -3267,42 +3267,43 @@ Return ONLY valid JSON:
       const { subject, dept, sem, date } = classInfo;
 
       // ── STRICT DUPLICATE SESSION GUARD ─────────────────────────────────────
-      // Identity key: Date + Subject + Semester  (dept variations are irrelevant;
-      // a subject can only be taught once per day per semester).
-      const sessionLockKey = `${date}||${(subject || '').trim().toLowerCase()}||${(sem || '').trim().toLowerCase()}`;
+      // Identity: Date + Subject (exact string).
+      // "DBMS" and "DBMS (Lab)" are different — so classroom and lab are
+      // independent. Each can only be saved ONCE per day.
+      const sessionLockKey = `${date}||${(subject || '').trim().toLowerCase()}`;
 
-      // 1. Race-condition lock — block a concurrent request that hasn't written yet
+      // 1. Race-condition lock — block a concurrent in-flight request
       if (_savingSessionLocks.has(sessionLockKey)) {
         return res.json({
           status: 'error',
           duplicate: true,
-          message: `Attendance for "${subject}" on ${date} is already being saved. Please wait.`
+          message: `Attendance for "${subject}" is already being saved right now. Please wait a moment.`
         });
       }
 
-      // 2. Persistent DB check — reject if attendance was saved in a previous request
+      // 2. DB check — has this subject already been saved today?
+      //    We only filter on Date + Subject (no Semester) to avoid any
+      //    format-mismatch false negatives.
       const { data: existingHist, error: dupCheckErr } = await supabase
         .from('AttendanceHistory')
         .select('ID')
         .eq('Date', date)
         .eq('Subject', subject)
-        .eq('Semester', sem)
         .limit(1);
 
       if (dupCheckErr) {
         console.warn('[save_session] Duplicate check query error:', dupCheckErr.message);
-        // Non-fatal: log and continue (don't silently skip the check)
       }
 
       if ((existingHist || []).length > 0) {
         return res.json({
           status: 'error',
           duplicate: true,
-          message: `Attendance for "${subject}" on ${date} has already been marked. You cannot mark it again.`
+          message: `Attendance for "${subject}" on ${date} has already been marked. You cannot mark it again for today.`
         });
       }
 
-      // 3. Acquire in-memory lock before writing
+      // 3. Acquire in-memory lock BEFORE writing so concurrent requests are blocked
       _savingSessionLocks.add(sessionLockKey);
       // ───────────────────────────────────────────────────────────────────────
 
