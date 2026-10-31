@@ -3284,9 +3284,11 @@ Return ONLY valid JSON:
       // 2. DB check — has this subject already been saved today?
       //    We only filter on Date + Subject (no Semester) to avoid any
       //    format-mismatch false negatives.
+      //    NOTE: select 'StudentID' (a guaranteed column) — not 'ID' which may
+      //    not exist or be case-sensitive, causing the query to silently fail.
       const { data: existingHist, error: dupCheckErr } = await supabase
         .from('AttendanceHistory')
-        .select('ID')
+        .select('StudentID')
         .eq('Date', date)
         .eq('Subject', subject)
         .limit(1);
@@ -3317,18 +3319,23 @@ Return ONLY valid JSON:
         const cleanSId = String(s.id).toLowerCase().trim();
 
         // Check if record already exists for this StudentID + Date + Subject
-        const { data: existing } = await supabase
+        // Use 'StudentID' — a guaranteed column — not 'ID' which may not exist.
+        const { data: existing, error: existingErr } = await supabase
           .from('AttendanceHistory')
-          .select('ID')
+          .select('StudentID')
           .eq('StudentID', s.id)
           .eq('Date', date)
-          .eq('Subject', subject);
+          .eq('Subject', subject)
+          .limit(1);
 
-        if (existing && existing.length > 0) {
-          // Record already exists — do NOT update. The session-level guard above
-          // should have blocked this case entirely. If we somehow reach here,
-          // silently skip to preserve the original attendance record.
-          console.warn(`[save_session] Skipping duplicate record for student ${s.id} on ${date} for ${subject}`);
+        if (existingErr) {
+          console.warn(`[save_session] Existence check failed for ${s.id}:`, existingErr.message);
+        }
+
+        if ((existing && existing.length > 0) || existingErr) {
+          // Record already exists (or check failed — err on side of caution): skip.
+          // This preserves the original attendance record and never overwrites it.
+          console.warn(`[save_session] Skipping: record exists or check failed for student ${s.id} on ${date} for ${subject}`);
           continue;
         }
 
