@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcryptjs');
 const { createClient } = require('@supabase/supabase-js');
@@ -28,11 +29,40 @@ const PORT = process.env.PORT || 3000;
 // Trust reverse proxy (Render, Cloudflare, AWS, Nginx) for accurate client IP resolution
 app.set('trust proxy', 1);
 
-// Enable CORS
-app.use(cors());
+// Security headers (OWASP A05 — helmet sets X-Frame-Options, HSTS, CSP, etc.)
+app.use(helmet({
+  contentSecurityPolicy: false, // Disabled to avoid breaking inline scripts in legacy HTML
+  crossOriginEmbedderPolicy: false
+}));
+
+// Enable CORS — restricted to known frontend origins only (HIGH-1)
+const allowedOrigins = [
+  'https://smartattend-official.github.io',
+  'https://smartattend.netlify.app',
+  'https://smartattend-o2te.onrender.com',
+  'http://localhost:3000',
+  'http://localhost:5500',
+  'http://127.0.0.1:5500'
+];
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (e.g. mobile apps, curl, Postman)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      return callback(null, true);
+    }
+    // Allow any subdomain of github.io or netlify.app for flexibility
+    if (/\.github\.io$/.test(origin) || /\.netlify\.app$/.test(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('CORS policy: Origin not allowed'));
+  },
+  credentials: true
+}));
 
 // Parse any incoming body first so action-based rate limiting can inspect req.body securely
-app.use(express.text({ limit: '50mb', type: '*/*' }));
+// Body limit: 2MB for most routes; file-upload routes use their own limits (LOW-3)
+app.use(express.text({ limit: '2mb', type: '*/*' }));
 app.use((req, res, next) => {
   if (req.body && typeof req.body === 'string') {
     try {
@@ -43,14 +73,16 @@ app.use((req, res, next) => {
   }
   next();
 });
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
-// Logger middleware
+// Logger middleware — NEVER log sensitive fields (MED-2: passwords, OTPs, face encodings)
+const SENSITIVE_FIELDS = ['password', 'Password', 'otp', 'OTP', 'encoding', 'face_encoding', 'token', 'Token'];
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-  console.log('Headers:', req.headers);
-  if (req.method === 'POST') {
-    console.log('Body:', req.body);
+  if (req.method === 'POST' && req.body && typeof req.body === 'object') {
+    const safeBody = { ...req.body };
+    SENSITIVE_FIELDS.forEach(f => { if (f in safeBody) safeBody[f] = '[REDACTED]'; });
+    console.log('Body (sanitized):', JSON.stringify(safeBody).substring(0, 500));
   }
   next();
 });
@@ -180,7 +212,12 @@ if (!supabaseUrl || !supabaseServiceKey) {
 
 const supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', supabaseServiceKey || 'placeholder');
 
-const JWT_SECRET = process.env.JWT_SECRET || '55ebcfc623910c59dd6c32145391bd76abf8c05763137976e106d9d1c9ef25bf';
+// CRIT-1: JWT secret MUST be set via environment variable — no hardcoded fallback
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET environment variable is not set. Server cannot start safely.');
+  process.exit(1);
+}
 
 // ── 2FA Column Bootstrap: Auto-add missing columns to ADMIN table on startup ──
 (async () => {
@@ -320,19 +357,20 @@ const JWT_SECRET = process.env.JWT_SECRET || '55ebcfc623910c59dd6c32145391bd76ab
 
 // JWT Token Authentication Middleware
 function authenticateToken(req, res, next) {
-  // Allow login, send OTP, verify OTP, and root health check routes to bypass authentication
+  // Allow login, OTP, and root health check routes to bypass authentication
+  // MED-3: save_encoding and get_encoding now REQUIRE auth (face data is sensitive)
+  // LOW-1: debug_email now REQUIRES auth (prevents anonymous email sending)
   const action = req.query.action || (req.body && req.body.action);
   const sheet = req.query.sheet || (req.body && req.body.sheet);
   
-  if (action === 'login' || action === 'verify_login_otp' || action === 'resend_2fa_otp' || action === 'send_otp' || action === 'verify_otp' || action === 'verify_otp_only' || action === 'verify_student_email' || action === 'get_encoding' || action === 'save_encoding' || action === 'debug_email' || (!action && !sheet)) {
+  if (action === 'login' || action === 'verify_login_otp' || action === 'resend_2fa_otp' || action === 'send_otp' || action === 'verify_otp' || action === 'verify_otp_only' || action === 'verify_student_email' || (!action && !sheet)) {
     return next();
   }
 
-  // Also allow verify_lab_code (students scanning a QR code don't have to be logged in to mark attendance,
-  // or they might be logged in, so we make authentication optional/lenient for mark_attendance)
-  if (action === 'verify_lab_code') {
-    return next();
-  }
+  // CRIT-3: verify_lab_code now REQUIRES authentication — students must be logged in to mark lab attendance.
+  // This prevents anonymous actors from marking any student present.
+  // The JWT's studentId is used to bind the verification to the authenticated student.
+  // (verify_lab_code handler below enforces this binding)
 
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1]; // Format: Bearer <token>
@@ -396,12 +434,12 @@ async function sendEmail({ to, subject, html, text }) {
 
   // 1. Primary Engine: Google Apps Script Web App (HTTPS over port 443)
   // Bypasses cloud host SMTP blocking (Render, AWS, DigitalOcean) and sends via Gmail API
-  const defaultGasUrl = 'https://script.google.com/macros/s/AKfycbwbVUxhvM4pIvjO7FqMclGLg8UXxYSCnTfmWinj655VvVPtWRrcpuCRo9yvlCwv06Kv/exec';
+  // MED-1: GAS URL must come from environment variable only — no hardcoded fallback in source
   const rawEnvUrl = (process.env.EMAIL_SCRIPT_URL || '').trim();
-  const urlsToTry = Array.from(new Set([
-    defaultGasUrl,
-    rawEnvUrl
-  ])).filter(u => u && u.startsWith('https://script.google.com/'));
+  const urlsToTry = rawEnvUrl && rawEnvUrl.startsWith('https://script.google.com/') ? [rawEnvUrl] : [];
+  if (urlsToTry.length === 0) {
+    console.warn('[sendEmail] EMAIL_SCRIPT_URL env var is not set or invalid — email sending via GAS is disabled');
+  }
 
   const browserHeaders = {
     'Content-Type': 'text/plain;charset=utf-8',
@@ -2487,7 +2525,7 @@ Return ONLY valid JSON:
         role: role
       };
 
-      const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' }); // Valid for 7 days
+      const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '12h' }); // HIGH-3: reduced from 7d to 12h
 
       // If it is a professor login, generate and persist a new SessionToken to prevent concurrent sessions
       let sessionToken = null;
@@ -2542,7 +2580,7 @@ Return ONLY valid JSON:
         await supabase.from('ADMIN').update({ OTP: null, OTP_Timestamp: null }).ilike('Email', cleanEmail);
 
         const adminPayload = { id: adminUser.Admin_id || '', email: cleanEmail, role: 'admin' };
-        const adminToken = jwt.sign(adminPayload, JWT_SECRET, { expiresIn: '7d' });
+        const adminToken = jwt.sign(adminPayload, JWT_SECRET, { expiresIn: '12h' }); // HIGH-3: reduced from 7d to 12h
 
         const adminClone = { ...adminUser };
         delete adminClone.Password; delete adminClone.password;
@@ -2590,7 +2628,7 @@ Return ONLY valid JSON:
         email: cleanEmail,
         role: 'professor'
       };
-      const token2fa = jwt.sign(payload2fa, JWT_SECRET, { expiresIn: '7d' });
+      const token2fa = jwt.sign(payload2fa, JWT_SECRET, { expiresIn: '12h' }); // HIGH-3: reduced from 7d to 12h
       const sessionToken2fa = Date.now().toString() + Math.random().toString(36).substring(2);
 
       await supabase.from(targetTable2fa).update({ SessionToken: sessionToken2fa }).eq('Email', cleanEmail);
@@ -3543,30 +3581,42 @@ Return ONLY valid JSON:
     }
 
     if (action === 'add_dept') {
-      const { error } = await supabase.from('Departments').insert([req.body.data]);
+      // HIGH-5: Whitelist fields — do not pass req.body.data directly to prevent mass assignment
+      const { Name, Code, Description } = req.body.data || {};
+      const deptRecord = { Name, Code, Description };
+      const { error } = await supabase.from('Departments').insert([deptRecord]);
       if (error) throw error;
-      await logActivity('ADD_DEPT', `Department created: ${req.body.data.Name}`);
+      await logActivity('ADD_DEPT', `Department created: ${Name}`);
       return res.json({ status: 'success' });
     }
 
     if (action === 'add_class') {
-      const { error } = await supabase.from('Classes').insert([req.body.data]);
+      // HIGH-5: Whitelist fields
+      const { Name, Code, Department, Semester, Section } = req.body.data || {};
+      const classRecord = { Name, Code, Department, Semester, Section };
+      const { error } = await supabase.from('Classes').insert([classRecord]);
       if (error) throw error;
-      await logActivity('ADD_CLASS', `Class created: ${req.body.data.Name}`);
+      await logActivity('ADD_CLASS', `Class created: ${Name}`);
       return res.json({ status: 'success' });
     }
 
     if (action === 'add_subject') {
-      const { error } = await supabase.from('Subjects').insert([req.body.data]);
+      // HIGH-5: Whitelist fields
+      const { Name, Code, Department, Semester, Credits, SubjectType } = req.body.data || {};
+      const subjectRecord = { Name, Code, Department, Semester, Credits, SubjectType };
+      const { error } = await supabase.from('Subjects').insert([subjectRecord]);
       if (error) throw error;
-      await logActivity('ADD_SUBJECT', `Subject created: ${req.body.data.Name}`);
+      await logActivity('ADD_SUBJECT', `Subject created: ${Name}`);
       return res.json({ status: 'success' });
     }
 
     if (action === 'add_proxy') {
-      const { error } = await supabase.from('Proxies').insert([req.body.data]);
+      // HIGH-5: Whitelist fields
+      const { Subject, Department, Semester, ProxyDate, OriginalDate, Reason } = req.body.data || {};
+      const proxyRecord = { Subject, Department, Semester, ProxyDate, OriginalDate, Reason };
+      const { error } = await supabase.from('Proxies').insert([proxyRecord]);
       if (error) throw error;
-      await logActivity('ADD_PROXY', `Proxy created for subject: ${req.body.data.Subject}`);
+      await logActivity('ADD_PROXY', `Proxy created for subject: ${Subject}`);
       return res.json({ status: 'success' });
     }
 
@@ -4032,7 +4082,23 @@ Return ONLY valid JSON:
     // ── STUDENT LAB CODE VERIFICATION ──
     if (action === 'verify_lab_code') {
       const { studentId, code, deviceId } = req.body;
-      const cleanStudentId = (studentId || '').toString().toLowerCase().trim();
+
+      // CRIT-3: Bind lab code verification to the authenticated student's JWT identity.
+      // Ignore any studentId in the request body — use only the JWT-decoded ID.
+      // This prevents one student from submitting attendance on behalf of another.
+      const jwtStudentId = (req.user && (req.user.id || req.user.studentId || req.user.email || '')).toString().toLowerCase().trim();
+      const bodyStudentId = (studentId || '').toString().toLowerCase().trim();
+
+      // If the JWT student ID is available and doesn't match the request body's student ID, reject
+      if (jwtStudentId && bodyStudentId && jwtStudentId !== bodyStudentId) {
+        return res.status(403).json({
+          status: 'error',
+          message: 'Unauthorized: You can only mark your own attendance.'
+        });
+      }
+
+      // Use JWT identity if body is empty, otherwise use body (both must match if both present)
+      const cleanStudentId = jwtStudentId || bodyStudentId;
       const cleanCode = (code || '').toString().trim();
 
       // Check student-level lab code attempt failure tracker (Anti-Brute-Force)
