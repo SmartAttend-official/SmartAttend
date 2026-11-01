@@ -636,11 +636,14 @@ async function renderStudentMgmt() {
                 <h2>Student Management</h2>
                 <p>Directory of all registered students. Assign classes or manage profiles.</p>
             </div>
-            <div style="display:flex; gap:10px;">
-                <button class="btn-cancel" onclick="document.getElementById('csvInput').click()">
-                    <i class="fa-solid fa-file-import"></i> Import CSV
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                <button class="btn-cancel" onclick="downloadStudentTemplate()" title="Download sample CSV template for import">
+                    <i class="fa-solid fa-download"></i> Template
                 </button>
-                <input type="file" id="csvInput" style="display:none" accept=".csv" onchange="importStudents(this)">
+                <button class="btn-cancel" onclick="document.getElementById('csvInput').click()" title="Import students from CSV or Excel file">
+                    <i class="fa-solid fa-file-import"></i> Import CSV / Excel
+                </button>
+                <input type="file" id="csvInput" style="display:none" accept=".csv, .xlsx, .xls" onchange="importStudents(this)">
                 <button class="btn-primary" onclick="showAddStudentModal()">
                     <i class="fa-solid fa-plus"></i> Add Student
                 </button>
@@ -837,6 +840,58 @@ async function renderStudentMgmt() {
                         <button type="submit" class="btn-primary">Save Changes</button>
                     </div>
                 </form>
+            </div>
+        </div>
+
+        <div id="bulkImportModal" class="modal-overlay" style="display:none;">
+            <div class="modal-content" style="max-width:750px; width:90%; max-height:90vh; overflow-y:auto;">
+                <div class="modal-header">
+                    <h3><i class="fa-solid fa-file-csv" style="color:#3b82f6;"></i> Bulk Import Students Preview</h3>
+                </div>
+                <div style="padding:15px 0;">
+                    <div style="display:flex; gap:12px; margin-bottom:15px; align-items:center; flex-wrap:wrap;">
+                        <span style="background:rgba(59,130,246,0.15); color:#60a5fa; padding:6px 14px; border-radius:20px; font-size:13px; font-weight:600; display:inline-flex; align-items:center; gap:6px;">
+                            <i class="fa-solid fa-file"></i> <span id="bulkFileName">file.csv</span>
+                        </span>
+                        <span style="background:rgba(16,185,129,0.15); color:#34d399; padding:6px 14px; border-radius:20px; font-size:13px; font-weight:600; display:inline-flex; align-items:center; gap:6px;">
+                            <i class="fa-solid fa-check"></i> <span id="bulkValidCount">0</span> Ready to Import
+                        </span>
+                        <span id="bulkInvalidBadge" style="background:rgba(239,68,68,0.15); color:#f87171; padding:6px 14px; border-radius:20px; font-size:13px; font-weight:600; display:none; align-items:center; gap:6px;">
+                            <i class="fa-solid fa-triangle-exclamation"></i> <span id="bulkInvalidCount">0</span> Skipped
+                        </span>
+                    </div>
+
+                    <p style="font-size:13px; color:var(--text-muted); margin-bottom:8px;">
+                        Preview of records to import (showing up to first 5 rows):
+                    </p>
+
+                    <div style="max-height:220px; overflow-y:auto; border:1px solid rgba(255,255,255,0.1); border-radius:8px; margin-bottom:15px;">
+                        <table class="mgmt-table" style="font-size:12px; margin:0; width:100%;">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Dept</th>
+                                    <th>Semester</th>
+                                    <th>Mobile</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bulkPreviewBody"></tbody>
+                        </table>
+                    </div>
+
+                    <div style="background:rgba(59,130,246,0.1); border-left:4px solid #3b82f6; padding:12px; border-radius:4px; font-size:12px; color:var(--text-muted); line-height:1.5;">
+                        <i class="fa-solid fa-circle-info" style="color:#3b82f6;"></i>
+                        Default password for newly registered students will be set to <strong>Welcome@123</strong>. Each student will receive a welcome email with their login credentials. Duplicate student IDs or emails will be skipped automatically.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-cancel" onclick="closeModal('bulkImportModal')">Cancel</button>
+                    <button type="button" id="confirmBulkImportBtn" class="btn-primary" onclick="confirmBulkImport()">
+                        <i class="fa-solid fa-cloud-arrow-up"></i> Confirm & Import (<span id="bulkConfirmCount">0</span>)
+                    </button>
+                </div>
             </div>
         </div>
     `;
@@ -1052,12 +1107,296 @@ window.executeBulkPromotion = async () => {
 };
 
 window.showAddStudentModal = () => document.getElementById('studentModal').style.display = 'flex';
+
+// ── BULK CSV / EXCEL STUDENT IMPORT SYSTEM ──
+window.downloadStudentTemplate = () => {
+    const csvContent = "ID,Name,Email,Parent_Email,Mobile,Department,Semester\n" +
+                       "2023001,John Doe,johndoe@example.com,parent.john@example.com,9876543210,BCA,1st sem\n" +
+                       "2023002,Jane Smith,janesmith@example.com,parent.jane@example.com,9876543211,MCA,1st sem\n" +
+                       "2023003,Rahul Verma,rahul.verma@example.com,parent.rahul@example.com,9876543212,B.Tech,3rd sem\n";
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'SmartAttend_Student_Import_Template.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast("Sample student import template downloaded!", "success");
+};
+
+function parseCSVLine(line) {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"' || char === "'") {
+            if (inQuotes && line[i + 1] === char) {
+                current += char;
+                i++;
+            } else {
+                inQuotes = !inQuotes;
+            }
+        } else if (char === ',' && !inQuotes) {
+            result.push(current.trim());
+            current = '';
+        } else {
+            current += char;
+        }
+    }
+    result.push(current.trim());
+    return result;
+}
+
+function parseCSVText(text) {
+    const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
+    if (lines.length < 2) return [];
+
+    const headers = parseCSVLine(lines[0]);
+    const results = [];
+
+    for (let i = 1; i < lines.length; i++) {
+        const values = parseCSVLine(lines[i]);
+        if (values.length === 0 || values.every(v => v === '')) continue;
+        const row = {};
+        headers.forEach((h, idx) => {
+            row[h] = values[idx] !== undefined ? values[idx] : '';
+        });
+        results.push(row);
+    }
+    return results;
+}
+
+function processParsedStudentRows(rows, fileName) {
+    if (!rows || rows.length === 0) {
+        showToast("No data rows found in uploaded file.", "error");
+        return;
+    }
+
+    const validStudents = [];
+    const invalidRows = [];
+
+    const findField = (row, patterns) => {
+        const keys = Object.keys(row);
+        for (const pattern of patterns) {
+            const foundKey = keys.find(k => {
+                const norm = k.toLowerCase().replace(/[\s\-_.]/g, '');
+                return norm === pattern.toLowerCase().replace(/[\s\-_.]/g, '');
+            });
+            if (foundKey && String(row[foundKey]).trim() !== '') {
+                return String(row[foundKey]).trim();
+            }
+        }
+        return '';
+    };
+
+    rows.forEach((row, idx) => {
+        const id = findField(row, ['id', 'rollno', 'rollnumber', 'enrollmentno', 'studentid', 'enrollment']);
+        const name = findField(row, ['name', 'fullname', 'studentname']);
+        const email = findField(row, ['email', 'studentemail', 'emailaddress']);
+        const parentEmail = findField(row, ['parentemail', 'fatheremail', 'motheremail', 'parent_email']);
+        const rawMobile = findField(row, ['mobile', 'mobilenumber', 'phone', 'phonenumber', 'contact']);
+        const dept = findField(row, ['department', 'dept', 'course', 'branch']);
+        const sem = findField(row, ['semester', 'sem']);
+
+        let mobile = rawMobile.replace(/[^\d]/g, '');
+        if (mobile.startsWith('91') && mobile.length === 12) {
+            mobile = mobile.substring(2);
+        }
+
+        let normSem = sem || '1st sem';
+        const semNum = normSem.replace(/[^0-9]/g, '');
+        if (semNum) {
+            const suffix = semNum === '1' ? '1st' : (semNum === '2' ? '2nd' : (semNum === '3' ? '3rd' : `${semNum}th`));
+            normSem = `${suffix} sem`;
+        }
+
+        if (!id || !name || !email) {
+            invalidRows.push({ rowNumber: idx + 2, id: id || 'N/A', name: name || 'N/A', reason: 'Missing ID, Name, or Email' });
+            return;
+        }
+
+        if (!email.includes('@')) {
+            invalidRows.push({ rowNumber: idx + 2, id: id, name: name, reason: 'Invalid Email format' });
+            return;
+        }
+
+        validStudents.push({
+            ID: id,
+            Name: name,
+            Email: email.toLowerCase(),
+            Parent_Email: parentEmail,
+            Mobile: mobile,
+            Department: dept || 'General',
+            Semester: normSem
+        });
+    });
+
+    if (validStudents.length === 0) {
+        showToast("No valid student records could be identified. Check column headers.", "error");
+        return;
+    }
+
+    window.PENDING_BULK_STUDENTS = validStudents;
+
+    const modal = document.getElementById('bulkImportModal');
+    if (!modal) {
+        showToast(`Parsed ${validStudents.length} students. Ready to import.`, "info");
+        confirmBulkImport();
+        return;
+    }
+
+    document.getElementById('bulkFileName').innerText = fileName;
+    document.getElementById('bulkValidCount').innerText = validStudents.length;
+    document.getElementById('bulkConfirmCount').innerText = validStudents.length;
+
+    const invalidBadge = document.getElementById('bulkInvalidBadge');
+    if (invalidRows.length > 0) {
+        invalidBadge.style.display = 'inline-flex';
+        document.getElementById('bulkInvalidCount').innerText = `${invalidRows.length} Skipped`;
+    } else {
+        invalidBadge.style.display = 'none';
+    }
+
+    const tbody = document.getElementById('bulkPreviewBody');
+    tbody.innerHTML = '';
+    const previewList = validStudents.slice(0, 5);
+    previewList.forEach(s => {
+        tbody.innerHTML += `
+            <tr>
+                <td style="font-weight:600; color:white;">${s.ID}</td>
+                <td>${s.Name}</td>
+                <td><span style="color:var(--text-muted);">${s.Email}</span></td>
+                <td><span style="padding:2px 8px; border-radius:12px; background:rgba(59,130,246,0.15); color:#60a5fa; font-size:11px;">${s.Department}</span></td>
+                <td>${s.Semester}</td>
+                <td>${s.Mobile || '-'}</td>
+            </tr>
+        `;
+    });
+
+    if (validStudents.length > 5) {
+        tbody.innerHTML += `
+            <tr>
+                <td colspan="6" style="text-align:center; color:var(--text-muted); font-style:italic; padding:8px;">
+                    ... and ${validStudents.length - 5} more student(s) ready to import
+                </td>
+            </tr>
+        `;
+    }
+
+    showModal('bulkImportModal');
+}
+
 window.importStudents = (input) => {
-    // Basic CSV import logic
-    const file = input.files[0];
-    if (file) {
-        showToast("CSV Import is being processed...", "success");
-        // Implementation for CSV parsing could go here
+    const file = input.files && input.files[0];
+    if (!file) return;
+
+    const fileName = file.name;
+    const fileExt = fileName.split('.').pop().toLowerCase();
+
+    if (!['csv', 'xlsx', 'xls'].includes(fileExt)) {
+        showToast("Please upload a valid CSV or Excel (.xlsx, .xls) file.", "error");
+        input.value = '';
+        return;
+    }
+
+    showToast("Parsing " + fileName + "...", "info");
+
+    if (fileExt === 'csv') {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const text = e.target.result;
+                const rows = parseCSVText(text);
+                processParsedStudentRows(rows, fileName);
+            } catch (err) {
+                showToast("Failed to parse CSV: " + err.message, "error");
+            }
+            input.value = '';
+        };
+        reader.onerror = () => {
+            showToast("Failed to read file.", "error");
+            input.value = '';
+        };
+        reader.readAsText(file);
+    } else {
+        if (typeof XLSX === 'undefined') {
+            showToast("Excel reader is still loading. Please retry in a moment or use CSV format.", "warning");
+            input.value = '';
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                const rows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+                processParsedStudentRows(rows, fileName);
+            } catch (err) {
+                showToast("Failed to parse Excel file: " + err.message, "error");
+            }
+            input.value = '';
+        };
+        reader.onerror = () => {
+            showToast("Failed to read file.", "error");
+            input.value = '';
+        };
+        reader.readAsArrayBuffer(file);
+    }
+};
+
+window.confirmBulkImport = async () => {
+    if (!window.PENDING_BULK_STUDENTS || window.PENDING_BULK_STUDENTS.length === 0) {
+        showToast("No student records to import.", "error");
+        return;
+    }
+
+    const btn = document.getElementById('confirmBulkImportBtn');
+    if (btn) {
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Importing...';
+        btn.disabled = true;
+    }
+
+    try {
+        const token = sessionStorage.getItem('token');
+        const res = await fetch(SCRIPT_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            },
+            body: JSON.stringify({
+                action: 'bulk_add_students',
+                students: window.PENDING_BULK_STUDENTS
+            })
+        });
+
+        const result = await res.json();
+
+        if (result.status === 'success') {
+            closeModal('bulkImportModal');
+            let msg = `Successfully imported ${result.importedCount} student(s)!`;
+            if (result.skippedCount > 0) {
+                msg += ` (${result.skippedCount} duplicate(s) skipped)`;
+            }
+            showToast(msg, 'success');
+            window.PENDING_BULK_STUDENTS = null;
+            await loadView('students');
+        } else {
+            showToast("Import error: " + (result.message || "Failed to import"), "error");
+        }
+    } catch (err) {
+        showToast("Network error during import: " + err.message, "error");
+    } finally {
+        if (btn) {
+            btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> Confirm & Import (<span id="bulkConfirmCount">' + (window.PENDING_BULK_STUDENTS ? window.PENDING_BULK_STUDENTS.length : 0) + '</span>)';
+            btn.disabled = false;
+        }
     }
 };
 

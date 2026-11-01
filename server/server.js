@@ -1884,6 +1884,7 @@ app.post('/', authenticateToken, async (req, res) => {
       'delete_camera_ip': ['admin'],
       'upload_timetable': ['admin'],
       'delete_timetable': ['admin'],
+      'bulk_add_students': ['admin'],
 
       // Faculty & Administrator Actions
       'generate_lab_code': ['professor', 'admin'],
@@ -3028,6 +3029,113 @@ Return ONLY valid JSON:
 
       await logActivity('ADD_STUDENT', `Student added: ${Name} (${ID})`);
       return res.json({ status: 'success' });
+    }
+
+    // ── BULK ADD STUDENTS (CSV / Excel Import) ──
+    if (action === 'bulk_add_students') {
+      if (userRole !== 'admin') {
+        return res.status(403).json({ status: 'error', message: 'Access Denied: Only administrators can import students in bulk.' });
+      }
+
+      const studentList = req.body.students;
+      if (!Array.isArray(studentList) || studentList.length === 0) {
+        return res.status(400).json({ status: 'error', message: 'No student records provided for bulk import.' });
+      }
+
+      // Fetch existing students to detect duplicates
+      const { data: existing, error: existErr } = await supabase
+        .from('students')
+        .select('ID, Email');
+
+      if (existErr) throw existErr;
+
+      const existingIds = new Set((existing || []).map(s => String(s.ID || '').toLowerCase().trim()));
+      const existingEmails = new Set((existing || []).map(s => String(s.Email || '').toLowerCase().trim()));
+
+      const toInsert = [];
+      const skipped = [];
+      const batchIds = new Set();
+      const batchEmails = new Set();
+
+      // Pre-hash default password for speed
+      const defaultPasswordHash = await bcrypt.hash('Welcome@123', 10);
+
+      for (const s of studentList) {
+        const rawId = String(s.ID || s.id || '').trim();
+        const rawName = String(s.Name || s.name || '').trim();
+        const rawEmail = String(s.Email || s.email || '').trim().toLowerCase();
+        const rawDept = String(s.Department || s.department || s.Dept || s.dept || 'General').trim();
+        const rawSem = String(s.Semester || s.semester || s.Sem || s.sem || '1st sem').trim();
+        const rawParentEmail = String(s.Parent_Email || s.parentEmail || s.parent_email || '').trim();
+        const rawMobile = String(s.Mobile || s.mobile || s.Phone || s.phone || '').trim();
+
+        if (!rawId || !rawName || !rawEmail) {
+          skipped.push({ ID: rawId || 'N/A', Name: rawName || 'N/A', reason: 'Missing ID, Name, or Email' });
+          continue;
+        }
+
+        const lowerId = rawId.toLowerCase();
+        if (existingIds.has(lowerId) || batchIds.has(lowerId)) {
+          skipped.push({ ID: rawId, Name: rawName, reason: 'Duplicate Student ID already exists' });
+          continue;
+        }
+
+        if (existingEmails.has(rawEmail) || batchEmails.has(rawEmail)) {
+          skipped.push({ ID: rawId, Name: rawName, reason: 'Duplicate Email address already exists' });
+          continue;
+        }
+
+        batchIds.add(lowerId);
+        batchEmails.add(rawEmail);
+
+        toInsert.push({
+          ID: rawId,
+          Name: rawName,
+          Email: rawEmail,
+          Password: defaultPasswordHash,
+          Department: rawDept,
+          Semester: rawSem,
+          Parent_Email: rawParentEmail,
+          Mobile: rawMobile,
+          Total_Classes: 0,
+          Classes_Attended: 0,
+          Attendance_Percentage: 0.00
+        });
+      }
+
+      if (toInsert.length > 0) {
+        const { error: insertErr } = await supabase
+          .from('students')
+          .insert(toInsert);
+
+        if (insertErr) throw insertErr;
+
+        // Asynchronously dispatch welcome emails without blocking response
+        (async () => {
+          for (const s of toInsert) {
+            if (s.Email && s.Email.includes('@')) {
+              try {
+                await sendEmail({
+                  to: s.Email,
+                  subject: 'SmartAttend — Your Student Account Details',
+                  html: getWelcomeEmailTemplate(s.Name || 'Student', s.ID, 'Welcome@123')
+                });
+              } catch (e) {
+                console.error(`[bulk_add_students] Welcome email failed for ${s.Email}:`, e.message);
+              }
+            }
+          }
+        })();
+      }
+
+      await logActivity('BULK_ADD_STUDENTS', `Bulk imported ${toInsert.length} students (${skipped.length} skipped)`);
+
+      return res.json({
+        status: 'success',
+        importedCount: toInsert.length,
+        skippedCount: skipped.length,
+        skippedDetails: skipped
+      });
     }
 
     if (action === 'add_professor') {
