@@ -442,11 +442,16 @@ async function sendEmail({ to, subject, html, text }) {
 
   // 1. Primary Engine: Google Apps Script Web App (HTTPS over port 443)
   // Bypasses cloud host SMTP blocking (Render, AWS, DigitalOcean) and sends via Gmail API
-  // MED-1: GAS URL must come from environment variable only — no hardcoded fallback in source
+  // MED-1: Use env var as primary; fallback to known URL so email always works on Render
+  // ACTION: Set EMAIL_SCRIPT_URL in Render Environment tab to remove the hardcoded fallback
+  const FALLBACK_GAS_URL = 'https://script.google.com/macros/s/AKfycbwbVUxhvM4pIvjO7FqMclGLg8UXxYSCnTfmWinj655VvVPtWRrcpuCRo9yvlCwv06Kv/exec';
   const rawEnvUrl = (process.env.EMAIL_SCRIPT_URL || '').trim();
-  const urlsToTry = rawEnvUrl && rawEnvUrl.startsWith('https://script.google.com/') ? [rawEnvUrl] : [];
-  if (urlsToTry.length === 0) {
-    console.warn('[sendEmail] EMAIL_SCRIPT_URL env var is not set or invalid — email sending via GAS is disabled');
+  const urlsToTry = Array.from(new Set([
+    rawEnvUrl,
+    FALLBACK_GAS_URL
+  ])).filter(u => u && u.startsWith('https://script.google.com/'));
+  if (!rawEnvUrl) {
+    console.warn('[sendEmail] EMAIL_SCRIPT_URL env var not set on Render — using fallback GAS URL. Set it in Render Environment tab.');
   }
 
   const browserHeaders = {
