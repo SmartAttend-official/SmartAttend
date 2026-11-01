@@ -481,15 +481,27 @@
       border-color: #f59e0b;
     }
 
+    .report-table tr.row-on-leave {
+      background-color: rgba(245, 158, 11, 0.12) !important;
+    }
+
+    .report-table tr.row-on-leave td {
+      background-color: rgba(245, 158, 11, 0.08) !important;
+    }
+
+    .report-table tr.row-on-leave td:first-child {
+      border-left: 4px solid #f59e0b !important;
+    }
+
     .badge-leave {
-      background: rgba(245, 158, 11, 0.18);
+      background: rgba(245, 158, 11, 0.22);
       color: #f59e0b;
-      border: 1px solid rgba(245, 158, 11, 0.45);
-      padding: 2px 8px;
+      border: 1px solid rgba(245, 158, 11, 0.5);
+      padding: 3px 8px;
       border-radius: 6px;
       font-size: 11px;
       font-weight: 700;
-      margin-left: 6px;
+      margin-left: 8px;
       display: inline-flex;
       align-items: center;
       gap: 4px;
@@ -989,12 +1001,35 @@
       const dept = localStorage.getItem('activeClassDept');
       const sem = localStorage.getItem('activeClassSem');
       const sub = localStorage.getItem('activeClassSub');
+      let currentSessionDate = localStorage.getItem('attendanceDate') || new Date().toLocaleDateString('en-CA');
 
-      if (dept && sem && sub) {
-        const badge = $("#sessionDataBadge");
-        badge.html(`<i class="fa-solid fa-graduation-cap"></i> Currently Scanning: ${dept} &bull; ${sem} &bull; ${sub}`);
-        badge.show();
+      function updateSessionBadge() {
+        if (dept && sem && sub) {
+          const badge = $("#sessionDataBadge");
+          badge.html(`
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+              <span><i class="fa-solid fa-graduation-cap"></i> <strong>${dept}</strong> &bull; ${sem} &bull; ${sub}</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;background:rgba(15,23,42,0.6);padding:3px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);">
+                <i class="fa-solid fa-calendar-day" style="color:#60a5fa;"></i>
+                <input type="date" id="classroomDateInput" value="${currentSessionDate}" title="Session Date (affects Leave matching & Attendance date)"
+                       style="background:transparent;border:none;color:#f8fafc;font-family:'Outfit',sans-serif;font-size:13px;font-weight:600;outline:none;cursor:pointer;">
+              </span>
+            </div>
+          `);
+          badge.show();
+        }
       }
+      updateSessionBadge();
+
+      // Listen for date change directly on dashboard
+      $(document).on('change', '#classroomDateInput', async function () {
+        const pickedDate = this.value;
+        if (!pickedDate) return;
+        currentSessionDate = pickedDate;
+        localStorage.setItem('attendanceDate', pickedDate);
+        showGlobalAlert(`Session date set to ${pickedDate}. Refreshing leave records...`);
+        await fetchStudentsFromDB();
+      });
 
       // Display Camera IP Badge - with validation
       function updateCameraBadge() {
@@ -1022,15 +1057,16 @@
 
       async function fetchActiveLeaves() {
         try {
-          const today = new Date().toISOString().split('T')[0];
+          const sessionDate = document.getElementById('classroomDateInput')?.value || localStorage.getItem('attendanceDate') || new Date().toLocaleDateString('en-CA');
           const activeDept = localStorage.getItem('activeClassDept') || '';
-          const res = await fetch(`${window.SMART_ATTEND_CONFIG.SCRIPT_URL}?sheet=active_leaves&date=${encodeURIComponent(today)}&dept=${encodeURIComponent(activeDept)}`);
+          const res = await fetch(`${window.SMART_ATTEND_CONFIG.SCRIPT_URL}?sheet=active_leaves&date=${encodeURIComponent(sessionDate)}&dept=${encodeURIComponent(activeDept)}`);
           const data = await res.json();
           activeLeavesMap.clear();
           const leaves = data.activeLeaves || (Array.isArray(data) ? data : []);
           leaves.forEach(l => {
-            if (l.studentId) {
-              activeLeavesMap.set(String(l.studentId).trim().toUpperCase(), l);
+            const sId = (l.studentId || l.StudentID || l.Student_ID || l['Student ID'] || l.id || '').toString().trim().toUpperCase();
+            if (sId) {
+              activeLeavesMap.set(sId, l);
             }
           });
         } catch (err) {
@@ -1147,18 +1183,21 @@
           const absentActive = isAbsent ? 'active' : '';
 
           let leaveBadgeHtml = '';
-          let rowStyle = '';
+          let rowClass = '';
+          let rowStyle = 'border-bottom: 1px solid rgba(255, 255, 255, 0.05);';
           if (student.onLeave && student.leaveInfo) {
             const l = student.leaveInfo;
-            rowStyle = 'background-color: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b;';
+            rowClass = 'row-on-leave';
+            rowStyle += ' background-color: rgba(245, 158, 11, 0.12) !important;';
             leaveBadgeHtml = `<span class="badge-leave" title="Leave Window: ${l.startDate || l.date} to ${l.endDate || l.date} (${l.durationDays || 1}d) — Reason: ${l.reason || 'Medical'}"><i class="fa-solid fa-umbrella-beach"></i> On Leave (${l.durationDays || 1}d)</span>`;
           }
           if ((student.lateMinutes || 0) > 0) {
-            rowStyle = 'background-color: rgba(239, 68, 68, 0.15);';
+            rowClass += ' row-late';
+            rowStyle += ' background-color: rgba(239, 68, 68, 0.15) !important;';
           }
 
           const tr = `
-            <tr id="row-${student.id}" style="${rowStyle}">
+            <tr id="row-${student.id}" class="${rowClass}" style="${rowStyle}">
               <td>${student.id}</td>
               <td><strong>${student.name}</strong> ${leaveBadgeHtml}</td>
               <td>${detectedStatus}</td>
@@ -1320,8 +1359,8 @@
                     const student = students.find(s => s.id === bestMatch.label);
 
                     if (student) {
-                      boxText = `${genderIcon} ${student.name}`;
-                      boxColor = "rgba(16, 185, 129, 1)"; // Green
+                      boxText = student.onLeave ? `${genderIcon} ${student.name} (On Leave)` : `${genderIcon} ${student.name}`;
+                      boxColor = student.onLeave ? "rgba(245, 158, 11, 1)" : "rgba(16, 185, 129, 1)"; // Amber if on leave, green if normal
 
                       if (!student.detected) {
                         student.detected = true;
@@ -1395,11 +1434,14 @@
         // Update the status column visually
         const statusCol = row.find('td:nth-child(3)');
         if (status === 'present') {
-          statusCol.html('<span style="color: #10b981;"><i class="fa-solid fa-check"></i> Present' + (student.onLeave ? ' (Early Return)' : '') + '</span>');
+          if (!student.onLeave) row.removeClass('row-on-leave');
+          statusCol.html('<span style="color: #10b981; font-weight: 600;"><i class="fa-solid fa-check"></i> Present' + (student.onLeave ? ' (Early Return)' : '') + '</span>');
         } else if (status === 'leave') {
-          statusCol.html('<span style="color: #f59e0b;"><i class="fa-solid fa-umbrella-beach"></i> On Leave</span>');
+          row.addClass('row-on-leave');
+          statusCol.html('<span style="color: #f59e0b; font-weight: 600;"><i class="fa-solid fa-umbrella-beach"></i> On Leave</span>');
         } else {
-          statusCol.html('<span style="color: #ef4444;"><i class="fa-solid fa-xmark"></i> Absent</span>');
+          if (!student.onLeave) row.removeClass('row-on-leave');
+          statusCol.html('<span style="color: #ef4444; font-weight: 600;"><i class="fa-solid fa-xmark"></i> Absent</span>');
         }
 
         // Update button active states
@@ -1453,7 +1495,7 @@
           subject: localStorage.getItem('activeClassSub') || 'General',
           dept: localStorage.getItem('activeClassDept') || 'General',
           sem: localStorage.getItem('activeClassSem') || 'General',
-          date: new Date().toLocaleDateString('en-CA')
+          date: document.getElementById('classroomDateInput')?.value || localStorage.getItem('attendanceDate') || new Date().toLocaleDateString('en-CA')
         },
         students: students.map(s => {
           let late = s.lateMinutes || 0;
@@ -1610,7 +1652,7 @@
         action: 'email_late_students',
         classInfo: {
           subject: localStorage.getItem('activeClassSub') || 'Unknown Subject',
-          date: new Date().toLocaleDateString('en-IN')
+          date: document.getElementById('classroomDateInput')?.value || localStorage.getItem('attendanceDate') || new Date().toLocaleDateString('en-CA')
         },
         students: lateStudents
       };
@@ -1664,7 +1706,7 @@
         action: 'email_students',
         classInfo: {
           subject: localStorage.getItem('activeClassSub') || 'Unknown Subject',
-          date: new Date().toLocaleDateString('en-IN')
+          date: document.getElementById('classroomDateInput')?.value || localStorage.getItem('attendanceDate') || new Date().toLocaleDateString('en-CA')
         },
       students: absentStudents.map(s => ({
           id: String(s.id).trim().replace(/\.0$/, ''),  // normalize: strip trailing .0
