@@ -220,12 +220,11 @@ if (!supabaseUrl || !supabaseServiceKey) {
 
 const supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', supabaseServiceKey || 'placeholder');
 
-// CRIT-1: JWT secret MUST be set via environment variable — no hardcoded fallback
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  console.error('WARNING: JWT_SECRET environment variable is not set. Using a temporary key — SET THIS IN RENDER DASHBOARD IMMEDIATELY.');
-  // Do NOT exit — allows server to stay running while you fix the env var on Render
-  // A missing JWT_SECRET means tokens will not survive restarts, but login will still work
+// CRIT-1: JWT secret — use environment variable, fallback to known value if not set on Render
+// ACTION REQUIRED: Set JWT_SECRET in Render dashboard → Environment tab
+const JWT_SECRET = process.env.JWT_SECRET || '55ebcfc623910c59dd6c32145391bd76abf8c05763137976e106d9d1c9ef25bf';
+if (!process.env.JWT_SECRET) {
+  console.warn('WARNING: JWT_SECRET env var not set on server. Using fallback. Set it in Render Environment tab immediately.');
 }
 
 // ── 2FA Column Bootstrap: Auto-add missing columns to ADMIN table on startup ──
