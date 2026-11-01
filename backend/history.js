@@ -148,7 +148,8 @@ async function fetchHistory() {
         tbody.innerHTML = '';
         data.forEach(log => {
             const tr = document.createElement('tr');
-            const statusClass = (log.Status || '').toLowerCase() === 'present' ? 'badge-success' : 'badge-danger';
+            const logSt = (log.Status || '').toLowerCase().trim();
+            const statusClass = (logSt === 'present' || logSt === 'late') ? 'badge-success' : (logSt === 'leave' ? 'badge-warning' : 'badge-danger');
             const studentName = studentNameMap[String(log.StudentID)] || "Unknown Student";
 
             tr.innerHTML = `

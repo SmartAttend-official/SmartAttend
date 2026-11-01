@@ -1753,7 +1753,7 @@ app.get('/', authenticateToken, async (req, res) => {
             subjectStats[hSub] = { dates: new Set(), attendedDates: new Set() };
           }
           subjectStats[hSub].dates.add(hDate);
-          if (hSid === dbStudentId.toLowerCase().trim() && ['present', 'late'].includes(hStatus)) {
+          if (hSid === dbStudentId.toLowerCase().trim() && ['present', 'late', 'leave', 'on leave', 'excused'].includes(hStatus)) {
             subjectStats[hSub].attendedDates.add(hDate);
           }
         }
@@ -4049,7 +4049,7 @@ Return ONLY valid JSON:
         }
         
         studentStats[sId].total++;
-        if (stat === 'present' || stat === 'late') studentStats[sId].present++;
+        if (['present', 'late', 'leave', 'on leave', 'excused'].includes(stat)) studentStats[sId].present++;
         else studentStats[sId].absent++;
       });
 
@@ -4455,12 +4455,16 @@ Return ONLY valid JSON:
       const absentCount = (stats && stats.absent) || 0;
       const totalCount = (stats && stats.total) || ((studentList || []).length);
 
-      const rowsHtml = (studentList || []).map(s => `
+      const rowsHtml = (studentList || []).map(s => {
+        const sStatusLower = (s.status || '').toLowerCase().trim();
+        const statusColor = (sStatusLower === 'present' || sStatusLower === 'late') ? '#10b981' : (sStatusLower === 'leave' ? '#f59e0b' : '#ef4444');
+        return `
         <tr>
           <td style="padding:10px; border-bottom:1px solid #e2e8f0; font-size:14px;">${s.name || s.id}<br><span style="color:#64748b; font-size:12px;">${s.id}</span></td>
-          <td style="padding:10px; border-bottom:1px solid #e2e8f0; font-size:14px; text-align:center; font-weight:bold; color:${s.status === 'Present' ? '#10b981' : '#ef4444'};">${s.status}</td>
+          <td style="padding:10px; border-bottom:1px solid #e2e8f0; font-size:14px; text-align:center; font-weight:bold; color:${statusColor};">${s.status}</td>
         </tr>
-      `).join('');
+      `;
+      }).join('');
 
       const htmlBody = `
         <div style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width:600px; margin:20px auto; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden;">
