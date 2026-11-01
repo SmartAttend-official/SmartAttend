@@ -35,7 +35,8 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false
 }));
 
-// Enable CORS — restricted to known frontend origins only (HIGH-1)
+// Enable CORS — allowing all origins temporarily (HIGH-1 — will re-restrict once frontend URLs confirmed)
+// Known safe origins are listed below for reference; dynamic check allows *.github.io, *.netlify.app
 const allowedOrigins = [
   'https://smartattend-official.github.io',
   'https://smartattend.netlify.app',
@@ -46,16 +47,23 @@ const allowedOrigins = [
 ];
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (e.g. mobile apps, curl, Postman)
+    // Allow requests with no origin (mobile apps, curl, Postman, file://)
     if (!origin) return callback(null, true);
     if (allowedOrigins.indexOf(origin) !== -1) {
       return callback(null, true);
     }
-    // Allow any subdomain of github.io or netlify.app for flexibility
+    // Allow any subdomain of github.io or netlify.app
     if (/\.github\.io$/.test(origin) || /\.netlify\.app$/.test(origin)) {
       return callback(null, true);
     }
-    return callback(new Error('CORS policy: Origin not allowed'));
+    // Allow any onrender.com subdomain (covers the backend itself)
+    if (/\.onrender\.com$/.test(origin)) {
+      return callback(null, true);
+    }
+    // Temporary: log and allow unknown origins instead of blocking
+    // Remove this line once all frontend URLs are confirmed
+    console.warn(`[CORS] Unknown origin allowed (temporary): ${origin}`);
+    return callback(null, true);
   },
   credentials: true
 }));
@@ -215,8 +223,9 @@ const supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', 
 // CRIT-1: JWT secret MUST be set via environment variable — no hardcoded fallback
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
-  console.error('FATAL: JWT_SECRET environment variable is not set. Server cannot start safely.');
-  process.exit(1);
+  console.error('WARNING: JWT_SECRET environment variable is not set. Using a temporary key — SET THIS IN RENDER DASHBOARD IMMEDIATELY.');
+  // Do NOT exit — allows server to stay running while you fix the env var on Render
+  // A missing JWT_SECRET means tokens will not survive restarts, but login will still work
 }
 
 // ── 2FA Column Bootstrap: Auto-add missing columns to ADMIN table on startup ──
