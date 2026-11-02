@@ -393,9 +393,9 @@ The Node.js middleware on Render exposes a unified REST API contract governed by
 
 | Endpoint & Action Parameter | HTTP Method | Authorization Level | Request Body / Query Params | Functional Description |
 | :--- | :---: | :---: | :--- | :--- |
-| `POST /api?action=student_login` | `POST` | Public | `{ email, password, deviceUUID }` | Authenticates student, checks 15-min lockout counter, verifies password hash, and validates hardware UUID. |
-| `POST /api?action=admin_login` | `POST` | Public | `{ email, password }` | Validates admin credentials and generates a 6-digit cryptographic 2FA OTP dispatched via email. |
-| `POST /api?action=admin_verify_otp` | `POST` | Public | `{ email, otp }` | Validates 2FA code within 5-minute TTL; issues a 12-hour signed Admin JWT bearer token. |
+| `POST /api?action=student_login` | `POST` | Pre-Auth (Student Login) | `{ email, password, deviceUUID }` | Authenticates student, checks 15-min lockout counter, verifies password hash, and validates hardware UUID. |
+| `POST /api?action=admin_login` | `POST` | Pre-Auth (Admin Login) | `{ email, password }` | Validates admin credentials and generates a 6-digit cryptographic 2FA OTP dispatched via email. |
+| `POST /api?action=admin_verify_otp` | `POST` | Pre-Auth (2FA OTP) | `{ email, otp }` | Validates 2FA code within 5-minute TTL; issues a 12-hour signed Admin JWT bearer token. |
 | `POST /api?action=save_session` | `POST` | Faculty JWT | `{ date, subject, dept, records: [] }` | Commits session roster, credits leaves, updates `students` statistics, and triggers absence alert emails. |
 | `POST /api?action=lab_attendance` | `POST` | Student JWT | `{ studentId, labCode, subject }` | Validates 6-digit time-decay PIN; deduplicates record using `${Date}_${Subject}` composite key. |
 | `POST /api?action=bulk_add_students` | `POST` | Admin JWT | `{ students: [ { name, id, email... } ] }` | Ingests batch student array into Supabase, hashes default passwords via bcrypt, and sends onboarding emails. |
@@ -404,8 +404,8 @@ The Node.js middleware on Render exposes a unified REST API contract governed by
 | `POST /api?action=apply_leave` | `POST` | Student JWT | `{ startDate, endDate, reason, proof }` | Validates date ranges, executes Overlap Guard, commits record, and alerts parents via email. |
 | `POST /api?action=review_leave` | `POST` | Faculty JWT | `{ leaveId, status, comments }` | Approves or rejects medical leave and dispatches final decision emails to student and parents. |
 | `GET /api?sheet=SubjectAttendance` | `GET` | Student JWT | `?studentId=<ID>` | Generates subject-level attendance records applying the Smart Credit Model. |
-| `POST /api?action=student_forget_password` | `POST` | Public | `{ email }` | Dispatches password reset OTP via dual-engine fail-safe email pipeline. |
-| `POST /api?action=student_reset_password` | `POST` | Public | `{ email, otp, newPassword }` | Validates OTP token and updates student password hash in Supabase. |
+| `POST /api?action=student_forget_password` | `POST` | Pre-Auth (Password Reset) | `{ email }` | Dispatches password reset OTP via dual-engine fail-safe email pipeline. |
+| `POST /api?action=student_reset_password` | `POST` | Pre-Auth (Password Reset) | `{ email, otp, newPassword }` | Validates OTP token and updates student password hash in Supabase. |
 
 ---
 
@@ -494,25 +494,25 @@ CREATE POLICY "Service Role Full Access" ON students
 
 ## 8. Role-Based Access Control (RBAC) Permission Matrix
 
-SmartAttend enforces strict least-privilege separation of duties across all user types:
+SmartAttend enforces strict least-privilege separation of duties across the three institutional roles (Administrator, Professor, and Student):
 
-| System Capability | Admin Command Center | Professor Portal | Student Hub | Public Visitor |
-| :--- | :---: | :---: | :---: | :---: |
-| **Bulk CSV/XLSX Student Import** | ✅ Full Access | ❌ Forbidden | ❌ Forbidden | ❌ Forbidden |
-| **Biometric Health & Diagnostic Deep Scan** | ✅ Full Access | ❌ Forbidden | ❌ Forbidden | ❌ Forbidden |
-| **Faculty Credential Management** | ✅ Full Access | ❌ Forbidden | ❌ Forbidden | ❌ Forbidden |
-| **Classroom Camera IP Whitelist Configuration**| ✅ Full Access | ❌ Forbidden | ❌ Forbidden | ❌ Forbidden |
-| **Department Timetable PDF Upload / Deletion** | ✅ Full Access | ❌ Forbidden | 👁️ View Only | ❌ Forbidden |
-| **Classroom Live Face-Scan & Roster Marking** | ❌ Forbidden | ✅ Full Access | ❌ Forbidden | ❌ Forbidden |
-| **Lab 6-Digit PIN & QR Code Generation** | ❌ Forbidden | ✅ Full Access | ❌ Forbidden | ❌ Forbidden |
-| **Gemini AI Medical Leave Verification** | ❌ Forbidden | ✅ Full Access | ❌ Forbidden | ❌ Forbidden |
-| **Approve / Reject Medical Leave Applications**| ❌ Forbidden | ✅ Full Access | ❌ Forbidden | ❌ Forbidden |
-| **Broadcast Course Assignments & Attachments** | ❌ Forbidden | ✅ Full Access | 👁️ Download Only | ❌ Forbidden |
-| **Submit Multi-Day Leave Application** | ❌ Forbidden | ❌ Forbidden | ✅ Full Access | ❌ Forbidden |
-| **Interactive Attendance Gauge & Recovery Calc**| ❌ Forbidden | ❌ Forbidden | ✅ Full Access | ❌ Forbidden |
-| **Self-Service Lab Attendance Code Entry** | ❌ Forbidden | ❌ Forbidden | ✅ Full Access | ❌ Forbidden |
-| **Bind Hardware UUID (Anti-Proxy Enforcement)**| ❌ Forbidden | ❌ Forbidden | ✅ Auto-Enforced | ❌ Forbidden |
-| **Authentication & Password Reset via OTP** | ✅ Admin 2FA | ✅ Faculty Auth | ✅ Student Auth | ✅ OTP Only |
+| System Capability | Admin Command Center | Professor Portal | Student Hub |
+| :--- | :---: | :---: | :---: |
+| **Bulk CSV/XLSX Student Import** | ✅ Full Access | ❌ Forbidden | ❌ Forbidden |
+| **Biometric Health & Diagnostic Deep Scan** | ✅ Full Access | ❌ Forbidden | ❌ Forbidden |
+| **Faculty Credential Management** | ✅ Full Access | ❌ Forbidden | ❌ Forbidden |
+| **Classroom Camera IP Whitelist Configuration**| ✅ Full Access | ❌ Forbidden | ❌ Forbidden |
+| **Department Timetable PDF Upload / Deletion** | ✅ Full Access | ❌ Forbidden | 👁️ View Only |
+| **Classroom Live Face-Scan & Roster Marking** | ❌ Forbidden | ✅ Full Access | ❌ Forbidden |
+| **Lab 6-Digit PIN & QR Code Generation** | ❌ Forbidden | ✅ Full Access | ❌ Forbidden |
+| **Gemini AI Medical Leave Verification** | ❌ Forbidden | ✅ Full Access | ❌ Forbidden |
+| **Approve / Reject Medical Leave Applications**| ❌ Forbidden | ✅ Full Access | ❌ Forbidden |
+| **Broadcast Course Assignments & Attachments** | ❌ Forbidden | ✅ Full Access | 👁️ Download Only |
+| **Submit Multi-Day Leave Application** | ❌ Forbidden | ❌ Forbidden | ✅ Full Access |
+| **Interactive Attendance Gauge & Recovery Calc**| ❌ Forbidden | ❌ Forbidden | ✅ Full Access |
+| **Self-Service Lab Attendance Code Entry** | ❌ Forbidden | ❌ Forbidden | ✅ Full Access |
+| **Bind Hardware UUID (Anti-Proxy Enforcement)**| ❌ Forbidden | ❌ Forbidden | ✅ Auto-Enforced |
+| **Authentication & Password Reset via OTP** | ✅ 2FA OTP Verified | ✅ Direct Faculty Auth | ✅ Student Auth + Device UUID |
 
 ---
 
