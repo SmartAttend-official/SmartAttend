@@ -56,6 +56,11 @@ SmartAttend is an enterprise-grade Educational ERP and Biometric Attendance plat
 
 ```mermaid
 flowchart TD
+    subgraph HostingDistribution["Frontend Distribution Tier"]
+        NETLIFY["Netlify Global Edge CDN (HTML5 / CSS3 / Vanilla JS)"]
+        MOBILE_PKG["Android Client Package (Standalone APK / Capacitor)"]
+    end
+
     subgraph ClientTier["Client Application Tier (3 Role Subsystems)"]
         subgraph AdminClient["1. Admin Command Portal"]
             A1["Admin Glassmorphism Web Interface"]
@@ -115,7 +120,7 @@ flowchart TD
 
     subgraph Database["Database Tier (Supabase PostgreSQL Cloud)"]
         RLS["Row-Level Security (RLS) Gatekeeper"]
-        T_STUDENTS[("students Table (Profiles, Passwords, Totals)")]
+        T_STUDENTS[("students Table (Profiles, Encodings, Totals)")]
         T_PROFS[("professors & dept Tables")]
         T_HIST[("AttendanceHistory Table (Ledgers & Sessions)")]
         T_LEAVES[("LeaveRequests Table (Multi-Day Ranges)")]
@@ -123,10 +128,14 @@ flowchart TD
         T_LOGS[("SecurityEvents & System Activity Logs")]
     end
 
+    NETLIFY -.->|Serves Static Web Assets| AdminClient & ProfessorClient & S1
+    MOBILE_PKG -.->|Runs Native Mobile App| S1
+
     AdminClient ===>|HTTPS POST / GET with Admin JWT| AUTH
     ProfessorClient ===>|HTTPS POST / GET with Faculty JWT| AUTH
     StudentClient ===>|HTTPS POST / GET with Student JWT| AUTH
 
+    P2 <-.->|Pre-load Encodings & Save Attended Roster| API
     AI_SVC <-->|OCR Document Analysis| GEMINI
     API --->|Trigger 2FA & Notification Alerts| GAS
     GAS -.->|Automatic Failover| SMTP
