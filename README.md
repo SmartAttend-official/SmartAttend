@@ -56,58 +56,83 @@ SmartAttend is an enterprise-grade Educational ERP and Biometric Attendance plat
 
 ```mermaid
 flowchart TD
-    subgraph Clients["User Client Tier"]
-        C1["Admin Dashboard (Desktop Web)"]
-        C2["Professor Portal (Laptop / Tablet)"]
-        C3["Student Portal (Web App)"]
-        C4["Student Android App (APK / PWA)"]
-    end
+    subgraph ClientTier["Client Application Tier (3 Role Subsystems)"]
+        subgraph AdminClient["1. Admin Command Portal"]
+            A1["Admin Glassmorphism Web Interface"]
+            A2["SheetJS (.xlsx / .csv) Engine & Sample Generator"]
+            A3["Biometric Health Diagnostic Command Center"]
+            A4["Camera IP Whitelist & Geofencing Manager"]
+            A1 --- A2
+            A1 --- A3
+            A1 --- A4
+        end
 
-    subgraph EdgeAI["Edge Computer Vision (Client Browser)"]
-        CAM["Webcam / Static Classroom IP Camera"] -->|HTML5 Canvas Video Stream| TF["face-api.js (TinyFaceDetector)"]
-        TF -->|68 Facial Landmarks| VEC["128-d Vector Face Descriptor Matcher"]
-        VEC -->|Local Euclidean Distance <= 0.45| MATCH["Instant Face Identification"]
+        subgraph ProfessorClient["2. Professor Biometric Portal"]
+            P1["Professor Dashboard Interface"]
+            P2["Edge-AI: face-api.js & 128-d Vector Matcher"]
+            P3["Classroom Face Scan with Amber Leave Sync"]
+            P4["6-Digit Lab PIN & QR Code Generator"]
+            P1 --- P2
+            P1 --- P3
+            P1 --- P4
+        end
+
+        subgraph StudentClient["3. Student Hub & Mobile APK"]
+            S1["Responsive Web Portal / Android Native APK"]
+            S2["Device UUID Fingerprint (Anti-Proxy Engine)"]
+            S3["Multi-Day Leave Form with Quick Chips (+2d..+7d)"]
+            S4["Circular Attendance Progress & Recovery Engine"]
+            S5["PWA Service Worker Offline Cache (sw.js)"]
+            S1 --- S2
+            S1 --- S3
+            S1 --- S4
+            S1 --- S5
+        end
     end
 
     subgraph Middleware["Cloud Middleware Tier (Node.js & Express on Render)"]
-        API["REST API Router & Controller Engine"]
-        AUTH["JWT Authenticator & RBAC Guard"]
-        BCRYPT["Bcrypt Password Hasher (10 Rounds)"]
+        AUTH["JWT Authenticator & 3-Tier RBAC Permission Guard"]
+        API["REST API Router & Business Logic Controller"]
+        BCRYPT["Bcrypt Salted Hasher (10 Rounds)"]
+        BULK["Batch Student Ingestion Engine"]
         AI_SVC["Gemini 1.5 Flash AI Verification Proxy"]
-        BULK["Bulk CSV / XLSX Data Parsing Engine"]
-        SEC_LOG["Security Monitor & Lockout Persistence"]
+        PDF_PARSER["PDF Stream Decompiler & Academic Regex Filter"]
+        SEC_LOG["Security Monitor & Brute-Force Lockout Engine"]
+        
+        AUTH --> API
+        API --> BCRYPT
+        API --> BULK
+        API --> AI_SVC
+        API --> PDF_PARSER
+        API --> SEC_LOG
     end
 
     subgraph ExternalServices["External Microservices"]
         GEMINI["Google Gemini 1.5 Flash API"]
-        GAS["Google Apps Script HTTPS Email Engine"]
+        GAS["Google Apps Script HTTPS Email Webhook"]
         SMTP["Nodemailer SMTP Fallback Server"]
     end
 
     subgraph Database["Database Tier (Supabase PostgreSQL Cloud)"]
-        RLS["Row-Level Security (RLS) Policies"]
-        T_STUDENTS[("students Table")]
+        RLS["Row-Level Security (RLS) Gatekeeper"]
+        T_STUDENTS[("students Table (Profiles, Passwords, Totals)")]
         T_PROFS[("professors & dept Tables")]
-        T_HIST[("AttendanceHistory Table")]
-        T_LEAVES[("LeaveRequests Table")]
-        T_DEPTS[("Departments & Timetables")]
-        T_LOGS[("SecurityEvents & Activity Logs")]
+        T_HIST[("AttendanceHistory Table (Ledgers & Sessions)")]
+        T_LEAVES[("LeaveRequests Table (Multi-Day Ranges)")]
+        T_DEPTS[("Departments & PDF Timetables")]
+        T_LOGS[("SecurityEvents & System Activity Logs")]
     end
 
-    C2 -.->|Biometric Video Feed| EdgeAI
-    Clients ==>|HTTPS REST API with JWT| AUTH
-    AUTH --> API
-    API --> BCRYPT
-    API --> BULK
-    API --> AI_SVC
-    API --> SEC_LOG
+    AdminClient ===>|HTTPS POST / GET with Admin JWT| AUTH
+    ProfessorClient ===>|HTTPS POST / GET with Faculty JWT| AUTH
+    StudentClient ===>|HTTPS POST / GET with Student JWT| AUTH
 
     AI_SVC <-->|OCR Document Analysis| GEMINI
     API --->|Trigger 2FA & Notification Alerts| GAS
-    GAS -.->|Failover Engine| SMTP
-    GAS & SMTP --->|HTML Emails| INBOX["Student & Parent Inboxes"]
+    GAS -.->|Automatic Failover| SMTP
+    GAS & SMTP --->|HTML Email Delivery| INBOX["Student, Parent & Faculty Inboxes"]
 
-    API <===>|Service Role Direct Connection| RLS
+    API <===>|Secure Service Role Connection| RLS
     RLS --- T_STUDENTS
     RLS --- T_PROFS
     RLS --- T_HIST
