@@ -1126,6 +1126,201 @@ function getLeaveRejectedStudentTemplate(studentName, studentId, leavePeriodStr,
   </div>`;
 }
 
+// ── HELPER: COMPILE AND SEND ANALYTIC ATTENDANCE REPORT ──
+async function compileAndSendAnalyticReport({
+  targetProfEmail,
+  department = 'All',
+  semester = 'All',
+  subject = 'All Subjects',
+  timeframe = 'Weekly',
+  sessionType = 'All'
+}) {
+  const cleanEmail = (targetProfEmail || '').trim();
+  if (!cleanEmail || !cleanEmail.includes('@')) {
+    return { success: false, error: 'Valid professor email address is required.' };
+  }
+
+  // Determine cutoff date
+  const now = new Date();
+  now.setHours(23, 59, 59, 999);
+  const cutoff = new Date();
+
+  const normTf = (timeframe || 'Weekly').trim().toLowerCase();
+  let standardTimeframe = 'Weekly';
+  let daysCovered = 7;
+
+  if (normTf.includes('half') || normTf.includes('6 month') || normTf.includes('six month') || normTf.includes('180') || normTf.includes('182')) {
+    standardTimeframe = 'Half-Yearly';
+    daysCovered = 182;
+    cutoff.setDate(now.getDate() - 182);
+  } else if (normTf.includes('month') || normTf.includes('1 month') || normTf.includes('one month') || normTf.includes('30')) {
+    standardTimeframe = 'Monthly';
+    daysCovered = 30;
+    cutoff.setDate(now.getDate() - 30);
+  } else if (normTf.includes('year') || normTf.includes('1 year') || normTf.includes('annual') || normTf.includes('365')) {
+    standardTimeframe = 'Yearly';
+    daysCovered = 365;
+    cutoff.setDate(now.getDate() - 365);
+  } else if (normTf.includes('all') || normTf.includes('all time') || normTf.includes('entire')) {
+    standardTimeframe = 'All Time';
+    daysCovered = 9999;
+    cutoff.setTime(0);
+  } else {
+    standardTimeframe = 'Weekly';
+    daysCovered = 7;
+    cutoff.setDate(now.getDate() - 7);
+  }
+  cutoff.setHours(0, 0, 0, 0);
+
+  // Fetch attendance records from Supabase
+  let query = supabase.from('AttendanceHistory').select('*');
+  if (semester && semester !== 'All' && semester !== 'All Semesters') {
+    query = query.eq('Semester', semester);
+  }
+  const { data: historyRecords, error: historyErr } = await query;
+  if (historyErr) throw historyErr;
+
+  const { data: depts } = await supabase.from('Departments').select('*');
+
+  // Filter matching records
+  const classRecords = (historyRecords || []).filter(r => {
+    if (department && department !== 'All' && department !== 'All Departments') {
+      if (!isDeptMatch(r.Department, department, depts || [])) return false;
+    }
+
+    const rSubject = (r.Subject || '').toString();
+    if (subject && subject !== 'All' && subject !== 'All Subjects') {
+      if (!rSubject.toLowerCase().includes(subject.toLowerCase())) return false;
+    }
+
+    if (sessionType === 'Theory' && rSubject.toLowerCase().includes('lab')) return false;
+    if (sessionType === 'Lab' && !rSubject.toLowerCase().includes('lab')) return false;
+
+    const rDate = parseRecordDate(r.Date);
+    if (!rDate) return false;
+    if (rDate < cutoff || rDate > now) return false;
+
+    return true;
+  });
+
+  if (classRecords.length === 0) {
+    return {
+      success: false,
+      error: `No attendance records found for ${department || 'class'} in the ${standardTimeframe} timeframe.`
+    };
+  }
+
+  // Count classes and presence per student
+  const studentStats = {};
+  const uniqueDates = {};
+
+  classRecords.forEach(r => {
+    const sId = r.StudentID;
+    if (!sId) return;
+    const stat = (r.Status || '').trim().toLowerCase();
+    const rDate = r.Date;
+    uniqueDates[rDate] = true;
+
+    if (!studentStats[sId]) {
+      studentStats[sId] = { total: 0, present: 0, late: 0, absent: 0 };
+    }
+
+    studentStats[sId].total++;
+    if (['present', 'late', 'leave', 'on leave', 'excused'].includes(stat)) studentStats[sId].present++;
+    else studentStats[sId].absent++;
+  });
+
+  const totalClasses = Object.keys(uniqueDates).length;
+
+  // Get student names
+  const { data: students } = await supabase.from('students').select('ID, Name');
+  const studentNames = {};
+  if (students) {
+    students.forEach(s => {
+      const id = (s.ID || '').toString();
+      studentNames[id] = s.Name || 'Student';
+    });
+  }
+
+  // Build HTML report
+  const htmlRows = [];
+  for (const sId in studentStats) {
+    const stats = studentStats[sId];
+    const pct = stats.total > 0 ? Math.round((stats.present / stats.total) * 100) : 0;
+    const name = studentNames[sId] || sId;
+    const color = pct < 75 ? '#ef4444' : '#10b981';
+
+    htmlRows.push(`
+      <tr>
+        <td style="padding:12px; border-bottom:1px solid #e2e8f0; font-size:14px;"><strong>${name}</strong><br><span style="color:#64748b; font-size:12px;">${sId}</span></td>
+        <td style="padding:12px; border-bottom:1px solid #e2e8f0; font-size:14px; text-align:center;">${stats.present} / ${stats.total}</td>
+        <td style="padding:12px; border-bottom:1px solid #e2e8f0; font-size:14px; font-weight:bold; color:${color}; text-align:center;">${pct}%</td>
+      </tr>
+    `);
+  }
+
+  const deptLabel = department && department !== 'All' ? department : 'All Departments';
+  const semLabel = semester && semester !== 'All' ? semester : 'All Semesters';
+  const subLabel = subject && subject !== 'All' ? subject : 'All Subjects';
+
+  const htmlBody = `
+    <div style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width:600px; margin:20px auto; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; box-shadow:0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+      <div style="background:linear-gradient(135deg, #3b82f6, #6366f1); padding:30px 24px; color:white;">
+        <h2 style="margin:0; font-size:24px; font-weight:600;">Attendance Analytic Report: ${standardTimeframe}</h2>
+        <p style="margin:8px 0 0 0; opacity:0.9; font-size:14px;">${deptLabel} | ${semLabel}<br>${subLabel}</p>
+      </div>
+      <div style="padding:24px; background:white;">
+        <div style="background:#f8fafc; padding:16px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:24px;">
+          <p style="margin:0; color:#334155; font-size:15px;"><strong>Total Classes Conducted:</strong> <span style="font-size:18px; color:#3b82f6; font-weight:bold;">${totalClasses}</span> &nbsp;|&nbsp; <strong>Students:</strong> <span style="font-size:18px; color:#10b981; font-weight:bold;">${Object.keys(studentStats).length}</span></p>
+        </div>
+        <table style="width:100%; border-collapse:collapse; text-align:left;">
+          <thead>
+            <tr style="background:#f1f5f9;">
+              <th style="padding:12px; border-bottom:2px solid #e2e8f0; color:#475569; font-size:13px; text-transform:uppercase;">Student</th>
+              <th style="padding:12px; border-bottom:2px solid #e2e8f0; color:#475569; font-size:13px; text-transform:uppercase; text-align:center;">Attended</th>
+              <th style="padding:12px; border-bottom:2px solid #e2e8f0; color:#475569; font-size:13px; text-transform:uppercase; text-align:center;">Percentage</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${htmlRows.join('')}
+          </tbody>
+        </table>
+      </div>
+      <div style="background:#f8fafc; padding:20px; text-align:center; border-top:1px solid #e2e8f0;">
+        <p style="margin:0; font-size:12px; color:#94a3b8; font-weight:500;">Secured & Verified by SmartAttend System</p>
+      </div>
+    </div>
+  `;
+
+  try {
+    await sendEmail({
+      to: cleanEmail,
+      subject: `SmartAttend: ${standardTimeframe} Analytic Report (${subLabel})`,
+      html: htmlBody
+    });
+
+    await logActivity('GENERATE_REPORT', `Generated ${standardTimeframe} report for ${subLabel} and sent to ${cleanEmail}`);
+    return {
+      success: true,
+      recipient: cleanEmail,
+      timeframe: standardTimeframe,
+      department: deptLabel,
+      semester: semLabel,
+      subject: subLabel,
+      totalClasses: totalClasses,
+      totalStudents: Object.keys(studentStats).length,
+      daysCovered: daysCovered
+    };
+  } catch (mailErr) {
+    console.error("Failed to send analytic email:", mailErr.message);
+    await logActivity('EMAIL_ERROR', `Failed to send to ${cleanEmail}: ${mailErr.message}`);
+    return {
+      success: false,
+      error: 'Report generated, but email failed to send: ' + mailErr.message
+    };
+  }
+}
+
 // ==========================================
 // 1. DYNAMIC FILE SERVICE ROUTE (GET)
 // ==========================================
@@ -1966,7 +2161,7 @@ app.post('/', authenticateToken, async (req, res) => {
       };
 
       function extractDateFromQuery(text) {
-        const lower = text.toLowerCase().trim();
+        const lower = (text || '').toLowerCase().trim();
         const today = new Date();
         const year = today.getFullYear();
 
@@ -1979,6 +2174,10 @@ app.post('/', authenticateToken, async (req, res) => {
         const isoMatch = lower.match(/\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b/);
         if (isoMatch) {
           return `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;
+        }
+        const dmyMatch = lower.match(/\b(\d{1,2})[-/](\d{1,2})[-/](\d{4})\b/);
+        if (dmyMatch) {
+          return `${dmyMatch[3]}-${dmyMatch[2].padStart(2, '0')}-${dmyMatch[1].padStart(2, '0')}`;
         }
 
         const words = lower.replace(/[^a-z0-9\- ]/g, ' ').split(/\s+/);
@@ -2010,9 +2209,116 @@ app.post('/', authenticateToken, async (req, res) => {
         return match ? match[1] : null;
       }
 
+      function parseReportIntent(text) {
+        const lower = (text || '').toLowerCase().trim();
+        const isReportIntent = /(generate|send|email|mail|dispatch|create|prepare|export)\b.*\breport\b/i.test(lower) ||
+                               lower.includes('email report') || lower.includes('send report') || lower.includes('mail report');
+
+        if (!isReportIntent) return null;
+
+        let timeframe = 'Weekly';
+        if (lower.includes('6 month') || lower.includes('six month') || lower.includes('half year') || lower.includes('half-year') || lower.includes('180 day') || lower.includes('182 day')) {
+          timeframe = 'Half-Yearly';
+        } else if (lower.includes('1 month') || lower.includes('one month') || lower.includes('monthly') || lower.includes('30 day') || lower.includes('a month')) {
+          timeframe = 'Monthly';
+        } else if (lower.includes('1 year') || lower.includes('one year') || lower.includes('yearly') || lower.includes('annual') || lower.includes('365 day')) {
+          timeframe = 'Yearly';
+        } else if (lower.includes('all time') || lower.includes('entire semester') || lower.includes('full semester')) {
+          timeframe = 'All';
+        } else if (lower.includes('1 week') || lower.includes('one week') || lower.includes('weekly') || lower.includes('7 day') || lower.includes('a week')) {
+          timeframe = 'Weekly';
+        }
+
+        const emailMatch = text.match(/[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}/);
+        const explicitEmail = emailMatch ? emailMatch[0] : null;
+
+        return { isReportIntent: true, timeframe, explicitEmail };
+      }
+
+      function parseTimeframeSummaryIntent(text) {
+        const lower = (text || '').toLowerCase().trim();
+        if (parseReportIntent(text)) return null;
+
+        const isTimeframe = /(summary|overview|stats|statistics|performance|how many classes|how many sessions|past|last|this|current)\b.*(day|week|month|year)s?/i.test(lower) ||
+                            lower.includes('past 7 days') || lower.includes('past 30 days') || lower.includes('past 6 months') ||
+                            lower.includes('last week') || lower.includes('last month') || lower.includes('last 6 months') || lower.includes('last 1 month') || lower.includes('last 1 week') ||
+                            lower.includes('this week') || lower.includes('this month');
+
+        if (!isTimeframe) return null;
+
+        let days = 7;
+        let label = 'Weekly (Past 7 Days)';
+        if (lower.includes('6 month') || lower.includes('six month') || lower.includes('half year') || lower.includes('180') || lower.includes('182')) {
+          days = 182;
+          label = 'Past 6 Months (Half-Yearly)';
+        } else if (lower.includes('month') || lower.includes('30 day')) {
+          days = 30;
+          label = 'Past 30 Days (Monthly)';
+        } else if (lower.includes('year') || lower.includes('365 day')) {
+          days = 365;
+          label = 'Past Year (Annual)';
+        } else {
+          days = 7;
+          label = 'Past 7 Days (Weekly)';
+        }
+
+        return { days, label };
+      }
+
+      function isDefaulterIntent(text) {
+        const lower = (text || '').toLowerCase().trim();
+        return /(defaulter|below 75|less than 75|< 75|<75|short attendance|low attendance|not eligible|exam eligibility|shortage|poor attendance)/i.test(lower);
+      }
+
+      // ── INTENT 1: AUTONOMOUS EMAIL REPORT GENERATION & DISPATCH ──
+      const reportIntent = parseReportIntent(prompt);
+      if (reportIntent) {
+        const targetEmail = (reportIntent.explicitEmail || clientContext.professorEmail || (req.user && req.user.email) || '').trim();
+        if (!targetEmail || !targetEmail.includes('@')) {
+          return res.json({
+            status: 'success',
+            message: `📧 **Attendance Email Report Request:**\n\nI am ready to compile and dispatch your **${reportIntent.timeframe} Attendance Analytic Report**!\n\nHowever, I could not detect your registered email address. Please include your email address in the message (e.g. *"Generate a ${reportIntent.timeframe === 'Half-Yearly' ? '6 month' : reportIntent.timeframe === 'Monthly' ? '1 month' : '1 week'} report and send to prof.name@example.com"*), or verify your profile in settings.`
+          });
+        }
+
+        const reportResult = await compileAndSendAnalyticReport({
+          targetProfEmail: targetEmail,
+          department: clientContext.department || 'All',
+          semester: clientContext.semester || 'All',
+          subject: clientContext.subject || 'All Subjects',
+          timeframe: reportIntent.timeframe,
+          sessionType: 'All'
+        });
+
+        if (reportResult.success) {
+          const periodLabel = reportResult.timeframe === 'Weekly' ? 'Past 7 Days' :
+                              reportResult.timeframe === 'Monthly' ? 'Past 30 Days' :
+                              reportResult.timeframe === 'Half-Yearly' ? 'Past 6 Months' :
+                              reportResult.timeframe === 'Yearly' ? 'Past 1 Year' : 'All Time';
+          return res.json({
+            status: 'success',
+            message: `📧 **Attendance Analytic Report Dispatched Successfully!**\n\n` +
+                     `• **Report Period:** ${reportResult.timeframe} (${periodLabel})\n` +
+                     `• **Recipient:** \`${reportResult.recipient}\`\n` +
+                     `• **Department & Semester:** ${reportResult.department} (${reportResult.semester})\n` +
+                     `• **Subject:** ${reportResult.subject}\n` +
+                     `• **Total Classes Conducted:** ${reportResult.totalClasses} session${reportResult.totalClasses === 1 ? '' : 's'}\n` +
+                     `• **Students Evaluated:** ${reportResult.totalStudents} student${reportResult.totalStudents === 1 ? '' : 's'}\n\n` +
+                     `✅ The official HTML attendance audit and breakdown table has been dispatched to your email. Please check your inbox!`
+          });
+        } else {
+          return res.json({
+            status: 'success',
+            message: `⚠️ **Could not generate report:** ${reportResult.error}\n\n*Tip: Try specifying a broader timeframe like 'Half-Yearly' (6 months) or check that attendance sessions have been logged for this class.*`
+          });
+        }
+      }
+
       let ragData = {
         targetDate: extractDateFromQuery(prompt),
         targetStudentId: extractStudentIdFromQuery(prompt),
+        timeframeSummary: null,
+        defaultersSummary: null,
         retrievedRecords: null,
         retrievedLeaves: null,
         retrievedStudentProfile: null,
@@ -2073,7 +2379,81 @@ app.post('/', authenticateToken, async (req, res) => {
 - Active Leave Requests Covering This Date: ${ragData.retrievedLeaves.length} requests`);
         }
 
-        // B. If a student ID is targeted (e.g. BCA051)
+        // B. If a timeframe summary is requested (in-chat analysis)
+        const tfIntent = parseTimeframeSummaryIntent(prompt);
+        if (tfIntent) {
+          const cutoff = new Date();
+          cutoff.setDate(cutoff.getDate() - tfIntent.days);
+          const cutoffStr = cutoff.toISOString().split('T')[0];
+
+          let q = supabase.from('AttendanceHistory').select('*').gte('Date', cutoffStr);
+          if (clientContext.department) {
+            q = q.ilike('Department', `%${clientContext.department}%`);
+          }
+          const { data: tfRecords } = await q;
+          const records = tfRecords || [];
+          const uniqueDates = Array.from(new Set(records.map(r => r.Date))).filter(Boolean);
+          const uniqueSubjects = Array.from(new Set(records.map(r => r.Subject))).filter(Boolean);
+          const present = records.filter(r => (r.Status || '').toLowerCase() === 'present');
+          const absent = records.filter(r => (r.Status || '').toLowerCase() === 'absent');
+          const onLeave = records.filter(r => (r.Status || '').toLowerCase() === 'leave');
+
+          ragData.timeframeSummary = {
+            days: tfIntent.days,
+            label: tfIntent.label,
+            cutoffDate: cutoffStr,
+            totalLogs: records.length,
+            totalClasses: uniqueDates.length,
+            uniqueDates: uniqueDates,
+            presentCount: present.length,
+            absentCount: absent.length,
+            leaveCount: onLeave.length,
+            subjects: uniqueSubjects
+          };
+
+          ragData.contextSummary.push(`[RETRIEVED TIMEFRAME ATTENDANCE SUMMARY: ${tfIntent.label}]
+- Date Range: Since ${cutoffStr} to Today (${tfIntent.days} days)
+- Total Finalized Sessions Conducted: ${uniqueDates.length} distinct dates
+- Total Student Session Records Logged: ${records.length}
+- Total Present Logs: ${present.length}
+- Total Absent Logs: ${absent.length}
+- Total Approved Medical/Duty Leave Logs: ${onLeave.length}
+- Subjects Taught: ${uniqueSubjects.join(', ') || 'None'}`);
+        }
+
+        // C. If user asks about defaulters / low attendance (< 75%)
+        if (isDefaulterIntent(prompt)) {
+          let stQuery = supabase.from('students').select('ID, Name, Department, Semester, Classes_Attended, Total_Classes');
+          if (clientContext.department) {
+            stQuery = stQuery.ilike('Department', `%${clientContext.department}%`);
+          }
+          const { data: stList } = await stQuery;
+          const defaulters = (stList || []).filter(s => {
+            if (!s.Total_Classes || s.Total_Classes === 0) return false;
+            return (s.Classes_Attended / s.Total_Classes) < 0.75;
+          }).map(s => {
+            const pct = Math.round((s.Classes_Attended / s.Total_Classes) * 100);
+            const needed = Math.ceil((0.75 * s.Total_Classes - s.Classes_Attended) / 0.25);
+            return {
+              id: s.ID,
+              name: s.Name,
+              department: s.Department,
+              semester: s.Semester,
+              attended: s.Classes_Attended,
+              total: s.Total_Classes,
+              pct: pct,
+              shortfall: needed > 0 ? needed : 1
+            };
+          }).sort((a, b) => a.pct - b.pct);
+
+          ragData.defaultersSummary = defaulters;
+          ragData.contextSummary.push(`[RETRIEVED ATTENDANCE DEFAULTERS LIST (< 75% ATTENDANCE CRITERIA)]
+- Total Students Analyzed: ${(stList || []).length}
+- Total Defaulters Found: ${defaulters.length}
+${defaulters.slice(0, 15).map(d => `• ${d.name} (${d.id}) - ${d.pct}% (${d.attended}/${d.total} classes attended, needs +${d.shortfall} consecutive classes)`).join('\n')}`);
+        }
+
+        // D. If a student ID is targeted (e.g. BCA051)
         if (ragData.targetStudentId) {
           const { data: studentRows } = await supabase
             .from('students')
@@ -2093,7 +2473,7 @@ app.post('/', authenticateToken, async (req, res) => {
           }
         }
 
-        // C. If user asks about leaves / pending requests
+        // E. If user asks about leaves / pending requests
         if (prompt.toLowerCase().includes('leave') || prompt.toLowerCase().includes('request') || prompt.toLowerCase().includes('approval')) {
           const { data: pending } = await supabase
             .from('LeaveRequests')
@@ -2123,26 +2503,71 @@ ${pending.map(p => `• Student ${p.StudentID || p.Student_ID}: ${p.StartDate} t
       }
 
       function generateDeterministicFallback() {
+        // Fallback 1: Defaulters List (< 75%)
+        if (ragData.defaultersSummary) {
+          const dList = ragData.defaultersSummary;
+          if (dList.length === 0) {
+            return `✅ **Attendance Defaulters Audit:**\n\nGreat news! **All enrolled students** currently have **75% or higher** attendance. No students are at risk of exam debarment.`;
+          }
+          return `⚠️ **Students Below 75% Attendance Requirement (${dList.length} Found):**\n\n` +
+                 dList.slice(0, 10).map((d, i) => `${i + 1}. **${d.name}** (\`${d.id}\`) — **${d.pct}%** (${d.attended}/${d.total} sessions) • *Needs +${d.shortfall} classes*`).join('\n') +
+                 (dList.length > 10 ? `\n\n*...and ${dList.length - 10} more students below 75%.*` : '') +
+                 `\n\nℹ️ *University Policy: A minimum of 75% attendance is mandatory to appear in semester exams. Approved medical leaves count towards attendance.*`;
+        }
+
+        // Fallback 2: Timeframe Summary (Last 1 Week, 1 Month, 6 Months)
+        if (ragData.timeframeSummary) {
+          const ts = ragData.timeframeSummary;
+          const totalLogs = ts.totalLogs;
+          const pct = totalLogs > 0 ? Math.round((ts.presentCount / totalLogs) * 100) : 0;
+          return `📊 **Attendance Summary: ${ts.label}**\n\n` +
+                 `• **Date Range:** Since ${ts.cutoffDate} (${ts.days} days)\n` +
+                 `• **Conducted Sessions:** ${ts.totalClasses} class days\n` +
+                 `• **Total Session Logs:** ${ts.totalLogs} records\n` +
+                 `• **Present Attendance:** ${ts.presentCount} records (${pct}% presence)\n` +
+                 `• **Absences Recorded:** ${ts.absentCount} records\n` +
+                 `• **Approved Medical Leaves:** ${ts.leaveCount} records\n` +
+                 `• **Subjects Conducted:** ${ts.subjects.join(', ') || 'All Subjects'}\n\n` +
+                 `*(Data aggregated live from Supabase Cloud AttendanceHistory)*`;
+        }
+
+        // Fallback 3: Date Query (Today or Past Date)
         if (ragData.targetDate) {
           const records = ragData.retrievedRecords || [];
           const present = records.filter(r => (r.Status || '').toLowerCase() === 'present');
           const absent = records.filter(r => (r.Status || '').toLowerCase() === 'absent');
           const onLeave = records.filter(r => (r.Status || '').toLowerCase() === 'leave');
           const subjects = Array.from(new Set(records.map(r => r.Subject))).filter(Boolean);
+          const isToday = ragData.targetDate === new Date().toISOString().split('T')[0];
 
           if (records.length === 0) {
+            if (isToday) {
+              const lr = clientContext.liveRoster;
+              if (lr && lr.isCameraRunning) {
+                return `📅 **Today's Attendance Status (${ragData.targetDate}):**\n\n` +
+                       `• **Camera Scanner:** ACTIVE & SCANNING\n` +
+                       `• **Live Detected Present:** ${lr.presentCount} student${lr.presentCount === 1 ? '' : 's'} (${(lr.presentStudents || []).join(', ') || 'None yet'})\n` +
+                       `• **On Formal Leave:** ${lr.leaveCount} student${lr.leaveCount === 1 ? '' : 's'} (${(lr.leaveStudents || []).join(', ') || 'None'})\n` +
+                       `• **Unmarked / Absent:** ${lr.absentCount} student${lr.absentCount === 1 ? '' : 's'}\n\n` +
+                       `*Click 'Save Attendance' on your dashboard to finalize and save this session into the database.*`;
+              }
+              return `📅 **Today's Attendance Status (${ragData.targetDate}):**\n\n` +
+                     `No finalized attendance sessions have been saved to the database for today yet.\n\n` +
+                     (lr && lr.totalLoaded > 0 ? `Your dashboard has **${lr.totalLoaded} students** enrolled for ${clientContext.subject || 'this class'}. Click **Start Camera** to scan faces, then click **Save Attendance** to record today's session.` : `To take attendance, select your Department, Semester, and Subject in 'Start Attendance', start the camera, and click 'Save Attendance'.`);
+            }
             return `📅 **Attendance Records for ${ragData.targetDate}:**\n\nNo finalized attendance sessions were found in the database for **${ragData.targetDate}**.\n\n${clientContext.liveRoster && clientContext.liveRoster.totalLoaded > 0 ? `*Note: Your current screen has an active class loaded with ${clientContext.liveRoster.totalLoaded} students. If you are taking attendance for today, start the camera scanner and click 'Save Attendance' to record it.*` : `To record attendance for this date, select the class in 'Start Attendance' and initialize a session.`}`;
           }
 
           return `📊 **Attendance Summary for ${ragData.targetDate}:**\n\n` +
                  `• **Total Recorded Entries:** ${records.length} session entries\n` +
-                 `• **Present:** ${present.length} records (${ragData.uniquePresentNames.length} student${ragData.uniquePresentNames.length === 1 ? '' : 's'}: ${ragData.uniquePresentNames.join(', ')})\n` +
+                 `• **Present:** ${present.length} records (${ragData.uniquePresentNames.length} student${ragData.uniquePresentNames.length === 1 ? '' : 's'}: ${ragData.uniquePresentNames.join(', ') || 'None'})\n` +
                  `• **Absent:** ${absent.length} records (${ragData.uniqueAbsentNames.length} student${ragData.uniqueAbsentNames.length === 1 ? '' : 's'}${ragData.uniqueAbsentNames.length > 0 ? ': ' + ragData.uniqueAbsentNames.join(', ') : ''})\n` +
                  `• **On Approved Leave:** ${onLeave.length} records (${ragData.uniqueLeaveNames.length} student${ragData.uniqueLeaveNames.length === 1 ? '' : 's'}${ragData.uniqueLeaveNames.length > 0 ? ': ' + ragData.uniqueLeaveNames.join(', ') : ''})\n` +
-                 `• **Subject(s):** ${subjects.join(', ')}\n\n` +
+                 `• **Subject(s):** ${subjects.join(', ') || 'All Subjects'}\n\n` +
                  `*(Data retrieved directly from Supabase Cloud AttendanceHistory)*`;
         }
 
+        // Fallback 4: Student Profile
         if (ragData.targetStudentId && ragData.retrievedStudentProfile) {
           const st = ragData.retrievedStudentProfile;
           const pct = st.Total_Classes > 0 ? Math.round((st.Classes_Attended / st.Total_Classes) * 100) : 0;
@@ -2154,6 +2579,7 @@ ${pending.map(p => `• Student ${p.StudentID || p.Student_ID}: ${p.StartDate} t
                  `• **Status:** ${pct >= 75 ? '✅ Safe Zone (Eligible for Exams)' : '⚠️ Below 75% Requirement'}`;
         }
 
+        // Fallback 5: Live Roster
         if (clientContext.liveRoster && clientContext.liveRoster.totalLoaded > 0) {
           const lr = clientContext.liveRoster;
           return `📷 **Current Live Class Status:**\n\n` +
@@ -2166,7 +2592,13 @@ ${pending.map(p => `• Student ${p.StudentID || p.Student_ID}: ${p.StartDate} t
                  `*Click 'Save Attendance' to finalize this session into the database.*`;
         }
 
-        return `🤖 **SmartAssist AI:** I am connected to your live database. You can ask me:\n• *"How many students were present on 2nd November?"*\n• *"How many students are present today?"*\n• *"What is the attendance of BCA051?"*\n• *"How does medical leave affect attendance?"*`;
+        return `🤖 **SmartAssist AI Agent:** I am connected to your live university database and operational ERP services. You can ask me:\n` +
+               `• *"Generate an email report for one week / one month / 6 months"*\n` +
+               `• *"How many students were present on 2nd November?"*\n` +
+               `• *"How many students are present today?"*\n` +
+               `• *"Give me an attendance summary for the last 30 days"*\n` +
+               `• *"Who has attendance below 75%?"*\n` +
+               `• *"What is the attendance of BCA051?"*`;
       }
 
       // Check for Gemini API Key
@@ -2210,8 +2642,10 @@ ${ragData.contextSummary.length > 0 ? ragData.contextSummary.join('\n\n') : 'No 
 === INSTRUCTIONS ===
 - Answer the user's question directly, accurately, and politely using the RETRIEVED REAL-TIME DATABASE CONTEXT and INSTITUTIONAL KNOWLEDGE BASE above.
 - If the user asks about attendance on a specific date (e.g. 2nd November or today), cite the exact counts, student IDs, and subjects from the retrieved data.
-- Never state that the student list hasn't loaded if database records exist.
-- Keep your tone concise, professional, and helpful.`;
+- If the user asks for a summary across a timeframe (e.g. last 1 week, 1 month, 6 months), use the RETRIEVED TIMEFRAME ATTENDANCE SUMMARY to give an analytical breakdown.
+- If the user asks about defaulters or students below 75%, list them with their current percentage and classes needed to reach 75%.
+- Never state that the student list hasn't loaded if database records or active roster exist.
+- Keep your tone concise, professional, and helpful. Format your response cleanly using GitHub-flavored markdown.`;
 
       try {
         const geminiResponse = await fetch(url, {
@@ -4332,147 +4766,19 @@ Return ONLY valid JSON:
       const { professorEmail, department, semester, subject, timeframe, sessionType = 'All' } = req.body;
       const targetProfEmail = (professorEmail || (req.user && req.user.email) || '').trim();
 
-      if (!targetProfEmail || !targetProfEmail.includes('@')) {
-        return res.status(400).json({ status: 'error', message: 'Valid professor email address is required.' });
-      }
-
-      // Determine cutoff date
-      const now = new Date();
-      now.setHours(23, 59, 59, 999); // Include full current day regardless of server timezone
-      const cutoff = new Date();
-
-      if (timeframe === 'Weekly') cutoff.setDate(now.getDate() - 7);
-      else if (timeframe === 'Monthly') cutoff.setDate(now.getDate() - 30);
-      else if (timeframe === 'Half-Yearly') cutoff.setDate(now.getDate() - 182);
-      else if (timeframe === 'Yearly') cutoff.setDate(now.getDate() - 365);
-      else if (timeframe === 'All' || timeframe === 'All Time') cutoff.setTime(0);
-      else cutoff.setDate(now.getDate() - 7);
-      cutoff.setHours(0, 0, 0, 0);
-
-      // Fetch all attendance logs for this semester
-      const { data: historyRecords, error: historyErr } = await supabase
-        .from('AttendanceHistory')
-        .select('*')
-        .eq('Semester', semester);
-
-      if (historyErr) throw historyErr;
-
-      // Fetch known departments to translate and match Code/Name fuzzy matching
-      const { data: depts } = await supabase.from('Departments').select('*');
-
-      // Filter matching records
-      const classRecords = (historyRecords || []).filter(r => {
-        if (!isDeptMatch(r.Department, department, depts || [])) return false;
-        
-        const rSubject = (r.Subject || '').toString();
-        if (subject !== 'All Subjects' && !rSubject.toLowerCase().includes(subject.toLowerCase())) return false;
-
-        if (sessionType === 'Theory' && rSubject.toLowerCase().includes('lab')) return false;
-        if (sessionType === 'Lab' && !rSubject.toLowerCase().includes('lab')) return false;
-
-        const rDate = parseRecordDate(r.Date);
-        if (!rDate) return false;
-        if (rDate < cutoff || rDate > now) return false;
-
-        return true;
+      const result = await compileAndSendAnalyticReport({
+        targetProfEmail,
+        department,
+        semester,
+        subject,
+        timeframe,
+        sessionType
       });
 
-      if (classRecords.length === 0) {
-        return res.json({ status: 'error', message: 'No attendance records found for this class in the selected timeframe.' });
+      if (!result.success) {
+        return res.json({ status: 'error', message: result.error });
       }
-
-      // Count classes and presence per student
-      const studentStats = {};
-      const uniqueDates = {};
-
-      classRecords.forEach(r => {
-        const sId = r.StudentID || r.StudentID;
-        const stat = (r.Status || '').trim().toLowerCase();
-        const rDate = r.Date;
-        uniqueDates[rDate] = true;
-
-        if (!studentStats[sId]) {
-          studentStats[sId] = { total: 0, present: 0, late: 0, absent: 0 };
-        }
-        
-        studentStats[sId].total++;
-        if (['present', 'late', 'leave', 'on leave', 'excused'].includes(stat)) studentStats[sId].present++;
-        else studentStats[sId].absent++;
-      });
-
-      const totalClasses = Object.keys(uniqueDates).length;
-
-      // Get student names
-      const { data: students } = await supabase.from('students').select('*');
-      const studentNames = {};
-      if (students) {
-        students.forEach(s => {
-          const id = (s.ID || '').toString();
-          studentNames[id] = s.Name || 'Unknown Student';
-        });
-      }
-
-      // Build HTML report
-      const htmlRows = [];
-      for (const sId in studentStats) {
-        const stats = studentStats[sId];
-        const pct = (stats.total > 0) ? Math.round((stats.present / stats.total) * 100) : 0;
-        const name = studentNames[sId] || sId;
-        const color = pct < 75 ? '#ef4444' : '#10b981';
-
-        htmlRows.push(`
-          <tr>
-            <td style="padding:12px; border-bottom:1px solid #e2e8f0; font-size:14px;">${name}<br><span style="color:#64748b; font-size:12px;">${sId}</span></td>
-            <td style="padding:12px; border-bottom:1px solid #e2e8f0; font-size:14px; text-align:center;">${stats.present} / ${stats.total}</td>
-            <td style="padding:12px; border-bottom:1px solid #e2e8f0; font-size:14px; font-weight:bold; color:${color}; text-align:center;">${pct}%</td>
-          </tr>
-        `);
-      }
-
-      const htmlBody = `
-        <div style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width:600px; margin:20px auto; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; box-shadow:0 4px 6px -1px rgba(0, 0, 0, 0.1);">
-          <div style="background:linear-gradient(135deg, #3b82f6, #6366f1); padding:30px 24px; color:white;">
-            <h2 style="margin:0; font-size:24px; font-weight:600;">Analytic Report: ${timeframe}</h2>
-            <p style="margin:8px 0 0 0; opacity:0.9; font-size:14px;">${department} | ${semester}<br>${subject}</p>
-          </div>
-          <div style="padding:24px; background:white;">
-            <div style="background:#f8fafc; padding:16px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:24px;">
-              <p style="margin:0; color:#334155; font-size:15px;"><strong>Total Classes Conducted:</strong> <span style="font-size:18px; color:#3b82f6;">${totalClasses}</span></p>
-            </div>
-            <table style="width:100%; border-collapse:collapse; text-align:left;">
-              <thead>
-                <tr style="background:#f1f5f9;">
-                  <th style="padding:12px; border-bottom:2px solid #e2e8f0; color:#475569; font-size:13px; text-transform:uppercase;">Student</th>
-                  <th style="padding:12px; border-bottom:2px solid #e2e8f0; color:#475569; font-size:13px; text-transform:uppercase; text-align:center;">Attended</th>
-                  <th style="padding:12px; border-bottom:2px solid #e2e8f0; color:#475569; font-size:13px; text-transform:uppercase; text-align:center;">Percentage</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${htmlRows.join('')}
-              </tbody>
-            </table>
-          </div>
-          <div style="background:#f8fafc; padding:20px; text-align:center; border-top:1px solid #e2e8f0;">
-            <p style="margin:0; font-size:12px; color:#94a3b8; font-weight:500;">Secured by SmartAttend System</p>
-          </div>
-        </div>
-      `;
-
-      try {
-        await sendEmail({
-          to: targetProfEmail,
-          subject: `SmartAttend: ${timeframe} Analytic Report for ${subject}`,
-          html: htmlBody
-        });
-        
-        await logActivity('GENERATE_REPORT', `Generated ${timeframe} report for ${subject} and sent to ${targetProfEmail}`);
-        return res.json({ status: 'success' });
-
-      } catch (mailErr) {
-        console.error("Failed to send analytic email:", mailErr.message);
-        await logActivity('EMAIL_ERROR', `Failed to send to ${targetProfEmail}: ${mailErr.message}`);
-        return res.json({ status: 'error', message: 'Report generated, but email failed to send: ' + mailErr.message });
-      }
+      return res.json({ status: 'success' });
     }
 
     // ── ACTIVE LAB CODE GENERATION ──

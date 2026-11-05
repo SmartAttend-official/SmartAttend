@@ -1852,21 +1852,49 @@
 
       // Simulate network delay for AI thinking
       setTimeout(() => {
-        processAIIntent(text.toLowerCase());
+        processAIIntent(text);
       }, 600);
+    }
+
+    function formatAIMarkdown(text) {
+      if (!text) return '';
+      // Escape HTML entities to prevent XSS
+      let safe = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      
+      // Bold
+      safe = safe.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      // Italic
+      safe = safe.replace(/\*(.*?)\*/g, '<em>$1</em>');
+      // Inline code
+      safe = safe.replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,0.06);padding:2px 5px;border-radius:4px;font-family:monospace;font-size:12px;">$1</code>');
+      // Bullet items
+      safe = safe.replace(/^[•\-\*]\s+(.*)$/gm, '<li style="margin-left:16px;margin-bottom:4px;">$1</li>');
+      // Newlines to <br>
+      safe = safe.replace(/\n/g, '<br>');
+      return safe;
     }
 
     function appendMessage(text, sender) {
       const msgDiv = document.createElement('div');
       msgDiv.className = `message ${sender === 'user' ? 'msg-user' : 'msg-ai'}`;
-      msgDiv.innerText = text;
+      if (sender === 'ai') {
+        msgDiv.innerHTML = formatAIMarkdown(text);
+      } else {
+        msgDiv.textContent = text;
+      }
       const container = document.getElementById('aiMessages');
       container.appendChild(msgDiv);
       container.scrollTop = container.scrollHeight;
     }
 
     async function listModels() {
-      const token = sessionStorage.getItem('token');
+      const token = sessionStorage.getItem('smartattend_token') || 
+                    localStorage.getItem('smartattend_token') || 
+                    sessionStorage.getItem('token') || 
+                    localStorage.getItem('token') || '';
       if (!token) return "Error: You are not logged in.";
       const serverUrl = window.SMART_ATTEND_CONFIG ? window.SMART_ATTEND_CONFIG.SCRIPT_URL : window.SCRIPT_URL; // HIGH-2: removed hardcoded fallback
       try {
@@ -1986,7 +2014,8 @@
       // Extract real-time session context to empower RAG
       const activeDept = localStorage.getItem('activeClassDept') || '';
       const activeSem = localStorage.getItem('activeClassSem') || '';
-      const activeSub = localStorage.getItem('activeClassSubject') || '';
+      const activeSub = localStorage.getItem('activeClassSub') || localStorage.getItem('activeClassSubject') || '';
+      const profEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail') || sessionStorage.getItem('email') || localStorage.getItem('email') || '';
       const dateBadge = document.getElementById('sessionDateBadge');
       const activeDate = (dateBadge && dateBadge.innerText.trim()) ? dateBadge.innerText.trim() : new Date().toISOString().split('T')[0];
       const isCameraRunning = !document.getElementById('camera_btn')?.innerText.includes('Start');
@@ -2013,7 +2042,7 @@
 
       const sessionContext = {
         professorName: name,
-        professorEmail: sessionStorage.getItem('userEmail') || '',
+        professorEmail: profEmail,
         department: activeDept,
         semester: activeSem,
         subject: activeSub,
