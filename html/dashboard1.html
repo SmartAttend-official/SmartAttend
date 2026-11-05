@@ -1886,19 +1886,22 @@
     }
 
     async function askGemini(prompt, context = {}) {
-      // Secure Node.js RAG endpoint
-      const token = sessionStorage.getItem('token');
-      if (!token) return "Error: You are not logged in.";
+      // Secure Node.js RAG endpoint - supports all token storage keys across the platform
+      const token = sessionStorage.getItem('smartattend_token') || 
+                    localStorage.getItem('smartattend_token') || 
+                    sessionStorage.getItem('token') || 
+                    localStorage.getItem('token') || '';
       
       const serverUrl = window.SMART_ATTEND_CONFIG ? window.SMART_ATTEND_CONFIG.SCRIPT_URL : window.SCRIPT_URL;
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
       
       try {
         const response = await fetch(`${serverUrl}/`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
+          headers: headers,
           body: JSON.stringify({
             action: 'ask_gemini',
             prompt: prompt,
@@ -1907,10 +1910,12 @@
         });
         
         const data = await response.json();
-        if (data.status === 'success') {
+        if (data && data.status === 'success') {
           return data.message;
-        } else {
+        } else if (data && data.message) {
           return `Server Error: ${data.message}`;
+        } else {
+          return "No response received from AI server.";
         }
       } catch (error) {
         console.error("Gemini server error:", error);
@@ -1922,6 +1927,12 @@
       const q = rawQuery.toLowerCase().trim();
       let response = "";
       const name = sessionStorage.getItem('userName') || 'Professor';
+
+      // ── GREETINGS & INTRODUCTIONS ───────────────────────────────────────────────
+      if (q === 'hi' || q === 'hello' || q === 'hey' || q.startsWith('hi ') || q.startsWith('hello ') || q.startsWith('hey ')) {
+        appendMessage(`Hello ${name}! 👋 I'm SmartAssist, your AI assistant. You can ask me questions about attendance records (e.g. "How many students were present on 2nd November?"), active class status ("How many students are present today?"), or student profiles!`, 'ai');
+        return;
+      }
 
       // ── DIRECT UI HARDWARE CONTROLS (Handled locally) ──────────────────────────
       if (q === 'log out' || q === 'logout' || q === 'sign out' || q === 'signout' || q === 'exit') {

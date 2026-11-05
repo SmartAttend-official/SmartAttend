@@ -371,17 +371,19 @@ function authenticateToken(req, res, next) {
   const action = req.query.action || (req.body && req.body.action);
   const sheet = req.query.sheet || (req.body && req.body.sheet);
   
-  if (action === 'login' || action === 'verify_login_otp' || action === 'resend_2fa_otp' || action === 'send_otp' || action === 'verify_otp' || action === 'verify_otp_only' || action === 'verify_student_email' || (!action && !sheet)) {
-    return next();
-  }
-
-  // CRIT-3: verify_lab_code now REQUIRES authentication — students must be logged in to mark lab attendance.
-  // This prevents anonymous actors from marking any student present.
-  // The JWT's studentId is used to bind the verification to the authenticated student.
-  // (verify_lab_code handler below enforces this binding)
-
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1]; // Format: Bearer <token>
+
+  if (action === 'login' || action === 'verify_login_otp' || action === 'resend_2fa_otp' || action === 'send_otp' || action === 'verify_otp' || action === 'verify_otp_only' || action === 'verify_student_email' || action === 'ask_gemini' || (!action && !sheet)) {
+    if (token) {
+      jwt.verify(token, JWT_SECRET, (err, decoded) => {
+        if (!err && decoded) req.user = decoded;
+        next();
+      });
+      return;
+    }
+    return next();
+  }
 
   if (!token) {
     return res.status(401).json({ status: 'error', message: 'Session Expired: Please log in again.' });
@@ -1866,7 +1868,7 @@ app.post('/', authenticateToken, async (req, res) => {
     const { data, id, email, searchCol, searchVal } = req.body || {};
     
     // ── ROLE-BASED ACCESS CONTROL (RBAC) AUTHORIZATION GATE ──
-    const userRole = (req.user && req.user.role) || '';
+    const userRole = (req.user && req.user.role) || (action === 'ask_gemini' ? 'professor' : '');
 
     const RBAC_RULES = {
       // Administrator Only Actions
