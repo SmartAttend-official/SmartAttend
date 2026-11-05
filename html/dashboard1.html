@@ -1885,13 +1885,12 @@
       }
     }
 
-    async function askGemini(prompt) {
-      // The API key and logic have been securely moved to the backend.
-      // We now make a request to our Node.js server instead of Google directly.
+    async function askGemini(prompt, context = {}) {
+      // Secure Node.js RAG endpoint
       const token = sessionStorage.getItem('token');
       if (!token) return "Error: You are not logged in.";
       
-      const serverUrl = window.SMART_ATTEND_CONFIG ? window.SMART_ATTEND_CONFIG.SCRIPT_URL : window.SCRIPT_URL; // HIGH-2: removed hardcoded fallback
+      const serverUrl = window.SMART_ATTEND_CONFIG ? window.SMART_ATTEND_CONFIG.SCRIPT_URL : window.SCRIPT_URL;
       
       try {
         const response = await fetch(`${serverUrl}/`, {
@@ -1902,7 +1901,8 @@
           },
           body: JSON.stringify({
             action: 'ask_gemini',
-            prompt: prompt
+            prompt: prompt,
+            context: context
           })
         });
         
@@ -1920,179 +1920,101 @@
 
     async function processAIIntent(rawQuery) {
       const q = rawQuery.toLowerCase().trim();
-      let response = "I'm not sure about that. Try asking: 'Who is absent?', 'What is my email?', 'How to update password?', or 'Log out'.";
-      let matched = true;
-
-      // ── GREETINGS ──────────────────────────────────────────────────────────
+      let response = "";
       const name = sessionStorage.getItem('userName') || 'Professor';
-      if (q === 'hi' || q === 'hello' || q === 'hey' || q.startsWith('hi ') || q.startsWith('hello ') || q.startsWith('hey ')) {
-        response = `Hello ${name}! 👋 I'm SmartAssist, your AI assistant. Ask me about attendance, your profile, how to navigate the system, or just say 'log out' to sign out!`;
-      }
 
-      // ── GOODBYE ────────────────────────────────────────────────────────────
-      else if (q.includes('bye') || q.includes('goodbye') || q.includes('see you') || q.includes('take care') || q.includes('later')) {
-        response = `Goodbye, ${name}! 👋 Have a great class. Come back anytime you need help!`;
-      }
-
-      // ── LOGOUT ─────────────────────────────────────────────────────────────
-      else if (q.includes('log out') || q.includes('logout') || q.includes('sign out') || q.includes('signout') || q === 'exit') {
+      // ── DIRECT UI HARDWARE CONTROLS (Handled locally) ──────────────────────────
+      if (q === 'log out' || q === 'logout' || q === 'sign out' || q === 'signout' || q === 'exit') {
         appendMessage("Logging you out now. Goodbye! 👋", 'ai');
         setTimeout(() => logoutUser(), 1500);
         return;
       }
 
-      // ── CAMERA CONTROLS ────────────────────────────────────────────────────
-      else if ((q.includes('start') || q.includes('open') || q.includes('turn on') || q.includes('begin') || q.includes('launch')) && (q.includes('camera') || q.includes('scan') || q.includes('video') || q.includes('face'))) {
-        if (document.getElementById('camera_btn').innerText.includes('Start')) {
+      if ((q.includes('start') || q.includes('open') || q.includes('turn on') || q.includes('launch')) && (q.includes('camera') || q.includes('scanner') || q.includes('webcam'))) {
+        const camBtn = document.getElementById('camera_btn');
+        if (camBtn && camBtn.innerText.includes('Start')) {
           $("#camera_btn").click();
-          response = "📷 Starting the facial recognition scanner now!";
+          appendMessage("📷 Starting the facial recognition scanner now!", 'ai');
         } else {
-          response = "The camera scanner is already running.";
+          appendMessage("The camera scanner is already running.", 'ai');
         }
+        return;
       }
-      else if ((q.includes('stop') || q.includes('close') || q.includes('turn off') || q.includes('end') || q.includes('halt') || q.includes('pause')) && (q.includes('camera') || q.includes('scan') || q.includes('video') || q.includes('face'))) {
-        if (document.getElementById('camera_btn').innerText.includes('Stop')) {
+
+      if ((q.includes('stop') || q.includes('close') || q.includes('turn off') || q.includes('halt') || q.includes('pause')) && (q.includes('camera') || q.includes('scanner') || q.includes('webcam'))) {
+        const camBtn = document.getElementById('camera_btn');
+        if (camBtn && camBtn.innerText.includes('Stop')) {
           $("#camera_btn").click();
-          response = "🛑 Stopping the facial recognition scanner.";
+          appendMessage("🛑 Stopping the facial recognition scanner.", 'ai');
         } else {
-          response = "The camera is not currently running.";
+          appendMessage("The camera is not currently running.", 'ai');
         }
+        return;
       }
 
-      // ── ABSENT STUDENTS ────────────────────────────────────────────────────
-      else if (q.includes('absent') || q.includes('missing') || q.includes('not here') || q.includes('not present') || q.includes('who didn') || q.includes("didn't come")) {
-        if (!Array.isArray(students) || students.length === 0) {
-          response = "The student list hasn't loaded yet. Please wait a moment.";
-        } else {
-          const absent = students.filter(s => !s.detected);
-          if (absent.length === 0) {
-            response = "✅ Great news! All students are currently marked present.";
-          } else {
-            const names = absent.map(s => s.name).join(', ');
-            response = `❌ ${absent.length} student(s) absent today: ${names}.`;
-          }
-        }
-      }
-
-      // ── PRESENT STUDENTS ───────────────────────────────────────────────────
-      else if ((q.includes('present') || q.includes('attended') || q.includes('who came') || q.includes('who is here')) && !q.includes('not')) {
-        if (!Array.isArray(students) || students.length === 0) {
-          response = "The student list hasn't loaded yet.";
-        } else {
-          const present = students.filter(s => s.detected);
-          const names = present.map(s => s.name).join(', ');
-          response = present.length > 0
-            ? `✅ ${present.length} student(s) present: ${names}.`
-            : "No students have been marked present yet.";
-        }
-      }
-
-      // ── TOTAL / COUNT ──────────────────────────────────────────────────────
-      else if (q.includes('total') || q.includes('how many student') || q.includes('count student') || (q.includes('how many') && q.includes('student'))) {
-        if (!Array.isArray(students)) {
-          response = "The student list hasn't loaded yet.";
-        } else {
-          const present = students.filter(s => s.detected).length;
-          const absent = students.filter(s => !s.detected).length;
-          response = `📊 Class Summary:\n• Total: ${students.length} students\n• Present: ${present}\n• Absent: ${absent}`;
-        }
-      }
-
-      // ── SAVE ATTENDANCE ────────────────────────────────────────────────────
-      else if (q.includes('save') || q.includes('submit attendance') || q.includes('upload attendance') || q.includes('record attendance')) {
+      if (q === 'save attendance' || q === 'submit attendance' || q === 'save session') {
         triggerSaveAlert();
-        response = "💾 Saving the attendance record to the database now!";
+        appendMessage("💾 Saving the attendance record to the database now!", 'ai');
+        return;
       }
 
-      // ── PERSONAL INFO: EMAIL ───────────────────────────────────────────────
-      else if ((q.includes('my email') || q.includes('email id') || q.includes('email address') || q.includes('what is my email') || q.includes('give me my email') || q.includes('show my email'))) {
-        const email = sessionStorage.getItem('userEmail') || 'Not available';
-        response = `📧 Your registered email is: ${email}`;
-      }
-
-      // ── PERSONAL INFO: FIRST NAME ──────────────────────────────────────────
-      else if (q.includes('first name') || q.includes('my first name') || q.includes('what is my first name') || q.includes('give me my first name')) {
-        const firstName = (sessionStorage.getItem('userName') || '').split(' ')[0] || 'Not available';
-        response = `👤 Your first name is: ${firstName}`;
-      }
-
-      // ── PERSONAL INFO: LAST NAME ───────────────────────────────────────────
-      else if (q.includes('last name') || q.includes('my last name') || q.includes('what is my last name') || q.includes('give me my last name') || q.includes('surname')) {
-        const parts = (sessionStorage.getItem('userName') || '').split(' ');
-        const lastName = parts.length > 1 ? parts.slice(1).join(' ') : 'Not available';
-        response = `👤 Your last name is: ${lastName}`;
-      }
-
-      // ── PERSONAL INFO: FULL NAME ───────────────────────────────────────────
-      else if (q.includes('my name') || q.includes('what is my name') || q.includes('give me my name') || q.includes('who am i') || q.includes('full name')) {
-        response = `👤 You are logged in as: ${name}`;
-      }
-
-      // ── HOW TO: UPDATE EMAIL ───────────────────────────────────────────────
-      else if ((q.includes('update') || q.includes('change') || q.includes('how to')) && q.includes('email')) {
-        response = `📧 To update your email:\n1. Go to 'Profile' in the sidebar\n2. Find the Personal Information section\n3. Change the Email Address field\n4. Click 'Save Changes'`;
-      }
-
-      // ── HOW TO: UPDATE PASSWORD ────────────────────────────────────────────
-      else if ((q.includes('update') || q.includes('change') || q.includes('how to') || q.includes('reset')) && q.includes('password')) {
-        response = `🔑 To update your password:\n1. Go to 'Profile' in the sidebar\n2. Find the Security section\n3. Enter your Current Password\n4. Enter your New Password\n5. Click 'Update Password'`;
-      }
-
-      // ── HOW TO: UPDATE PROFILE / NAME ──────────────────────────────────────
-      else if ((q.includes('update') || q.includes('change') || q.includes('edit')) && (q.includes('profile') || q.includes('name') || q.includes('info'))) {
-        response = `✏️ To update your profile:\n1. Click 'Profile' in the sidebar\n2. Update your First Name, Last Name, or Email\n3. Click 'Save Changes'`;
-      }
-
-      // ── NAVIGATE: DASHBOARD ────────────────────────────────────────────────
-      else if (q.includes('dashboard') || q.includes('go to dashboard') || q.includes('home')) {
-        response = `🏠 You are on the Dashboard! It shows the live camera feed and attendance scan results.`;
-      }
-
-      // ── NAVIGATE: HISTORY ──────────────────────────────────────────────────
-      else if (q.includes('history') || q.includes('past attendance') || q.includes('previous session')) {
-        response = `🕐 To view past attendance:\nClick 'Attendance History' in the sidebar. It shows all previous session records.`;
-      }
-
-      // ── NAVIGATE: RECORDS ──────────────────────────────────────────────────
-      else if (q.includes('record') || q.includes('student list') || q.includes('student data')) {
-        response = `👥 To view/edit student records:\nClick 'Student Records' in the sidebar. You can add, edit, delete students and export PDF reports there.`;
-      }
-
-      // ── NAVIGATE: SETTINGS ────────────────────────────────────────────────
-      else if (q.includes('setting') || q.includes('ip camera') || q.includes('camera url') || q.includes('configure')) {
-        response = `⚙️ To change settings:\nClick 'Settings' in the sidebar. You can configure the IP Camera URL and other preferences.`;
-      }
-
-      // ── NAVIGATE: START ATTENDANCE ────────────────────────────────────────
-      else if ((q.includes('start') || q.includes('begin') || q.includes('new')) && q.includes('attendance')) {
-        response = `▶️ To start a new attendance session:\nClick 'Start Attendance' in the sidebar, select the Department, Semester, Subject and Date, then click 'Initialize Session'.`;
-      }
-
-      // ── LIST MODELS ───────────────────────────────────────────────────────
-      else if (q === 'list models' || q === 'show models' || q.includes('what models do you have')) {
+      if (q === 'list models' || q === 'show models') {
         response = await listModels();
+        appendMessage(response, 'ai');
+        return;
       }
 
-      // ── HELP ──────────────────────────────────────────────────────────────
-      else if (q.includes('help') || q.includes('what can you do') || q.includes('commands') || q.includes('options')) {
-        response = `🤖 I can help you with:\n• "Who is absent today?"\n• "How many students are present?"\n• "Start / Stop camera"\n• "What is my email?"\n• "What is my name?"\n• "How to update my password?"\n• "How to update my email?"\n• "Go to history / records / settings"\n• "Save attendance"\n• "Log out"`;
-      }
-      else {
-        matched = false;
-      }
+      // ── ALL OTHER INQUIRIES & QUESTIONS ROUTED VIA RAG ENGINE ──────────────────
+      const container = document.getElementById('aiMessages');
+      const thinkingDiv = document.createElement('div');
+      thinkingDiv.className = 'message msg-ai';
+      thinkingDiv.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Checking database & synthesizing answer...';
+      container.appendChild(thinkingDiv);
+      container.scrollTop = container.scrollHeight;
 
-      if (!matched) {
-        // Show thinking message
-        const container = document.getElementById('aiMessages');
-        const thinkingDiv = document.createElement('div');
-        thinkingDiv.className = 'message msg-ai';
-        thinkingDiv.innerText = 'Thinking...';
-        container.appendChild(thinkingDiv);
-        container.scrollTop = container.scrollHeight;
-        
-        response = await askGemini(rawQuery);
-        
-        // Remove thinking message
+      // Extract real-time session context to empower RAG
+      const activeDept = localStorage.getItem('activeClassDept') || '';
+      const activeSem = localStorage.getItem('activeClassSem') || '';
+      const activeSub = localStorage.getItem('activeClassSubject') || '';
+      const dateBadge = document.getElementById('sessionDateBadge');
+      const activeDate = (dateBadge && dateBadge.innerText.trim()) ? dateBadge.innerText.trim() : new Date().toISOString().split('T')[0];
+      const isCameraRunning = !document.getElementById('camera_btn')?.innerText.includes('Start');
+
+      const liveRoster = (Array.isArray(students) && students.length > 0) ? {
+        totalLoaded: students.length,
+        isCameraRunning: isCameraRunning,
+        presentCount: students.filter(s => s.detected).length,
+        presentStudents: students.filter(s => s.detected).map(s => s.name || s.id),
+        leaveCount: students.filter(s => s.status === 'leave' || s.onLeave).length,
+        leaveStudents: students.filter(s => s.status === 'leave' || s.onLeave).map(s => s.name || s.id),
+        absentCount: students.filter(s => !s.detected && s.status !== 'leave' && !s.onLeave).length,
+        absentStudents: students.filter(s => !s.detected && s.status !== 'leave' && !s.onLeave).map(s => s.name || s.id)
+      } : {
+        totalLoaded: 0,
+        isCameraRunning: isCameraRunning,
+        presentCount: 0,
+        presentStudents: [],
+        leaveCount: 0,
+        leaveStudents: [],
+        absentCount: 0,
+        absentStudents: []
+      };
+
+      const sessionContext = {
+        professorName: name,
+        professorEmail: sessionStorage.getItem('userEmail') || '',
+        department: activeDept,
+        semester: activeSem,
+        subject: activeSub,
+        sessionDate: activeDate,
+        liveRoster: liveRoster
+      };
+
+      try {
+        response = await askGemini(rawQuery, sessionContext);
+      } catch (err) {
+        response = `Error: ${err.message}`;
+      } finally {
         thinkingDiv.remove();
       }
 

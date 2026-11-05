@@ -1915,19 +1915,17 @@ app.post('/', authenticateToken, async (req, res) => {
       }
     }
     
-    // ── AI ASSISTANT ACTION ──
-    // ── AI ASSISTANT ACTION ──
+    // ── AI ASSISTANT & RAG ACTION ──
     if (action === 'ask_gemini') {
       const rawPrompt = req.body.prompt;
       if (!rawPrompt) return res.json({ status: 'error', message: 'Prompt is required.' });
 
       // MED-6: Prompt injection mitigations
-      // 1. Enforce maximum prompt length (prevents giant payloads that try to overflow the system prompt)
       const MAX_PROMPT_LENGTH = 1000;
       if (rawPrompt.length > MAX_PROMPT_LENGTH) {
         return res.json({ status: 'error', message: `Prompt too long. Maximum ${MAX_PROMPT_LENGTH} characters allowed.` });
       }
-      // 2. Strip common prompt injection patterns (ignore/forget/disregard system instructions etc.)
+
       const INJECTION_PATTERNS = [
         /ignore\s+(previous|above|all|prior|system)\s+(instructions?|prompts?|rules?|context)/gi,
         /forget\s+(everything|all|previous|above|your\s+instructions?)/gi,
@@ -1942,38 +1940,276 @@ app.post('/', authenticateToken, async (req, res) => {
       for (const pattern of INJECTION_PATTERNS) {
         prompt = prompt.replace(pattern, '[removed]');
       }
-      // 3. Trim whitespace
       prompt = prompt.trim();
+      const clientContext = req.body.context || {};
 
-      const apiKey = process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY.startsWith('AIzaSyBY60belKbg2wHUq') ? process.env.GEMINI_API_KEY.trim() : null;
+      // ── Natural Language Date & Entity Extractor ──
+      const ORDINAL_MAP = {
+        first: 1, '1st': 1, second: 2, '2nd': 2, third: 3, '3rd': 3, fourth: 4, '4th': 4,
+        fifth: 5, '5th': 5, sixth: 6, '6th': 6, seventh: 7, '7th': 7, eighth: 8, '8th': 8,
+        ninth: 9, '9th': 9, tenth: 10, '10th': 10, eleventh: 11, '11th': 11, twelfth: 12, '12th': 12,
+        thirteenth: 13, '13th': 13, fourteenth: 14, '14th': 14, fifteenth: 15, '15th': 15,
+        sixteenth: 16, '16th': 16, seventeenth: 17, '17th': 17, eighteenth: 18, '18th': 18,
+        nineteenth: 19, '19th': 19, twentieth: 20, '20th': 20, 'twenty-first': 21, '21st': 21,
+        'twenty-second': 22, '22nd': 22, 'twenty-third': 23, '23rd': 23, 'twenty-fourth': 24, '24th': 24,
+        'twenty-fifth': 25, '25th': 25, 'twenty-sixth': 26, '26th': 26, 'twenty-seventh': 27, '27th': 27,
+        'twenty-eighth': 28, '28th': 28, 'twenty-ninth': 29, '29th': 29, thirtieth: 30, '30th': 30,
+        'thirty-first': 31, '31st': 31
+      };
+      const MONTH_MAP = {
+        january: '01', jan: '01', february: '02', feb: '02', march: '03', mar: '03',
+        april: '04', apr: '04', may: '05', jun: '06', june: '06', july: '07', jul: '07',
+        august: '08', aug: '08', september: '09', sep: '09', sept: '09', october: '10', oct: '10',
+        november: '11', nov: '11', december: '12', dec: '12'
+      };
+
+      function extractDateFromQuery(text) {
+        const lower = text.toLowerCase().trim();
+        const today = new Date();
+        const year = today.getFullYear();
+
+        if (lower.includes('today')) return today.toISOString().split('T')[0];
+        if (lower.includes('yesterday')) {
+          const yest = new Date(today);
+          yest.setDate(today.getDate() - 1);
+          return yest.toISOString().split('T')[0];
+        }
+        const isoMatch = lower.match(/\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b/);
+        if (isoMatch) {
+          return `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;
+        }
+
+        const words = lower.replace(/[^a-z0-9\- ]/g, ' ').split(/\s+/);
+        for (let i = 0; i < words.length; i++) {
+          const w = words[i];
+          if (MONTH_MAP[w]) {
+            const mVal = MONTH_MAP[w];
+            if (i > 0) {
+              const prev = words[i - 1] === 'of' && i > 1 ? words[i - 2] : words[i - 1];
+              const dayVal = ORDINAL_MAP[prev] || parseInt(prev, 10);
+              if (dayVal >= 1 && dayVal <= 31) {
+                return `${year}-${mVal}-${String(dayVal).padStart(2, '0')}`;
+              }
+            }
+            if (i < words.length - 1) {
+              const next = words[i + 1] === 'the' && i < words.length - 2 ? words[i + 2] : words[i + 1];
+              const dayVal = ORDINAL_MAP[next] || parseInt(next, 10);
+              if (dayVal >= 1 && dayVal <= 31) {
+                return `${year}-${mVal}-${String(dayVal).padStart(2, '0')}`;
+              }
+            }
+          }
+        }
+        return null;
+      }
+
+      function extractStudentIdFromQuery(text) {
+        const match = text.toUpperCase().match(/\b([A-Z]{2,5}\d{2,6})\b/);
+        return match ? match[1] : null;
+      }
+
+      let ragData = {
+        targetDate: extractDateFromQuery(prompt),
+        targetStudentId: extractStudentIdFromQuery(prompt),
+        retrievedRecords: null,
+        retrievedLeaves: null,
+        retrievedStudentProfile: null,
+        retrievedPendingLeaves: null,
+        uniquePresentNames: [],
+        uniqueAbsentNames: [],
+        uniqueLeaveNames: [],
+        contextSummary: []
+      };
+
+      try {
+        // A. If a date is targeted (e.g. 2026-11-02 or today)
+        if (ragData.targetDate) {
+          let q = supabase.from('AttendanceHistory').select('*').eq('Date', ragData.targetDate);
+          if (clientContext.department) {
+            q = q.ilike('Department', `%${clientContext.department}%`);
+          }
+          const { data: records } = await q;
+          ragData.retrievedRecords = records || [];
+
+          // Query active medical leaves covering this date
+          const { data: leaves } = await supabase
+            .from('LeaveRequests')
+            .select('*')
+            .lte('StartDate', ragData.targetDate)
+            .gte('EndDate', ragData.targetDate);
+          ragData.retrievedLeaves = leaves || [];
+
+          const present = ragData.retrievedRecords.filter(r => (r.Status || '').toLowerCase() === 'present');
+          const absent = ragData.retrievedRecords.filter(r => (r.Status || '').toLowerCase() === 'absent');
+          const onLeave = ragData.retrievedRecords.filter(r => (r.Status || '').toLowerCase() === 'leave');
+
+          const uniquePresentIds = Array.from(new Set(present.map(r => r.StudentID))).filter(Boolean);
+          const uniqueAbsentIds = Array.from(new Set(absent.map(r => r.StudentID))).filter(Boolean);
+          const uniqueLeaveIds = Array.from(new Set(onLeave.map(r => r.StudentID))).filter(Boolean);
+          const subjects = Array.from(new Set(ragData.retrievedRecords.map(r => r.Subject))).filter(Boolean);
+
+          // Fetch student names from students table
+          const allReferencedIds = Array.from(new Set([...uniquePresentIds, ...uniqueAbsentIds, ...uniqueLeaveIds]));
+          let studentNameMap = new Map();
+          if (allReferencedIds.length > 0) {
+            const { data: stRows } = await supabase.from('students').select('ID, Name').in('ID', allReferencedIds);
+            if (stRows) {
+              stRows.forEach(s => studentNameMap.set(s.ID, s.Name));
+            }
+          }
+
+          ragData.uniquePresentNames = uniquePresentIds.map(id => studentNameMap.has(id) ? `${studentNameMap.get(id)} (${id})` : id);
+          ragData.uniqueAbsentNames = uniqueAbsentIds.map(id => studentNameMap.has(id) ? `${studentNameMap.get(id)} (${id})` : id);
+          ragData.uniqueLeaveNames = uniqueLeaveIds.map(id => studentNameMap.has(id) ? `${studentNameMap.get(id)} (${id})` : id);
+
+          ragData.contextSummary.push(`[RETRIEVED ATTENDANCE LEDGER FOR DATE: ${ragData.targetDate}]
+- Total Database Entries Logged: ${ragData.retrievedRecords.length}
+- Present Count: ${present.length} session logs (${uniquePresentIds.length} unique student(s): ${ragData.uniquePresentNames.join(', ') || 'None'})
+- Absent Count: ${absent.length} session logs (${uniqueAbsentIds.length} unique student(s): ${ragData.uniqueAbsentNames.join(', ') || 'None'})
+- Approved Leave Count: ${onLeave.length} session logs (${uniqueLeaveIds.length} unique student(s): ${ragData.uniqueLeaveNames.join(', ') || 'None'})
+- Subjects Logged: ${subjects.join(', ') || 'None'}
+- Active Leave Requests Covering This Date: ${ragData.retrievedLeaves.length} requests`);
+        }
+
+        // B. If a student ID is targeted (e.g. BCA051)
+        if (ragData.targetStudentId) {
+          const { data: studentRows } = await supabase
+            .from('students')
+            .select('*')
+            .eq('ID', ragData.targetStudentId)
+            .limit(1);
+          if (studentRows && studentRows.length > 0) {
+            const st = studentRows[0];
+            ragData.retrievedStudentProfile = st;
+            const pct = st.Total_Classes > 0 ? Math.round((st.Classes_Attended / st.Total_Classes) * 100) : 0;
+            ragData.contextSummary.push(`[RETRIEVED STUDENT MASTER RECORD]
+- Student ID: ${st.ID}
+- Name: ${st.Name}
+- Department: ${st.Department}, Semester: ${st.Semester}
+- Classes Attended: ${st.Classes_Attended} / ${st.Total_Classes} Total Sessions (${pct}% Attendance)
+- Status: ${pct >= 75 ? 'Safe Zone (Eligible for Exams)' : 'Below 75% Requirement'}`);
+          }
+        }
+
+        // C. If user asks about leaves / pending requests
+        if (prompt.toLowerCase().includes('leave') || prompt.toLowerCase().includes('request') || prompt.toLowerCase().includes('approval')) {
+          const { data: pending } = await supabase
+            .from('LeaveRequests')
+            .select('*')
+            .eq('Status', 'Pending')
+            .limit(5);
+          if (pending && pending.length > 0) {
+            ragData.retrievedPendingLeaves = pending;
+            ragData.contextSummary.push(`[RETRIEVED PENDING LEAVE APPLICATIONS: ${pending.length} pending]
+${pending.map(p => `• Student ${p.StudentID || p.Student_ID}: ${p.StartDate} to ${p.EndDate} (${p.DurationDays} days) - Reason: "${p.Reason}" (AI Trust Score: ${p.GeminiVerdict || 'Pending Audit'})`).join('\n')}`);
+          }
+        }
+      } catch (err) {
+        console.warn('RAG Database retrieval warning:', err.message);
+      }
+
+      if (clientContext.liveRoster) {
+        const lr = clientContext.liveRoster;
+        ragData.contextSummary.push(`[LIVE ACTIVE DASHBOARD SCAN CONTEXT]
+- Department: ${clientContext.department || 'Not selected'}, Semester: ${clientContext.semester || 'Not selected'}, Subject: ${clientContext.subject || 'Not selected'}
+- Active Dashboard Date: ${clientContext.sessionDate || 'Today'}
+- Camera Scanner Status: ${lr.isCameraRunning ? 'ACTIVE & SCANNING' : 'INACTIVE / STOPPED'}
+- Total Students Enrolled in Active Class: ${lr.totalLoaded}
+- Live Detected Present in Camera: ${lr.presentCount} students (${(lr.presentStudents || []).slice(0, 10).join(', ')})
+- Live On Formal Leave: ${lr.leaveCount} students (${(lr.leaveStudents || []).slice(0, 10).join(', ')})
+- Live Unmarked / Absent: ${lr.absentCount} students (${(lr.absentStudents || []).slice(0, 10).join(', ')})`);
+      }
+
+      function generateDeterministicFallback() {
+        if (ragData.targetDate) {
+          const records = ragData.retrievedRecords || [];
+          const present = records.filter(r => (r.Status || '').toLowerCase() === 'present');
+          const absent = records.filter(r => (r.Status || '').toLowerCase() === 'absent');
+          const onLeave = records.filter(r => (r.Status || '').toLowerCase() === 'leave');
+          const subjects = Array.from(new Set(records.map(r => r.Subject))).filter(Boolean);
+
+          if (records.length === 0) {
+            return `📅 **Attendance Records for ${ragData.targetDate}:**\n\nNo finalized attendance sessions were found in the database for **${ragData.targetDate}**.\n\n${clientContext.liveRoster && clientContext.liveRoster.totalLoaded > 0 ? `*Note: Your current screen has an active class loaded with ${clientContext.liveRoster.totalLoaded} students. If you are taking attendance for today, start the camera scanner and click 'Save Attendance' to record it.*` : `To record attendance for this date, select the class in 'Start Attendance' and initialize a session.`}`;
+          }
+
+          return `📊 **Attendance Summary for ${ragData.targetDate}:**\n\n` +
+                 `• **Total Recorded Entries:** ${records.length} session entries\n` +
+                 `• **Present:** ${present.length} records (${ragData.uniquePresentNames.length} student${ragData.uniquePresentNames.length === 1 ? '' : 's'}: ${ragData.uniquePresentNames.join(', ')})\n` +
+                 `• **Absent:** ${absent.length} records (${ragData.uniqueAbsentNames.length} student${ragData.uniqueAbsentNames.length === 1 ? '' : 's'}${ragData.uniqueAbsentNames.length > 0 ? ': ' + ragData.uniqueAbsentNames.join(', ') : ''})\n` +
+                 `• **On Approved Leave:** ${onLeave.length} records (${ragData.uniqueLeaveNames.length} student${ragData.uniqueLeaveNames.length === 1 ? '' : 's'}${ragData.uniqueLeaveNames.length > 0 ? ': ' + ragData.uniqueLeaveNames.join(', ') : ''})\n` +
+                 `• **Subject(s):** ${subjects.join(', ')}\n\n` +
+                 `*(Data retrieved directly from Supabase Cloud AttendanceHistory)*`;
+        }
+
+        if (ragData.targetStudentId && ragData.retrievedStudentProfile) {
+          const st = ragData.retrievedStudentProfile;
+          const pct = st.Total_Classes > 0 ? Math.round((st.Classes_Attended / st.Total_Classes) * 100) : 0;
+          return `👤 **Student Attendance Profile: ${st.Name} (${st.ID})**\n\n` +
+                 `• **Department:** ${st.Department} (${st.Semester})\n` +
+                 `• **Attended Classes:** ${st.Classes_Attended} (includes approved medical leaves)\n` +
+                 `• **Total Classes:** ${st.Total_Classes}\n` +
+                 `• **Overall Percentage:** ${pct}%\n` +
+                 `• **Status:** ${pct >= 75 ? '✅ Safe Zone (Eligible for Exams)' : '⚠️ Below 75% Requirement'}`;
+        }
+
+        if (clientContext.liveRoster && clientContext.liveRoster.totalLoaded > 0) {
+          const lr = clientContext.liveRoster;
+          return `📷 **Current Live Class Status:**\n\n` +
+                 `• **Department:** ${clientContext.department || 'Selected Class'} (${clientContext.semester || ''})\n` +
+                 `• **Subject:** ${clientContext.subject || 'Active Session'}\n` +
+                 `• **Total Enrolled:** ${lr.totalLoaded} students\n` +
+                 `• **Present in Camera:** ${lr.presentCount} (${(lr.presentStudents || []).join(', ') || 'None yet'})\n` +
+                 `• **On Formal Leave:** ${lr.leaveCount} (${(lr.leaveStudents || []).join(', ') || 'None'})\n` +
+                 `• **Absent / Unmarked:** ${lr.absentCount}\n\n` +
+                 `*Click 'Save Attendance' to finalize this session into the database.*`;
+        }
+
+        return `🤖 **SmartAssist AI:** I am connected to your live database. You can ask me:\n• *"How many students were present on 2nd November?"*\n• *"How many students are present today?"*\n• *"What is the attendance of BCA051?"*\n• *"How does medical leave affect attendance?"*`;
+      }
+
+      // Check for Gemini API Key
+      const rawKey = process.env.GEMINI_API_KEY || '';
+      const apiKey = rawKey && 
+                     !rawKey.includes('your_gemini_api_key') && 
+                     !rawKey.includes('your_key') && 
+                     !rawKey.startsWith('AIzaSyBY60belKbg2wHUq') 
+                     ? rawKey.trim() : null;
+
       if (!apiKey) {
-        return res.json({ status: 'error', message: 'Gemini API Key is unconfigured. Please add GEMINI_API_KEY=your_key in server/.env' });
+        return res.json({ status: 'success', message: generateDeterministicFallback() });
       }
 
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
       
-      const systemInstruction = `You are a helpful assistant for the SmartAttend2 system, used only in the Professor Panel. 
-You can answer questions about the system usage and general knowledge questions.
+      const systemInstruction = `You are SmartAssist, the intelligent AI assistant and ERP specialist for the SmartAttend2 platform.
 CURRENT DATE AND TIME: ${new Date().toLocaleString()}
+PROFESSOR IN SESSION: ${clientContext.professorName || req.user?.email || 'Professor'} (${req.user?.department || clientContext.department || 'All Departments'})
 
-SYSTEM OVERVIEW:
-SmartAttend2 is an automated attendance management system. 
-In the Professor Panel, professors can:
-1. View Dashboard with live camera feed.
-2. Start Attendance using facial recognition or manual toggles.
-3. View Student Records.
-4. View Attendance History.
-5. Manage Profile.
-6. View Proxy & Invigilation assignments.
-7. Handle Leave Requests.
-8. Configure Settings like IP Camera URL.
-9. Send alert emails to absent students and parents.
+=== INSTITUTIONAL KNOWLEDGE BASE ===
+1. SMART ATTENDANCE CREDIT MODEL:
+   - Attendance percentage formula: Attendance % = ((Classes Attended + Approved Leaves) / Total Classes) * 100.
+   - Students on approved medical leave or duty leave are credited identically to present students in both overall totals and SubjectAttendance.
+   - False Absenteeism Alert Suppression: When attendance is saved, students on approved or pending leave are automatically excluded from absence alert emails to parents.
+2. BIOMETRIC ATTENDANCE:
+   - Face recognition runs client-side via edge-AI (face-api.js with 128-dimensional Euclidean distance matching <= 0.45 threshold).
+   - In live classroom view: Green bounding boxes indicate Present students. Amber bounding boxes indicate students on Approved Leave.
+3. LAB ATTENDANCE:
+   - Cryptographic 6-digit dynamic PIN and QR code with a 5-minute decay timer. Set-based deduplication key: Date_Subject.
+4. LEAVE REQUESTS:
+   - Single day and multi-day leave application with quick chips (+2d, +3d, +5d, +7d).
+   - Instant parent email notifications on submission, approval, or rejection.
+   - AI Medical Proof Fraud Audit: Google Gemini 1.5 Flash + PDF stream decompiler verifies medical documents and assigns trust scores (GENUINE, SUSPICIOUS, INVALID).
+5. BULK STUDENT IMPORTER:
+   - Admin command center supports batch ingestion via Excel (.xlsx) and CSV using SheetJS with live duplicate detection and auto-welcome emails.
 
-RULES:
-1. Do not reveal any technical details about the system (e.g., API keys, database passwords, specific technologies used like Firebase, Node.js, etc.).
-2. If asked about these sensitive details, politely refuse to answer.
-3. Be concise and professional.
-4. Keep answers brief and avoid overly detailed responses unless asked.`;
+=== RETRIEVED REAL-TIME DATABASE CONTEXT (RAG) ===
+${ragData.contextSummary.length > 0 ? ragData.contextSummary.join('\n\n') : 'No specific date or student ID was identified in the query; no custom database slice retrieved.'}
+
+=== INSTRUCTIONS ===
+- Answer the user's question directly, accurately, and politely using the RETRIEVED REAL-TIME DATABASE CONTEXT and INSTITUTIONAL KNOWLEDGE BASE above.
+- If the user asks about attendance on a specific date (e.g. 2nd November or today), cite the exact counts, student IDs, and subjects from the retrieved data.
+- Never state that the student list hasn't loaded if database records exist.
+- Keep your tone concise, professional, and helpful.`;
 
       try {
         const geminiResponse = await fetch(url, {
@@ -1982,7 +2218,7 @@ RULES:
           body: JSON.stringify({
             contents: [
               { role: "user", parts: [{ text: systemInstruction }] },
-              { role: "model", parts: [{ text: "Understood. I will act as the SmartAttend2 assistant following these rules." }] },
+              { role: "model", parts: [{ text: "Understood. I will act as the SmartAssist AI specialist with live database context following these instructions." }] },
               { role: "user", parts: [{ text: prompt }] }
             ]
           })
@@ -1992,11 +2228,12 @@ RULES:
         if (responseData.candidates && responseData.candidates[0].content && responseData.candidates[0].content.parts[0].text) {
           return res.json({ status: 'success', message: responseData.candidates[0].content.parts[0].text });
         } else {
-          return res.json({ status: 'error', message: responseData.error ? responseData.error.message : 'Unknown Gemini error.' });
+          console.warn("Gemini API error, falling back to deterministic RAG answer:", responseData.error || responseData);
+          return res.json({ status: 'success', message: generateDeterministicFallback() });
         }
       } catch (error) {
-        console.error("Gemini API error:", error);
-        return res.json({ status: 'error', message: 'Failed to connect to AI provider.' });
+        console.error("Gemini API error, falling back to deterministic RAG answer:", error);
+        return res.json({ status: 'success', message: generateDeterministicFallback() });
       }
     }
 
