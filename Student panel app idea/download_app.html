@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Download SmartAttend Student App</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0b1120;
+      --card-bg: rgba(30, 41, 59, 0.7);
+      --accent: #10b981;
+      --accent-hover: #059669;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background-image:
+        radial-gradient(circle at 20% 20%, rgba(16, 185, 129, 0.15), transparent 40%),
+        radial-gradient(circle at 80% 80%, rgba(59, 130, 246, 0.15), transparent 40%);
+    }
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      padding: 36px 30px;
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+    }
+    .logo {
+      width: 72px;
+      height: 72px;
+      border-radius: 18px;
+      margin-bottom: 16px;
+      box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);
+    }
+    h1 {
+      font-size: 24px;
+      margin-bottom: 8px;
+      font-weight: 700;
+    }
+    p {
+      color: var(--text-muted);
+      font-size: 14px;
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+    .qr-box {
+      background: white;
+      padding: 16px;
+      border-radius: 16px;
+      display: inline-block;
+      margin-bottom: 24px;
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+    }
+    .qr-box img {
+      display: block;
+      width: 180px;
+      height: 180px;
+    }
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+      color: white;
+      text-decoration: none;
+      padding: 14px 28px;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 16px;
+      box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 15px 30px rgba(16, 185, 129, 0.4);
+    }
+    .steps {
+      margin-top: 24px;
+      text-align: left;
+      background: rgba(15, 23, 42, 0.6);
+      padding: 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .steps ol {
+      padding-left: 20px;
+    }
+    .steps li {
+      margin-bottom: 8px;
+    }
+    .steps li:last-child { margin-bottom: 0; }
+    .badge {
+      display: inline-block;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--accent);
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <img src="APK_Student_Panel/icon.png" alt="Logo" class="logo" onerror="this.src='APK_Student_Panel/images/bg1.1.png'">
+    <div class="badge"><i class="fa-solid fa-mobile-screen"></i> ANDROID APP v1.0.0</div>
+    <h1>SmartAttend Student</h1>
+    <p>Scan the QR code with your mobile camera or tap the button below to download the app directly.</p>
+
+    <!-- QR Code for instant phone camera scanning -->
+    <div class="qr-box">
+      <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://raw.githubusercontent.com/SmartAttend-official/SmartAttend/main/Student%2520panel%2520app%2520idea/SmartAttend%2520Student.debug.v1.0.0.apk" alt="Scan to Download APK">
+    </div>
+
+    <!-- Direct Download Button -->
+    <a href="SmartAttend Student.debug.v1.0.0.apk" download class="btn">
+      <i class="fa-solid fa-download"></i> Download Android APK (3.2 MB)
+    </a>
+
+    <!-- Installation Steps -->
+    <div class="steps">
+      <strong style="color: #f8fafc; display: block; margin-bottom: 6px;"><i class="fa-solid fa-circle-info"></i> Installation Steps on Phone:</strong>
+      <ol>
+        <li>Download the <code>.apk</code> file onto your Android phone.</li>
+        <li>Tap the downloaded file to install.</li>
+        <li>If prompted with <em>"Unknown Source"</em> or <em>"Play Protect"</em>, select <strong>"Install anyway"</strong>.</li>
+        <li>Launch the <strong>SmartAttend Student</strong> app and log in!</li>
+      </ol>
+    </div>
+  </div>
+
+</body>
+</html>
