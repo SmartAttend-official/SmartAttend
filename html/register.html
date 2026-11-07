@@ -7,7 +7,27 @@
   <title>SmartAttend — Register Face</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js" onerror="this.onerror=null;this.src='https://unpkg.com/face-api.js@0.22.2/dist/face-api.min.js';"></script>
+  <script>
+    // Synchronize authentication tokens across tabs/storage
+    try {
+      if (window.opener && window.opener.sessionStorage) {
+        const opToken = window.opener.sessionStorage.getItem('smartattend_token') || window.opener.sessionStorage.getItem('token');
+        if (opToken) {
+          sessionStorage.setItem('smartattend_token', opToken);
+          localStorage.setItem('smartattend_token', opToken);
+          sessionStorage.setItem('isAuthenticated', 'true');
+          localStorage.setItem('isAuthenticated', 'true');
+        }
+      }
+    } catch (e) {}
+
+    const currentAuthToken = sessionStorage.getItem('smartattend_token') || localStorage.getItem('smartattend_token') || sessionStorage.getItem('token') || localStorage.getItem('token');
+    const isUserAuth = sessionStorage.getItem('isAuthenticated') === 'true' || localStorage.getItem('isAuthenticated') === 'true';
+    if (!currentAuthToken && !isUserAuth) {
+      window.location.replace('Login.html');
+    }
+  </script>
   <style>
     *,
     *::before,

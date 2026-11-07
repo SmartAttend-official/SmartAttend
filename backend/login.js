@@ -64,14 +64,20 @@ document.getElementById('loginForm').addEventListener('submit', async function (
 
 		if (result.status === 'success' && result.token) {
 			sessionStorage.setItem('smartattend_token', result.token);
+			localStorage.setItem('smartattend_token', result.token);
 			sessionStorage.setItem('isAuthenticated', 'true');
+			localStorage.setItem('isAuthenticated', 'true');
 			sessionStorage.setItem('userEmail', email);
+			localStorage.setItem('userEmail', email);
 			sessionStorage.setItem('sessionToken', result.sessionToken);
+			localStorage.setItem('sessionToken', result.sessionToken);
 			const firstName = user['Professor first_name'] || '';
 			const lastName = user['Professor last_name'] || '';
 			const fullName = (firstName + ' ' + lastName).trim() || user.Name || 'Professor';
 			sessionStorage.setItem('userName', fullName);
+			localStorage.setItem('userName', fullName);
 			sessionStorage.setItem('userId', user['Professor id'] || '');
+			localStorage.setItem('userId', user['Professor id'] || '');
 
 			// Visual Feedback
 			btnText.innerText = 'Access Granted';
@@ -223,14 +229,20 @@ async function verify2FAOTP() {
 		if (result.status === 'success' && result.token) {
 			const user = result.user || {};
 			sessionStorage.setItem('smartattend_token', result.token);
+			localStorage.setItem('smartattend_token', result.token);
 			sessionStorage.setItem('isAuthenticated', 'true');
+			localStorage.setItem('isAuthenticated', 'true');
 			sessionStorage.setItem('userEmail', _2fa_email);
+			localStorage.setItem('userEmail', _2fa_email);
 			sessionStorage.setItem('sessionToken', result.sessionToken);
+			localStorage.setItem('sessionToken', result.sessionToken);
 			const firstName = user['Professor first_name'] || '';
 			const lastName = user['Professor last_name'] || '';
 			const fullName = (firstName + ' ' + lastName).trim() || user.Name || 'Professor';
 			sessionStorage.setItem('userName', fullName);
+			localStorage.setItem('userName', fullName);
 			sessionStorage.setItem('userId', user['Professor id'] || '');
+			localStorage.setItem('userId', user['Professor id'] || '');
 
 			// Success animation
 			verifyBtnText.innerText = 'Access Granted';

@@ -12,16 +12,20 @@ window.SMART_ATTEND_CONFIG = {
         const targetUrl = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
 
         if (urlStr.startsWith(targetUrl)) {
-            // Retrieve token from sessionStorage
-            const token = sessionStorage.getItem('smartattend_token') || localStorage.getItem('smartattend_token');
+            // Retrieve token from sessionStorage or localStorage
+            const token = sessionStorage.getItem('smartattend_token') || 
+                          localStorage.getItem('smartattend_token') ||
+                          sessionStorage.getItem('token') || 
+                          localStorage.getItem('token') ||
+                          sessionStorage.getItem('sessionToken');
             if (token) {
                 init.headers = init.headers || {};
                 if (init.headers instanceof Headers) {
-                    init.headers.set('Authorization', `Bearer ${token}`);
+                    if (!init.headers.has('Authorization')) init.headers.set('Authorization', `Bearer ${token}`);
                 } else if (Array.isArray(init.headers)) {
-                    init.headers.push(['Authorization', `Bearer ${token}`]);
+                    if (!init.headers.some(h => h[0].toLowerCase() === 'authorization')) init.headers.push(['Authorization', `Bearer ${token}`]);
                 } else {
-                    init.headers['Authorization'] = `Bearer ${token}`;
+                    if (!init.headers['Authorization'] && !init.headers['authorization']) init.headers['Authorization'] = `Bearer ${token}`;
                 }
             }
         }

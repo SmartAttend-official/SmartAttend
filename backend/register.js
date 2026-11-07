@@ -54,26 +54,77 @@ function isSemMatch(studentSem, selectedSem) {
 
 // Load models, students, and departments in parallel
 async function init() {
+  const loadingBar = document.getElementById('loadingBar');
   try {
-    const [, data, deptsData] = await Promise.all([
-      Promise.all([
-        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-        faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-        faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-      ]),
-      fetch(API_URL).then(r => r.json()),
-      fetch(`${window.SMART_ATTEND_CONFIG.SCRIPT_URL}?sheet=departments`).then(r => r.json()).catch(() => [])
+    if (typeof faceapi === 'undefined') {
+      throw new Error('Face recognition AI library (face-api.js) is not loaded. Please check your internet connection or reload.');
+    }
+
+    const token = sessionStorage.getItem('smartattend_token') || 
+                  localStorage.getItem('smartattend_token') || 
+                  sessionStorage.getItem('token') || 
+                  localStorage.getItem('token') || '';
+
+    const reqHeaders = { 'Content-Type': 'application/json' };
+    if (token) {
+      reqHeaders['Authorization'] = `Bearer ${token}`;
+    }
+
+    if (loadingBar) {
+      loadingBar.innerHTML = '<i class="fa-solid fa-spinner spinner"></i> Loading AI models & student list...';
+    }
+
+    // Dual CDN fallback for face models
+    const MODEL_CDN_PRIMARY = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
+    const MODEL_CDN_FALLBACK = 'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';
+
+    async function loadModelsWithFallback() {
+      try {
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_CDN_PRIMARY),
+          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_CDN_PRIMARY),
+          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_CDN_PRIMARY),
+        ]);
+      } catch (cdnErr) {
+        console.warn('Primary CDN weights failed, attempting fallback...', cdnErr);
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_CDN_FALLBACK),
+          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_CDN_FALLBACK),
+          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_CDN_FALLBACK),
+        ]);
+      }
+    }
+
+    const [, studentData, deptsData] = await Promise.all([
+      loadModelsWithFallback(),
+      fetch(API_URL, { headers: reqHeaders }).then(async r => {
+        const json = await r.json();
+        if (!r.ok || !Array.isArray(json)) {
+          if (json && (json.message || json.status === 'error')) {
+            throw new Error(json.message || 'Authentication required to access student list.');
+          }
+          throw new Error(`Failed to load students: Server returned HTTP ${r.status}`);
+        }
+        return json;
+      }),
+      fetch(`${window.SMART_ATTEND_CONFIG.SCRIPT_URL}?sheet=departments`, { headers: reqHeaders })
+        .then(r => r.json())
+        .catch(() => [])
     ]);
 
+    if (!Array.isArray(studentData)) {
+      throw new Error('Student data received is not a valid list.');
+    }
+
     // Populate students
-    data.sort((a, b) => String(a.ID).localeCompare(String(b.ID), undefined, { numeric: true }));
-    students = data;
+    studentData.sort((a, b) => String(a.ID || a.id).localeCompare(String(b.ID || b.id), undefined, { numeric: true }));
+    students = studentData;
 
     const deptSel = document.getElementById('deptSelect');
     const semSel = document.getElementById('semesterSelect');
 
     // Populate departments dropdown
-    if (deptsData && deptsData.length > 0) {
+    if (deptsData && Array.isArray(deptsData) && deptsData.length > 0) {
       deptsData.forEach(d => {
         const opt = document.createElement('option');
         opt.value = d.Code || d.Name;
@@ -106,6 +157,7 @@ async function init() {
       "7th Sem",
       "8th Sem"
     ];
+    semSel.innerHTML = '<option value="all">All Semesters</option>';
     semesters.forEach(s => {
       const opt = document.createElement('option');
       opt.value = s;
@@ -121,16 +173,26 @@ async function init() {
     filterStudents();
 
     modelsReady = true;
-    document.getElementById('loadingBar').style.display = 'none';
-    document.getElementById('formArea').style.display = 'block';
+    if (loadingBar) loadingBar.style.display = 'none';
+    const formArea = document.getElementById('formArea');
+    if (formArea) formArea.style.display = 'block';
 
     // Show already-registered students
     refreshResultList();
 
   } catch (e) {
-    document.getElementById('loadingBar').innerHTML =
-      '<i class="fa-solid fa-circle-exclamation" style="color:#f87171;"></i> Failed to load. Check internet connection.';
-    console.error(e);
+    console.error("Init Error in Register Portal:", e);
+    const msg = e.message || String(e);
+    if (loadingBar) {
+      if (msg.includes('Session Expired') || msg.includes('log in again') || msg.includes('Authentication required')) {
+        loadingBar.innerHTML =
+          `<i class="fa-solid fa-lock" style="color:#f87171;"></i> Session expired. Please <a href="login.html" style="color:#60a5fa; text-decoration:underline; font-weight:600;">log in again</a>.`;
+      } else {
+        loadingBar.innerHTML =
+          `<i class="fa-solid fa-circle-exclamation" style="color:#f87171;"></i> ${msg}<br>` +
+          `<button onclick="location.reload()" style="margin-top:12px; padding:8px 18px; border-radius:8px; border:none; background:#6366f1; color:white; font-weight:600; cursor:pointer;">Retry</button>`;
+      }
+    }
   }
 }
 
@@ -155,14 +217,15 @@ function filterStudents() {
   
   filtered.forEach(s => {
     const opt = document.createElement('option');
-    opt.value = s.ID;
+    const sId = s.ID || s.id;
+    opt.value = sId;
     const tick = s.Face_Encoding ? ' ✅' : '';
-    opt.textContent = `${s.ID} — ${s.Name}${tick}`;
+    opt.textContent = `${sId} — ${s.Name || 'Student'}${tick}`;
     studentSel.appendChild(opt);
   });
   
   // Restore selection if possible
-  if (currentSelectedValue && filtered.some(s => s.ID === currentSelectedValue)) {
+  if (currentSelectedValue && filtered.some(s => (s.ID || s.id) === currentSelectedValue)) {
     studentSel.value = currentSelectedValue;
   } else {
     // Reset select
@@ -254,12 +317,20 @@ async function captureAndSave() {
       return;
     }
 
-    // Save to Google Sheets instead of localStorage
+    // Save face descriptor to database
     const arr = Array.from(det.descriptor);
     const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
+
+    const token = sessionStorage.getItem('smartattend_token') || 
+                  localStorage.getItem('smartattend_token') || 
+                  sessionStorage.getItem('token') || 
+                  localStorage.getItem('token') || '';
+    const saveHeaders = { 'Content-Type': 'application/json' };
+    if (token) saveHeaders['Authorization'] = `Bearer ${token}`;
     
-    await fetch(SCRIPT_URL, {
+    const saveRes = await fetch(SCRIPT_URL, {
       method: 'POST',
+      headers: saveHeaders,
       body: JSON.stringify({
         sheet: 'student',
         action: 'update',
@@ -268,9 +339,14 @@ async function captureAndSave() {
       })
     });
 
-    const student = students.find(s => s.ID === studentId);
-    if(student) student.Face_Encoding = JSON.stringify(arr);
-    setStatus(`✅ ${student ? student.Name : studentId} registered successfully!`, '#34d399');
+    const saveJson = await saveRes.json();
+    if (!saveRes.ok || (saveJson && saveJson.status === 'error')) {
+      throw new Error((saveJson && saveJson.message) || `Failed to save face descriptor (Status ${saveRes.status})`);
+    }
+
+    const student = students.find(s => (s.ID === studentId || s.id === studentId));
+    if (student) student.Face_Encoding = JSON.stringify(arr);
+    setStatus(`✅ ${student ? (student.Name || student.ID) : studentId} registered successfully!`, '#34d399');
 
     // Update dropdown option
     const sel = document.getElementById('studentSelect');
@@ -298,6 +374,7 @@ async function captureAndSave() {
 function refreshResultList() {
   const wrap = document.getElementById('resultList');
   const items = document.getElementById('resultItems');
+  if (!wrap || !items) return;
   items.innerHTML = '';
 
   const registered = students.filter(s => s.Face_Encoding && s.Face_Encoding.length > 10);
@@ -306,7 +383,7 @@ function refreshResultList() {
   registered.forEach(s => {
     const div = document.createElement('div');
     div.className = 'result-item';
-    div.innerHTML = `<div><strong>${s.ID}</strong> — ${s.Name}</div><span>✅</span>`;
+    div.innerHTML = `<div><strong>${s.ID || s.id}</strong> — ${s.Name || 'Student'}</div><span>✅</span>`;
     items.appendChild(div);
   });
 

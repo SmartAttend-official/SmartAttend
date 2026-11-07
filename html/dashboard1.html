@@ -10,11 +10,21 @@
   <script>
     // MED-8 NOTE: isAuthenticated is a UX-only redirect guard — it is NOT a security control.
     // Real security is enforced by JWT validation on every backend API call.
-    if (sessionStorage.getItem('isAuthenticated') !== 'true') {
+    const hasAuth = sessionStorage.getItem('isAuthenticated') === 'true' || localStorage.getItem('isAuthenticated') === 'true';
+    if (!hasAuth) {
       window.location.replace('Login.html');
     } else {
-      const userEmail = sessionStorage.getItem('userEmail');
-      const localToken = sessionStorage.getItem('sessionToken');
+      // Synchronize tokens across sessionStorage and localStorage
+      const activeTok = sessionStorage.getItem('smartattend_token') || localStorage.getItem('smartattend_token') || sessionStorage.getItem('token') || localStorage.getItem('token');
+      if (activeTok) {
+        sessionStorage.setItem('smartattend_token', activeTok);
+        localStorage.setItem('smartattend_token', activeTok);
+        sessionStorage.setItem('isAuthenticated', 'true');
+        localStorage.setItem('isAuthenticated', 'true');
+      }
+
+      const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail');
+      const localToken = sessionStorage.getItem('sessionToken') || localStorage.getItem('sessionToken');
       const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
       if (userEmail && localToken) {
         fetch(`${SCRIPT_URL}?sheet=professor&email=${encodeURIComponent(userEmail)}`)
@@ -23,7 +33,7 @@
             if (data && data.length > 0) {
               if (data[0].SessionToken && data[0].SessionToken !== localToken) {
                 alert("Session expired: You logged in from another device.");
-                logout();
+                logoutUser();
               } else {
                 // Save real name from sheet into sessionStorage (double-space column names)
                 const fn = data[0]['Professor  first_name'] || data[0]['Professor first_name'] || '';
@@ -31,6 +41,7 @@
                 const fullName = (fn + ' ' + ln).trim();
                 if (fullName) {
                   sessionStorage.setItem('userName', fullName);
+                  localStorage.setItem('userName', fullName);
                   // Update topbar greeting if already rendered
                   const topbarName = document.getElementById('topbarName');
                   if (topbarName) topbarName.innerText = fullName;
@@ -45,6 +56,12 @@
     }
     function logoutUser() {
       sessionStorage.clear();
+      localStorage.removeItem('smartattend_token');
+      localStorage.removeItem('isAuthenticated');
+      localStorage.removeItem('userEmail');
+      localStorage.removeItem('sessionToken');
+      localStorage.removeItem('userName');
+      localStorage.removeItem('userId');
       window.location.replace('Login.html');
     }
   </script>
@@ -845,10 +862,11 @@
         </button>
 
         <!-- Register Faces Button -->
-        <a href="register.html" target="_blank" style="display:flex; align-items:center; justify-content:center; gap:10px; margin-top:10px;
+        <a href="register.html" target="_blank" rel="opener" style="display:flex; align-items:center; justify-content:center; gap:10px; margin-top:10px;
           padding:14px; border-radius:14px; font-size:15px; font-weight:600; text-decoration:none;
           background:rgba(139,92,246,0.15); border:1px solid rgba(139,92,246,0.35); color:#c4b5fd;
           font-family:'Outfit',sans-serif; transition:all 0.2s; cursor:pointer;"
+          onclick="const t = sessionStorage.getItem('smartattend_token') || localStorage.getItem('smartattend_token'); if(t){ localStorage.setItem('smartattend_token', t); localStorage.setItem('isAuthenticated', 'true'); }"
           onmouseover="this.style.background='rgba(139,92,246,0.25)'"
           onmouseout="this.style.background='rgba(139,92,246,0.15)'">
           <i class="fa-solid fa-user-plus"></i> Register Student Faces
