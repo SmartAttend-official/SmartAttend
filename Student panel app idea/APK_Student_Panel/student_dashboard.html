@@ -588,27 +588,29 @@
       bottom: 0;
       left: 0;
       right: 0;
-      height: 65px;
+      height: 66px;
       background: rgba(11, 17, 32, 0.95);
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
       border-top: 1px solid var(--glass-border);
       display: flex;
       justify-content: space-around;
-      align-items: center;
+      align-items: stretch;
       z-index: 1000;
-      padding: 0 2px;
+      padding: 0 4px;
       padding-bottom: env(safe-area-inset-bottom, 0px);
       box-shadow: 0 -8px 25px rgba(0, 0, 0, 0.5);
+      box-sizing: border-box;
     }
 
     .nav-tab {
       flex: 1;
+      height: 100%;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 3px;
+      gap: 5px;
       padding: 6px 0;
       color: var(--text-muted);
       cursor: pointer;
@@ -620,6 +622,8 @@
 
     .nav-tab i {
       font-size: 19px;
+      margin-top: 6px;
+      line-height: 1;
       transition: all 0.2s ease;
     }
 
@@ -627,6 +631,7 @@
       font-size: 11px;
       font-weight: 500;
       letter-spacing: 0.1px;
+      line-height: 1.1;
       transition: color 0.2s ease;
     }
 
@@ -635,7 +640,6 @@
     }
 
     .nav-tab.active i {
-      transform: translateY(-2px);
       color: #34d399;
       filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.7));
     }
@@ -649,7 +653,9 @@
       content: '';
       position: absolute;
       top: 0;
-      width: 28px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 32px;
       height: 3px;
       background: linear-gradient(90deg, #10b981, #34d399);
       border-radius: 0 0 4px 4px;
@@ -705,6 +711,7 @@
 
       .nav-tab i {
         font-size: 18px;
+        margin-top: 6px;
       }
       .nav-tab span {
         font-size: 10px;
@@ -835,10 +842,10 @@
           <br><span style="color: #ef4444; font-weight: 600;"><i class="fa-solid fa-shield-halved"></i> Anti-Proxy Lock Active:</span> Your device fingerprint is registered to prevent proxy submissions.
         </p>
 
-        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+        <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
           <input type="text" id="labCodeInput" class="form-control" placeholder="000000" maxlength="6" inputmode="numeric" style="flex: 1; min-width: 180px; font-size: 22px; font-weight: 700; text-align: center; letter-spacing: 6px; text-transform: uppercase;">
-          <button id="submitLabCodeBtn" class="btn-submit" onclick="submitLabCode()" style="background: linear-gradient(135deg, #3b82f6, #2563eb); width: auto; padding: 0 28px; white-space: nowrap; color: white;">
-            <i class="fa-solid fa-check"></i> Mark Present
+          <button id="submitLabCodeBtn" class="btn-submit" onclick="submitLabCode()" style="background: linear-gradient(135deg, #3b82f6, #2563eb); width: auto; padding: 13px 26px; min-height: 48px; border-radius: 12px; font-size: 15px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; color: white; box-shadow: 0 4px 16px rgba(37, 99, 235, 0.35);">
+            <i class="fa-solid fa-check" style="font-size: 16px;"></i> Mark Present
           </button>
         </div>
         <div id="labCodeMessage" style="margin-top: 15px; font-weight: 600; display: none;"></div>
