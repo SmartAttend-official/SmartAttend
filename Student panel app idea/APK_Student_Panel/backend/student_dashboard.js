@@ -29,7 +29,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       // Render Chart.js Pie Chart
       const ctx = document.getElementById('attendanceChart').getContext('2d');
-      new Chart(ctx, {
+      if (window.attendanceChartInstance) {
+        try { window.attendanceChartInstance.destroy(); } catch (e) {}
+      }
+      window.attendanceChartInstance = new Chart(ctx, {
         type: 'doughnut',
         data: {
           labels: ['Attended', 'Missed'],
