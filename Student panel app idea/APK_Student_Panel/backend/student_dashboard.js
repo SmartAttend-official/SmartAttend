@@ -1,9 +1,11 @@
+const getStored = (k) => sessionStorage.getItem(k) || localStorage.getItem(k);
+
 document.addEventListener('DOMContentLoaded', async () => {
-  const studentEmail = sessionStorage.getItem('studentEmail');
+  const studentEmail = getStored('studentEmail');
   if (!studentEmail) return;
 
   // Initialize UI with session data for "Optimistic" loading
-  const cachedName = sessionStorage.getItem('studentName') || 'Student';
+  const cachedName = getStored('studentName') || 'Student';
   document.getElementById('studentNameDisplay').innerText = cachedName.split(' ')[0];
   document.getElementById('welcomeText').innerText = `Welcome back, ${cachedName.split(' ')[0]}!`;
 
@@ -80,7 +82,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       // ── FEATURE 3: SUBJECT-WISE ATTENDANCE ────────────────────────
       try {
-        const studentId = sessionStorage.getItem('studentId');
+        const studentId = getStored('studentId');
         const subResponse = await fetch(`${SCRIPT_URL}?sheet=SubjectAttendance&studentId=${encodeURIComponent(studentId)}`);
         const subData = await subResponse.json();
         const tbody = document.getElementById('subjectBreakdownBody');
@@ -522,8 +524,8 @@ document.getElementById('leaveForm').addEventListener('submit', async (e) => {
     // Create Request Object
     const request = {
       id: Date.now().toString(),
-      studentId: sessionStorage.getItem('studentId') || 'Unknown ID',
-      studentName: sessionStorage.getItem('studentName') || 'Unknown Student',
+      studentId: getStored('studentId') || 'Unknown ID',
+      studentName: getStored('studentName') || 'Unknown Student',
       targetProfessor: targetProfessor,
       date: startDate, // Legacy field
       startDate: startDate,
@@ -586,7 +588,7 @@ async function renderLeaveHistory() {
   const container = document.getElementById('leaveRequestHistory');
   if (!container) return;
 
-  const currentStudentId = sessionStorage.getItem('studentId');
+  const currentStudentId = getStored('studentId');
   if (!currentStudentId) {
     container.innerHTML = '<div style="text-align: center; color: #ef4444; padding: 20px;">Session error. Please log in again.</div>';
     return;
@@ -737,7 +739,7 @@ window.submitLabCode = async function() {
     return;
   }
 
-  const studentId = sessionStorage.getItem('studentId');
+  const studentId = getStored('studentId');
   if (!studentId) {
     alert("Session error. Please login again.");
     return;
@@ -763,6 +765,7 @@ window.submitLabCode = async function() {
 
     const res = await fetch(SCRIPT_URL, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
 

@@ -42,12 +42,25 @@ document.getElementById('studentLoginForm').addEventListener('submit', async fun
 			sessionStorage.setItem('smartattend_token', result.token);
 			localStorage.setItem('smartattend_token', result.token);
 			sessionStorage.setItem('isStudentAuthenticated', 'true');
-			sessionStorage.setItem('studentId', student.ID || student.id || student['Student ID'] || '');
-			sessionStorage.setItem('studentName', student.Name || student.name || 'Student');
+			localStorage.setItem('isStudentAuthenticated', 'true');
+			const stdId = student.ID || student.id || student['Student ID'] || '';
+			const stdName = student.Name || student.name || 'Student';
+			sessionStorage.setItem('studentId', stdId);
+			localStorage.setItem('studentId', stdId);
+			sessionStorage.setItem('studentName', stdName);
+			localStorage.setItem('studentName', stdName);
 			sessionStorage.setItem('studentEmail', email);
+			localStorage.setItem('studentEmail', email);
 			
 			// Optional: Save other data if available
-			if (student.Department) sessionStorage.setItem('studentDept', student.Department);
+			if (student.Department) {
+				sessionStorage.setItem('studentDept', student.Department);
+				localStorage.setItem('studentDept', student.Department);
+			}
+			if (student.Semester) {
+				sessionStorage.setItem('studentSem', student.Semester);
+				localStorage.setItem('studentSem', student.Semester);
+			}
 			
 			// Visual Feedback
 			btnText.innerText = 'Access Granted';

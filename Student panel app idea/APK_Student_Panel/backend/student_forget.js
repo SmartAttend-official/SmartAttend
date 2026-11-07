@@ -116,7 +116,7 @@ async function handleResetPassword() {
       alertBox.classList.add('show');
       setTimeout(() => {
         alertBox.classList.remove('show');
-        setTimeout(() => { window.location.href = 'student_login.html'; }, 400);
+        setTimeout(() => { window.location.href = 'index.html'; }, 400);
       }, 3000);
     } else {
       showError('step3-error', data.message || 'Failed to update password.');

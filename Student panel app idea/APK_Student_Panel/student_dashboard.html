@@ -6,12 +6,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Student Dashboard - SmartAttend</title>
   <script>
-    if (sessionStorage.getItem('isStudentAuthenticated') !== 'true') {
-      window.location.replace('student_login.html');
+    if (sessionStorage.getItem('isStudentAuthenticated') !== 'true' && localStorage.getItem('isStudentAuthenticated') !== 'true') {
+      window.location.replace('index.html');
     }
     function logout() {
       sessionStorage.clear();
-      window.location.replace('student_login.html');
+      localStorage.clear();
+      window.location.replace('index.html');
     }
   </script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">

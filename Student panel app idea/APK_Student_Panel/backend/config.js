@@ -11,7 +11,7 @@ window.SMART_ATTEND_CONFIG = {
         const urlStr = typeof resource === 'string' ? resource : (resource && resource.url) || '';
         const targetUrl = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
 
-        if (urlStr.startsWith(targetUrl)) {
+        if (urlStr.startsWith(targetUrl) || urlStr.startsWith('?') || urlStr.startsWith('/')) {
             // Retrieve token from sessionStorage or localStorage
             const token = sessionStorage.getItem('smartattend_token') || localStorage.getItem('smartattend_token');
             if (token) {

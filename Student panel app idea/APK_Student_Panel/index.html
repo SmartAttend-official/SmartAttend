@@ -9,7 +9,7 @@
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#3b82f6">
 	<script>
-		if (sessionStorage.getItem('isStudentAuthenticated') === 'true') {
+		if (sessionStorage.getItem('isStudentAuthenticated') === 'true' || localStorage.getItem('isStudentAuthenticated') === 'true') {
 			window.location.replace('student_dashboard.html');
 		}
 	</script>
