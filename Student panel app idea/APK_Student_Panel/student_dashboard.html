@@ -122,6 +122,85 @@
       color: white;
     }
 
+    /* Refresh Button */
+    .refresh-btn {
+      background: rgba(16, 185, 129, 0.12);
+      color: var(--accent-hover);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      font-size: 15px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.25s ease;
+    }
+
+    .refresh-btn:hover {
+      background: rgba(16, 185, 129, 0.25);
+    }
+
+    .refresh-btn.spinning i {
+      animation: spinRefresh 0.8s linear infinite;
+    }
+
+    @keyframes spinRefresh {
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Floating Toast Notification */
+    .refresh-toast {
+      position: fixed;
+      top: 80px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-20px);
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: #0b1120;
+      padding: 9px 20px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 8px 24px rgba(16, 185, 129, 0.4);
+      z-index: 2000;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .refresh-toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* Pull to Refresh Indicator */
+    .pull-refresh-indicator {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: var(--accent-hover);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 8px 0;
+      margin-top: -36px;
+      opacity: 0;
+      transition: all 0.25s ease;
+    }
+
+    .pull-refresh-indicator.visible {
+      margin-top: 0;
+      opacity: 1;
+    }
+
+    .pull-refresh-indicator.spinning i {
+      animation: spinRefresh 0.8s linear infinite;
+    }
+
     /* Main Content Container */
     .dashboard-container {
       flex: 1;
@@ -644,12 +723,27 @@
     </div>
     <div class="user-info">
       <h3>Hello, <span id="studentNameDisplay">Student</span></h3>
+      <button class="refresh-btn" id="refreshBtn" onclick="refreshStudentData(true)" title="Refresh data">
+        <i class="fa-solid fa-arrows-rotate"></i>
+      </button>
       <button class="logout-btn" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
     </div>
   </header>
 
+  <!-- Floating Toast Notification -->
+  <div id="refreshToast" class="refresh-toast">
+    <i class="fa-solid fa-circle-check"></i>
+    <span>Data refreshed successfully!</span>
+  </div>
+
   <!-- Main Content Container -->
   <div class="dashboard-container">
+    <!-- Pull down to refresh indicator -->
+    <div id="pullRefreshIndicator" class="pull-refresh-indicator">
+      <i class="fa-solid fa-arrows-rotate"></i>
+      <span id="pullRefreshText">Pull down to refresh...</span>
+    </div>
+
     <div class="page-header">
       <h1 id="welcomeText">Welcome back, Student!</h1>
       <p>Real-time SmartAttend student workspace.</p>

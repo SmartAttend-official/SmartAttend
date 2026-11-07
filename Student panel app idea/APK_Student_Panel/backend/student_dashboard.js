@@ -1,13 +1,25 @@
 const getStored = (k) => sessionStorage.getItem(k) || localStorage.getItem(k);
 
-document.addEventListener('DOMContentLoaded', async () => {
+window.refreshStudentData = async function(isManual = false) {
+  const refreshBtn = document.getElementById('refreshBtn');
+  const toast = document.getElementById('refreshToast');
+
+  if (isManual && refreshBtn) {
+    refreshBtn.classList.add('spinning');
+  }
+
   const studentEmail = getStored('studentEmail');
-  if (!studentEmail) return;
+  if (!studentEmail) {
+    if (refreshBtn) refreshBtn.classList.remove('spinning');
+    return;
+  }
 
   // Initialize UI with session data for "Optimistic" loading
   const cachedName = getStored('studentName') || 'Student';
-  document.getElementById('studentNameDisplay').innerText = cachedName.split(' ')[0];
-  document.getElementById('welcomeText').innerText = `Welcome back, ${cachedName.split(' ')[0]}!`;
+  const nameEl = document.getElementById('studentNameDisplay');
+  const welcomeEl = document.getElementById('welcomeText');
+  if (nameEl) nameEl.innerText = cachedName.split(' ')[0];
+  if (welcomeEl) welcomeEl.innerText = `Welcome back, ${cachedName.split(' ')[0]}!`;
 
   try {
     const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
@@ -272,55 +284,84 @@ document.addEventListener('DOMContentLoaded', async () => {
           </div>
         `;
       }
+    }
 
+    // Also refresh leave history if active
+    if (window.renderLeaveHistory) {
+      window.renderLeaveHistory().catch(() => {});
     }
   } catch (error) {
     console.error('Failed to sync student data:', error);
-  }
-
-  function renderAttendanceChart(present, missed, total) {
-    const ctx = document.getElementById('attendanceChart').getContext('2d');
-    
-    if (attendanceChart) {
-      attendanceChart.destroy();
-    }
-
-    attendanceChart = new Chart(ctx, {
-      type: 'doughnut',
-      data: {
-        labels: ['Attended', 'Missed'],
-        datasets: [{
-          data: [present, missed],
-          backgroundColor: ['#10b981', '#ef4444'],
-          borderColor: ['rgba(255,255,255,0.1)', 'rgba(255,255,255,0.1)'],
-          borderWidth: 2,
-          hoverOffset: 10
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            display: true,
-            position: 'bottom',
-            labels: { color: '#94a3b8', font: { family: 'Outfit', size: 12 } }
-          },
-          tooltip: {
-            callbacks: {
-              label: function(context) {
-                const label = context.label || '';
-                const value = context.raw || 0;
-                const pct = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
-                return `${label}: ${value} (${pct}%)`;
-              }
-            }
-          }
-        },
-        cutout: '70%'
+  } finally {
+    if (isManual) {
+      if (refreshBtn) {
+        refreshBtn.classList.remove('spinning');
+        refreshBtn.innerHTML = '<i class="fa-solid fa-check" style="color: #10b981;"></i>';
+        setTimeout(() => {
+          refreshBtn.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i>';
+        }, 1500);
       }
-    });
+      if (toast) {
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 2000);
+      }
+    }
   }
+};
+
+function setupPullToRefresh() {
+  const container = document.querySelector('.dashboard-container');
+  const indicator = document.getElementById('pullRefreshIndicator');
+  const textEl = document.getElementById('pullRefreshText');
+  if (!container || !indicator) return;
+
+  let startY = 0;
+  let isPulling = false;
+
+  container.addEventListener('touchstart', (e) => {
+    if (container.scrollTop === 0) {
+      startY = e.touches[0].clientY;
+      isPulling = true;
+    } else {
+      isPulling = false;
+    }
+  }, { passive: true });
+
+  container.addEventListener('touchmove', (e) => {
+    if (!isPulling) return;
+    const currentY = e.touches[0].clientY;
+    const diff = currentY - startY;
+
+    if (diff > 25 && container.scrollTop === 0) {
+      indicator.classList.add('visible');
+      if (diff > 75) {
+        if (textEl) textEl.innerText = 'Release to refresh...';
+      } else {
+        if (textEl) textEl.innerText = 'Pull down to refresh...';
+      }
+    }
+  }, { passive: true });
+
+  container.addEventListener('touchend', async (e) => {
+    if (!isPulling) return;
+    isPulling = false;
+    const currentY = e.changedTouches[0].clientY;
+    const diff = currentY - startY;
+
+    if (diff > 75 && container.scrollTop === 0) {
+      indicator.classList.add('spinning');
+      if (textEl) textEl.innerText = 'Refreshing data...';
+      await window.refreshStudentData(true);
+      indicator.classList.remove('spinning');
+      indicator.classList.remove('visible');
+    } else {
+      indicator.classList.remove('visible');
+    }
+  }, { passive: true });
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  await window.refreshStudentData(false);
 
   // Fetch Professors for Dropdown
   try {
@@ -345,6 +386,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   } catch (error) {
     console.error('Failed to load professors', error);
   }
+
+  // Initialize mobile pull-to-refresh
+  setupPullToRefresh();
 });
 
 // ── MULTI-DAY LEAVE CONTROLLER & DURATION CALCULATION ──
