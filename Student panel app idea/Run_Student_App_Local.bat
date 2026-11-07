@@ -13,3 +13,4 @@ echo.
 start "" "http://localhost:8080/index.html"
 npx --yes serve "APK_Student_Panel" -l 8080
 pause
+
