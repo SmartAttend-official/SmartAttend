@@ -23,6 +23,13 @@ const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 require('dotenv').config();
 
+// Automated Attendance Monitoring & Warning Notification System
+const {
+  evaluateStudentWarnings,
+  evaluateAllStudents,
+  getWarningLogs
+} = require('./attendanceWarningService');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -4295,6 +4302,22 @@ Return ONLY valid JSON:
 
       await logActivity('SAVE_SESSION', `Saved attendance session for ${subject} - ${dept} - ${sem}`);
 
+      // ── Automated Attendance Monitoring & Warning Notification Trigger ──
+      // Evaluates 60% and 50% thresholds for each updated student asynchronously
+      const sessionDateStr = date || new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+      (async () => {
+        for (const sId of uniqueStudentIds) {
+          try {
+            await evaluateStudentWarnings(supabase, sendEmail, sId, {
+              sessionSubject: subject,
+              sessionDate: sessionDateStr
+            });
+          } catch (warnEvalErr) {
+            console.warn(`[attendanceWarnings] Auto-eval warning failed for student ${sId}:`, warnEvalErr.message);
+          }
+        }
+      })().catch(err => console.error('[attendanceWarnings] Background evaluation loop failed:', err.message));
+
       // Optional Auto-Dispatch Email Alerts to Absent/Late students and parents
       let autoAlertsCount = 0;
       if (req.body.sendEmailAlerts) {
@@ -5170,6 +5193,29 @@ Return ONLY valid JSON:
         console.error('Failed to send session report:', err.message);
         return res.status(500).json({ status: 'error', message: 'Failed to send report email: ' + err.message });
       }
+    }
+
+    // ── ATTENDANCE WARNING EVALUATION ENDPOINTS ──
+    if (action === 'check_attendance_warnings') {
+      const { studentId, department, semester, dryRun } = req.body;
+      const opts = { dryRun: !!dryRun };
+
+      if (studentId) {
+        const result = await evaluateStudentWarnings(supabase, sendEmail, studentId, opts);
+        return res.json({ status: 'success', data: result });
+      } else {
+        const filter = {};
+        if (department) filter.department = department;
+        if (semester) filter.semester = semester;
+        const result = await evaluateAllStudents(supabase, sendEmail, filter, opts);
+        return res.json({ status: 'success', data: result });
+      }
+    }
+
+    if (action === 'get_warning_logs') {
+      const { studentId, category, threshold, limit } = req.body;
+      const logs = await getWarningLogs(supabase, { studentId, category, threshold, limit });
+      return res.json({ status: 'success', logs });
     }
 
     // Fallback
