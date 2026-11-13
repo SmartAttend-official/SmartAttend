@@ -260,8 +260,8 @@ async function fetchRecords() {
       tbody.appendChild(tr);
     });
   } catch (e) {
-    console.error("Failed to load records from Google Sheets", e);
-    document.getElementById('recordsTbody').innerHTML = '<tr><td colspan="7" style="text-align: center; color: #ef4444;">Failed to load data from Google Sheets</td></tr>';
+    console.error("Failed to load records from database", e);
+    document.getElementById('recordsTbody').innerHTML = '<tr><td colspan="7" style="text-align: center; color: #ef4444;">Failed to load data from database</td></tr>';
   }
 }
 

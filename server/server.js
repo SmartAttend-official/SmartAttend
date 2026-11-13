@@ -1156,7 +1156,11 @@ async function compileAndSendAnalyticReport({
   let standardTimeframe = 'Weekly';
   let daysCovered = 7;
 
-  if (normTf.includes('half') || normTf.includes('6 month') || normTf.includes('six month') || normTf.includes('180') || normTf.includes('182')) {
+  if (normTf.includes('today') || normTf.includes('daily') || normTf === 'today') {
+    standardTimeframe = 'Today';
+    daysCovered = 1;
+    cutoff.setDate(now.getDate());
+  } else if (normTf.includes('half') || normTf.includes('6 month') || normTf.includes('six month') || normTf.includes('180') || normTf.includes('182')) {
     standardTimeframe = 'Half-Yearly';
     daysCovered = 182;
     cutoff.setDate(now.getDate() - 182);
@@ -2254,7 +2258,9 @@ app.post('/', authenticateToken, async (req, res) => {
         if (!isReportIntent) return null;
 
         let timeframe = 'Weekly';
-        if (lower.includes('6 month') || lower.includes('six month') || lower.includes('half year') || lower.includes('half-year') || lower.includes('180 day') || lower.includes('182 day')) {
+        if (lower.includes('today') || lower.includes('daily') || lower.includes('todays') || lower.includes("today's")) {
+          timeframe = 'Today';
+        } else if (lower.includes('6 month') || lower.includes('six month') || lower.includes('half year') || lower.includes('half-year') || lower.includes('180 day') || lower.includes('182 day')) {
           timeframe = 'Half-Yearly';
         } else if (lower.includes('1 month') || lower.includes('one month') || lower.includes('monthly') || lower.includes('30 day') || lower.includes('a month')) {
           timeframe = 'Monthly';
@@ -2328,7 +2334,8 @@ app.post('/', authenticateToken, async (req, res) => {
         });
 
         if (reportResult.success) {
-          const periodLabel = reportResult.timeframe === 'Weekly' ? 'Past 7 Days' :
+          const periodLabel = reportResult.timeframe === 'Today' ? "Today's Attendance" :
+                              reportResult.timeframe === 'Weekly' ? 'Past 7 Days' :
                               reportResult.timeframe === 'Monthly' ? 'Past 30 Days' :
                               reportResult.timeframe === 'Half-Yearly' ? 'Past 6 Months' :
                               reportResult.timeframe === 'Yearly' ? 'Past 1 Year' : 'All Time';
