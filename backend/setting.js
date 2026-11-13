@@ -208,11 +208,38 @@ document.addEventListener('DOMContentLoaded', async () => {
     deptSelect.innerHTML = '<option value="" disabled>Error loading</option>';
   }
 
+  const customDateContainer = document.getElementById('customDateContainer');
+  const specificDateInput = document.getElementById('reportSpecificDate');
+
+  if (timeframeSelect) {
+    timeframeSelect.addEventListener('change', () => {
+      if (timeframeSelect.value === 'CustomDate') {
+        if (customDateContainer) {
+          customDateContainer.style.display = 'block';
+          if (specificDateInput && !specificDateInput.value) {
+            specificDateInput.value = new Date().toLocaleDateString('en-CA');
+          }
+        }
+      } else {
+        if (customDateContainer) {
+          customDateContainer.style.display = 'none';
+        }
+      }
+    });
+  }
+
   // Handle Email Report
   emailBtn.addEventListener('click', async () => {
     if (!deptSelect.value || !semSelect.value || !subjectSelect.value || !timeframeSelect.value) {
       alert("Please select Department, Semester, Subject, and Timeframe.");
       return;
+    }
+
+    if (timeframeSelect.value === 'CustomDate') {
+      if (!specificDateInput || !specificDateInput.value) {
+        alert("Please select a specific date from the calendar.");
+        return;
+      }
     }
 
     emailBtn.disabled = true;
@@ -231,6 +258,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         semester: semSelect.value == 1 ? "1st sem" : semSelect.value == 2 ? "2nd sem" : semSelect.value == 3 ? "3rd sem" : semSelect.value + "th sem",
         subject: subjectSelect.options[subjectSelect.selectedIndex].text.split(' (')[0],
         timeframe: timeframeSelect.value,
+        specificDate: timeframeSelect.value === 'CustomDate' && specificDateInput ? specificDateInput.value : undefined,
         sessionType: sessionType
       };
 

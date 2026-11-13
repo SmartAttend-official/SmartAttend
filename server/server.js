@@ -411,17 +411,29 @@ function parseRecordDate(dateStr) {
   if (dateStr instanceof Date) return isNaN(dateStr.getTime()) ? null : dateStr;
   const str = String(dateStr).trim();
 
-  let d = new Date(str);
-  if (!isNaN(d.getTime())) return d;
+  // YYYY-MM-DD or YYYY/MM/DD
+  const ymdMatch = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (ymdMatch) {
+    const year = parseInt(ymdMatch[1], 10);
+    const month = parseInt(ymdMatch[2], 10) - 1;
+    const day = parseInt(ymdMatch[3], 10);
+    const d = new Date(year, month, day);
+    if (!isNaN(d.getTime())) return d;
+  }
 
+  // DD-MM-YYYY or DD/MM/YYYY
   const dmyMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
   if (dmyMatch) {
     const day = parseInt(dmyMatch[1], 10);
     const month = parseInt(dmyMatch[2], 10) - 1;
     const year = parseInt(dmyMatch[3], 10);
-    d = new Date(year, month, day);
+    const d = new Date(year, month, day);
     if (!isNaN(d.getTime())) return d;
   }
+
+  let d = new Date(str);
+  if (!isNaN(d.getTime())) return d;
+
   return null;
 }
 
@@ -1140,6 +1152,7 @@ async function compileAndSendAnalyticReport({
   semester = 'All',
   subject = 'All Subjects',
   timeframe = 'Weekly',
+  specificDate = null,
   sessionType = 'All'
 }) {
   const cleanEmail = (targetProfEmail || '').trim();
@@ -1148,40 +1161,62 @@ async function compileAndSendAnalyticReport({
   }
 
   // Determine cutoff date
-  const now = new Date();
+  let now = new Date();
   now.setHours(23, 59, 59, 999);
-  const cutoff = new Date();
+  let cutoff = new Date();
 
   const normTf = (timeframe || 'Weekly').trim().toLowerCase();
   let standardTimeframe = 'Weekly';
   let daysCovered = 7;
 
-  if (normTf.includes('today') || normTf.includes('daily') || normTf === 'today') {
+  if (normTf.includes('custom') || normTf.includes('specific') || normTf.includes('select date') || specificDate) {
+    const rawTarget = specificDate || (normTf.match(/\d{4}-\d{2}-\d{2}/) ? normTf.match(/\d{4}-\d{2}-\d{2}/)[0] : null) || (normTf.match(/\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}/) ? normTf.match(/\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}/)[0] : null);
+    const parsedTarget = rawTarget ? parseRecordDate(rawTarget) : null;
+    if (parsedTarget) {
+      cutoff = new Date(parsedTarget);
+      cutoff.setHours(0, 0, 0, 0);
+      now = new Date(parsedTarget);
+      now.setHours(23, 59, 59, 999);
+      const displayDate = parsedTarget.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+      standardTimeframe = `Date: ${displayDate}`;
+      daysCovered = 1;
+    } else {
+      standardTimeframe = 'Today';
+      daysCovered = 1;
+      cutoff.setDate(now.getDate());
+      cutoff.setHours(0, 0, 0, 0);
+    }
+  } else if (normTf.includes('today') || normTf.includes('daily') || normTf === 'today') {
     standardTimeframe = 'Today';
     daysCovered = 1;
     cutoff.setDate(now.getDate());
+    cutoff.setHours(0, 0, 0, 0);
   } else if (normTf.includes('half') || normTf.includes('6 month') || normTf.includes('six month') || normTf.includes('180') || normTf.includes('182')) {
     standardTimeframe = 'Half-Yearly';
     daysCovered = 182;
     cutoff.setDate(now.getDate() - 182);
+    cutoff.setHours(0, 0, 0, 0);
   } else if (normTf.includes('month') || normTf.includes('1 month') || normTf.includes('one month') || normTf.includes('30')) {
     standardTimeframe = 'Monthly';
     daysCovered = 30;
     cutoff.setDate(now.getDate() - 30);
+    cutoff.setHours(0, 0, 0, 0);
   } else if (normTf.includes('year') || normTf.includes('1 year') || normTf.includes('annual') || normTf.includes('365')) {
     standardTimeframe = 'Yearly';
     daysCovered = 365;
     cutoff.setDate(now.getDate() - 365);
+    cutoff.setHours(0, 0, 0, 0);
   } else if (normTf.includes('all') || normTf.includes('all time') || normTf.includes('entire')) {
     standardTimeframe = 'All Time';
     daysCovered = 9999;
     cutoff.setTime(0);
+    cutoff.setHours(0, 0, 0, 0);
   } else {
     standardTimeframe = 'Weekly';
     daysCovered = 7;
     cutoff.setDate(now.getDate() - 7);
+    cutoff.setHours(0, 0, 0, 0);
   }
-  cutoff.setHours(0, 0, 0, 0);
 
   // Fetch attendance records from Supabase
   let query = supabase.from('AttendanceHistory').select('*');
@@ -2257,8 +2292,13 @@ app.post('/', authenticateToken, async (req, res) => {
 
         if (!isReportIntent) return null;
 
+        const dateMatch = text.match(/\b(\d{4}-\d{2}-\d{2})\b/) || text.match(/\b(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})\b/);
+        let specificDate = null;
         let timeframe = 'Weekly';
-        if (lower.includes('today') || lower.includes('daily') || lower.includes('todays') || lower.includes("today's")) {
+        if (dateMatch) {
+          specificDate = dateMatch[0];
+          timeframe = 'CustomDate';
+        } else if (lower.includes('today') || lower.includes('daily') || lower.includes('todays') || lower.includes("today's")) {
           timeframe = 'Today';
         } else if (lower.includes('6 month') || lower.includes('six month') || lower.includes('half year') || lower.includes('half-year') || lower.includes('180 day') || lower.includes('182 day')) {
           timeframe = 'Half-Yearly';
@@ -2275,7 +2315,7 @@ app.post('/', authenticateToken, async (req, res) => {
         const emailMatch = text.match(/[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}/);
         const explicitEmail = emailMatch ? emailMatch[0] : null;
 
-        return { isReportIntent: true, timeframe, explicitEmail };
+        return { isReportIntent: true, timeframe, specificDate, explicitEmail };
       }
 
       function parseTimeframeSummaryIntent(text) {
@@ -2330,11 +2370,13 @@ app.post('/', authenticateToken, async (req, res) => {
           semester: clientContext.semester || 'All',
           subject: clientContext.subject || 'All Subjects',
           timeframe: reportIntent.timeframe,
+          specificDate: reportIntent.specificDate,
           sessionType: 'All'
         });
 
         if (reportResult.success) {
-          const periodLabel = reportResult.timeframe === 'Today' ? "Today's Attendance" :
+          const periodLabel = reportResult.timeframe.startsWith('Date:') ? reportResult.timeframe :
+                              reportResult.timeframe === 'Today' ? "Today's Attendance" :
                               reportResult.timeframe === 'Weekly' ? 'Past 7 Days' :
                               reportResult.timeframe === 'Monthly' ? 'Past 30 Days' :
                               reportResult.timeframe === 'Half-Yearly' ? 'Past 6 Months' :
@@ -4823,7 +4865,7 @@ Return ONLY valid JSON:
 
     // ── ANALYTIC REPORTS ──
     if (action === 'generate_analytic_report') {
-      const { professorEmail, department, semester, subject, timeframe, sessionType = 'All' } = req.body;
+      const { professorEmail, department, semester, subject, timeframe, specificDate, sessionType = 'All' } = req.body;
       const targetProfEmail = (professorEmail || (req.user && req.user.email) || '').trim();
 
       const result = await compileAndSendAnalyticReport({
@@ -4832,6 +4874,7 @@ Return ONLY valid JSON:
         semester,
         subject,
         timeframe,
+        specificDate,
         sessionType
       });
 

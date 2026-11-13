@@ -738,8 +738,18 @@
                 <option value="Half-Yearly">Half-Yearly (Last 182 Days)</option>
                 <option value="Yearly">Yearly (Last 365 Days)</option>
                 <option value="All">All-Time (Entire History)</option>
+                <option value="CustomDate">Select Date (Pick from Calendar)</option>
               </select>
             </div>
+          </div>
+
+          <!-- Specific Date Picker (Revealed when 'Select Date' is chosen) -->
+          <div class="form-group" id="customDateContainer" style="display: none; margin-top: 16px; background: rgba(59, 130, 246, 0.06); padding: 16px; border-radius: 10px; border: 1px solid rgba(59, 130, 246, 0.25);">
+            <label for="reportSpecificDate" style="display: flex; align-items: center; gap: 8px; font-weight: 600; color: #93c5fd; margin-bottom: 8px;">
+              <i class="fa-solid fa-calendar-day" style="color: #60a5fa;"></i> Choose Attendance Date
+            </label>
+            <input type="date" id="reportSpecificDate" class="form-control" style="max-width: 260px; color-scheme: dark;">
+            <small style="color: var(--text-muted); font-size: 12px; margin-top: 6px; display: block;">Select any specific date from the calendar to generate an audit report for that exact day.</small>
           </div>
 
           <div style="margin-top: 16px;">
