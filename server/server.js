@@ -1217,27 +1217,57 @@ async function compileAndSendAnalyticReport({
     };
   }
 
-  // Count classes and presence per student
-  const studentStats = {};
-  const uniqueDates = {};
+  // Count classes and presence per student with session deduplication
+  // Matches Student Panel logic: duplicate attendance submissions for the same subject on the same date are counted only once
+  const isSpecificSubject = subject && subject !== 'All' && subject !== 'All Subjects';
+  const studentSessions = {};
+  const uniqueDates = new Set();
+  const uniqueSessionsConducted = new Set();
 
   classRecords.forEach(r => {
-    const sId = r.StudentID;
+    const sId = (r.StudentID || '').toString().trim();
     if (!sId) return;
-    const stat = (r.Status || '').trim().toLowerCase();
-    const rDate = r.Date;
-    uniqueDates[rDate] = true;
 
-    if (!studentStats[sId]) {
-      studentStats[sId] = { total: 0, present: 0, late: 0, absent: 0 };
+    const rDate = (r.Date || '').toString().trim();
+    const rSubject = (r.Subject || 'General').toString().trim().toLowerCase();
+    const stat = (r.Status || '').toString().trim().toLowerCase();
+
+    if (rDate) {
+      uniqueDates.add(rDate);
+      uniqueSessionsConducted.add(`${rDate}_${rSubject}`);
     }
 
-    studentStats[sId].total++;
-    if (['present', 'late', 'leave', 'on leave', 'excused'].includes(stat)) studentStats[sId].present++;
-    else studentStats[sId].absent++;
+    if (!studentSessions[sId]) {
+      studentSessions[sId] = {
+        sessions: new Set(),
+        attended: new Set()
+      };
+    }
+
+    // Deduplicate: same subject on the same date = 1 session
+    const sessionKey = `${rDate}_${rSubject}`;
+    studentSessions[sId].sessions.add(sessionKey);
+
+    if (['present', 'late', 'leave', 'on leave', 'excused'].includes(stat)) {
+      studentSessions[sId].attended.add(sessionKey);
+    }
   });
 
-  const totalClasses = Object.keys(uniqueDates).length;
+  const studentStats = {};
+  for (const sId in studentSessions) {
+    const total = studentSessions[sId].sessions.size;
+    const present = studentSessions[sId].attended.size;
+    studentStats[sId] = {
+      total,
+      present,
+      absent: total > present ? total - present : 0
+    };
+  }
+
+  // Total classes conducted:
+  // For single subject: number of unique classes conducted for that subject (deduplicated)
+  // For all subjects: number of unique attendance dates conducted (deduplicated)
+  const totalClasses = isSpecificSubject ? uniqueSessionsConducted.size : uniqueDates.size;
 
   // Get student names
   const { data: students } = await supabase.from('students').select('ID, Name');
