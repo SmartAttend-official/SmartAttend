@@ -850,8 +850,17 @@
             <i class="fa-solid fa-video-slash"></i>
             <span>Camera Feed Offline</span>
           </div>
+          <!-- Camera stream error overlay (shown when stream fails to load) -->
+          <div id="cameraErrorOverlay" style="display:none; position:absolute; inset:0; background:rgba(15,23,42,0.92); z-index:10; flex-direction:column; align-items:center; justify-content:center; gap:10px; color:#ef4444; border-radius:inherit;">
+            <i class="fa-solid fa-triangle-exclamation" style="font-size:32px;"></i>
+            <span style="font-size:14px; font-weight:600; text-align:center; max-width:280px; line-height:1.5;" id="cameraErrorMsg">
+              Camera not reachable. Check the URL and ensure the same Wi-Fi network.
+            </span>
+            <span style="font-size:12px; color:#94a3b8; text-align:center;">Go to Settings → Camera Configuration</span>
+          </div>
           <!-- The image tag where the IP Camera stream will load -->
-          <img id="camera" src="" alt="" crossorigin="anonymous">
+          <img id="camera" src="" alt="" crossorigin="anonymous"
+            onerror="showCameraError('Stream failed to load. Verify the URL ends with /video and camera is online.')">
           <canvas id="faceCanvas"></canvas>
           <!-- Scanning Overlay -->
           <div class="scan-overlay" id="scanOverlay"></div>
@@ -1336,14 +1345,34 @@
 
           // Hide placeholder and show the image stream
           $(".feed-placeholder").hide();
-          const storedUrl = localStorage.getItem('ipCameraUrl') || '';
-          // Validate: must start with http and be longer than 10 chars to be a real URL
-          const cameraUrl = (storedUrl.startsWith('http') && storedUrl.length > 10)
+          $("#cameraErrorOverlay").hide();
+
+          let storedUrl = localStorage.getItem('ipCameraUrl') || '';
+
+          // Reject https:// — IP cameras on LAN cannot serve SSL
+          if (storedUrl.startsWith('https://')) {
+            storedUrl = storedUrl.replace('https://', 'http://');
+            localStorage.setItem('ipCameraUrl', storedUrl);
+            showGlobalAlert('⚠️ Camera URL changed from https:// to http:// — IP cameras on local Wi-Fi do not support SSL.');
+          }
+
+          // Auto-correct: use http:// URL only, fallback to default
+          let cameraUrl = (storedUrl.startsWith('http://') && storedUrl.length > 10)
             ? storedUrl
             : "http://100.80.76.38:8080/video";
+
+          // Auto-append /video if only host:port is set (no path beyond /)
+          try {
+            const parsedUrl = new URL(cameraUrl);
+            if (parsedUrl.pathname === '/' || parsedUrl.pathname === '') {
+              cameraUrl = cameraUrl.replace(/\/+$/, '') + '/video';
+            }
+          } catch(e) {}
+
           // Update badge to show the URL actually being used
           $("#ipCameraText").text(cameraUrl);
-          localStorage.setItem('ipCameraUrl', cameraUrl); // fix any bad stored value
+          localStorage.setItem('ipCameraUrl', cameraUrl);
+
           // Add cache-buster to force the browser to open a fresh connection to the MJPEG stream
           const freshUrl = cameraUrl + (cameraUrl.includes('?') ? '&' : '?') + 't=' + new Date().getTime();
           $("#camera").attr("src", freshUrl).show();
@@ -1472,6 +1501,7 @@
 
           // Stop stream visually
           $("#camera").attr("src", "").hide();
+          $("#cameraErrorOverlay").hide();
           const ctx = canvas.getContext('2d');
           ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -1487,6 +1517,18 @@
         }
       });
     });
+
+    // Camera error display function (called by onerror on the img tag)
+    window.showCameraError = function(msg) {
+      const overlay = document.getElementById('cameraErrorOverlay');
+      const msgEl = document.getElementById('cameraErrorMsg');
+      if (overlay) {
+        if (msgEl) msgEl.textContent = msg || 'Camera not reachable. Check the URL and ensure you are on the same Wi-Fi network.';
+        overlay.style.display = 'flex';
+      }
+      // Also update the badge to warn
+      $("#ipCameraText").text('⚠️ Stream Error — Check Settings');
+    };
 
     // Global function for manual override toggle
     window.overrideStatus = function (btn, status) {

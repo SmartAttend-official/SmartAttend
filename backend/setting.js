@@ -66,14 +66,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Validate — must not be empty or just "http://"
     if (!val || val === 'http://' || val === 'https://') {
-      alert('Please enter a valid IP Camera URL (e.g. http://192.168.1.5:8080/video)');
+      alert('Please enter a valid IP Camera URL (e.g. http://10.151.242.94:8080/video)');
+      return;
+    }
+
+    // Reject https:// for IP cameras — local network cameras never have SSL certs
+    if (val.startsWith('https://')) {
+      alert('⚠️ IP cameras on a local Wi-Fi network do not support HTTPS.\n\nPlease use http:// instead.\nExample: http://10.151.242.94:8080/video');
+      urlInput.value = val.replace('https://', 'http://');
       return;
     }
 
     // Auto-add http:// prefix if missing
-    if (!val.startsWith('http://') && !val.startsWith('https://')) {
+    if (!val.startsWith('http://')) {
       val = 'http://' + val;
     }
+
+    // Auto-append /video if no path is set (bare host:port only)
+    try {
+      const parsed = new URL(val);
+      if (parsed.pathname === '/' || parsed.pathname === '') {
+        val = val.replace(/\/+$/, '') + '/video';
+      }
+    } catch (e) {}
 
     urlInput.value = val;
     localStorage.setItem('ipCameraUrl', val);
@@ -93,9 +108,24 @@ document.addEventListener('DOMContentLoaded', () => {
         alert('Please enter a valid IP Camera URL to test.');
         return;
       }
-      if (!val.startsWith('http://') && !val.startsWith('https://')) {
+
+      // Reject https
+      if (val.startsWith('https://')) {
+        alert('⚠️ IP cameras on a local Wi-Fi network do not support HTTPS.\nPlease use http:// instead.');
+        return;
+      }
+
+      if (!val.startsWith('http://')) {
         val = 'http://' + val;
       }
+
+      // Auto-append /video if only host:port
+      try {
+        const parsed = new URL(val);
+        if (parsed.pathname === '/' || parsed.pathname === '') {
+          val = val.replace(/\/+$/, '') + '/video';
+        }
+      } catch (e) {}
 
       const originalText = testConnectionBtn.innerHTML;
       testConnectionBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Testing...';
@@ -103,20 +133,66 @@ document.addEventListener('DOMContentLoaded', () => {
       testConnectionBtn.style.borderColor = 'var(--glass-border)';
       testConnectionBtn.disabled = true;
 
-      // Silent Ping
-      fetch(val, { cache: 'no-store' })
-        .then(() => {
-          testConnectionBtn.innerHTML = '<i class="fa-solid fa-circle-check"></i> Connected';
-          testConnectionBtn.style.color = '#10b981';
-          testConnectionBtn.style.borderColor = '#10b981';
-          setTimeout(() => resetBtn(), 3000);
-        })
-        .catch(() => {
-          testConnectionBtn.innerHTML = '<i class="fa-solid fa-circle-xmark"></i> Failed';
-          testConnectionBtn.style.color = '#ef4444';
-          testConnectionBtn.style.borderColor = '#ef4444';
-          setTimeout(() => resetBtn(), 3000);
-        });
+      // Show live preview container
+      const previewContainer = document.getElementById('cameraPreviewContainer');
+      const previewImg = document.getElementById('cameraPreviewImg');
+      const previewError = document.getElementById('cameraPreviewError');
+
+      // Test by loading camera stream into an <img> tag (works for MJPEG).
+      // The fetch() API does NOT work for MJPEG streams due to CORS + streaming body,
+      // so we use the native image loading mechanism which respects HTTP cross-origin differently.
+      const probeImg = new Image();
+      const probeUrl = val + (val.includes('?') ? '&' : '?') + 'probe=' + Date.now();
+      let settled = false;
+
+      const succeed = () => {
+        if (settled) return;
+        settled = true;
+        testConnectionBtn.innerHTML = '<i class="fa-solid fa-circle-check"></i> Connected ✓';
+        testConnectionBtn.style.color = '#10b981';
+        testConnectionBtn.style.borderColor = '#10b981';
+
+        // Show live preview
+        if (previewContainer && previewImg && previewError) {
+          previewError.style.display = 'none';
+          previewImg.style.display = 'block';
+          previewImg.src = val + (val.includes('?') ? '&' : '?') + 't=' + Date.now();
+          previewContainer.style.display = 'block';
+        }
+
+        setTimeout(() => resetBtn(), 4000);
+      };
+
+      const fail = () => {
+        if (settled) return;
+        settled = true;
+        testConnectionBtn.innerHTML = '<i class="fa-solid fa-circle-xmark"></i> Failed ✗';
+        testConnectionBtn.style.color = '#ef4444';
+        testConnectionBtn.style.borderColor = '#ef4444';
+
+        if (previewContainer && previewImg && previewError) {
+          previewImg.style.display = 'none';
+          previewError.style.display = 'flex';
+          previewContainer.style.display = 'block';
+        }
+
+        setTimeout(() => resetBtn(), 4000);
+      };
+
+      // For MJPEG streams: onload fires on first frame; timeout triggers if truly unreachable
+      probeImg.onload = succeed;
+      // Some MJPEG streams never fire onload (they're streaming) but do start downloading
+      // Use a 3-second timeout: if the img starts loading (not erroring), consider it connected
+      probeImg.onerror = fail;
+      probeImg.src = probeUrl;
+
+      // If the image has not errored within 3s, it means the camera is responding (streaming)
+      setTimeout(() => {
+        if (!settled && probeImg.naturalWidth === 0) {
+          // Still loading (i.e. streaming) = camera IS reachable
+          succeed();
+        }
+      }, 3000);
 
       function resetBtn() {
         testConnectionBtn.innerHTML = originalText;
