@@ -862,6 +862,40 @@
           <img id="camera" src="" alt="" crossorigin="anonymous"
             onerror="showCameraError('Stream failed to load. Verify the URL ends with /video and camera is online.')">
           <canvas id="faceCanvas"></canvas>
+          <!-- Live Face Counter Badge (shows over the feed while scanning) -->
+          <div id="liveFaceCounter" style="
+            display: none;
+            position: absolute;
+            top: 14px;
+            left: 14px;
+            z-index: 20;
+            background: rgba(9, 13, 22, 0.88);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.18);
+            border-radius: 9999px;
+            padding: 6px 14px;
+            align-items: center;
+            gap: 8px;
+            font-family: 'Outfit', sans-serif;
+            user-select: none;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+          ">
+            <!-- Dot indicator -->
+            <span id="liveFaceCountDot" style="
+              width: 8px; height: 8px; border-radius: 50%;
+              background: #94a3b8;
+              display: inline-block;
+              flex-shrink: 0;
+              transition: all 0.25s ease;
+            "></span>
+            <span id="liveFaceCountLabel" style="
+              font-size: 13px;
+              font-weight: 700;
+              color: #f8fafc;
+              white-space: nowrap;
+            ">0 Faces Visible</span>
+          </div>
           <!-- Scanning Overlay -->
           <div class="scan-overlay" id="scanOverlay"></div>
         </div>
@@ -1378,6 +1412,11 @@
           $("#camera").attr("src", freshUrl).show();
           $("#scanOverlay").fadeIn();
 
+          // Show and initialize the live face counter badge
+          $("#liveFaceCounter").css('display', 'flex').fadeIn(200);
+          $("#liveFaceCountLabel").text('Scanning for faces...');
+          $("#liveFaceCountDot").css({ 'background': '#94a3b8', 'box-shadow': 'none' });
+
           // Clear canvas
           const ctx = canvas.getContext('2d');
           ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1409,8 +1448,8 @@
                 }
               }
 
-              // Balanced classroom detection: inputSize 224 provides 2.5x distance coverage over 128
-              const detections = await faceapi.detectAllFaces(cameraImg, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.55 }))
+              // Balanced multi-face classroom detection (scoreThreshold 0.45 detects all visible faces reliably)
+              const detections = await faceapi.detectAllFaces(cameraImg, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.45 }))
                 .withFaceLandmarks()
                 .withFaceDescriptors()
                 .withAgeAndGender();
@@ -1418,11 +1457,26 @@
               const resizedDetections = faceapi.resizeResults(detections, displaySize);
               ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+              // Live face count badge update
+              const liveCount = resizedDetections.length;
+              const counterLabel = $("#liveFaceCountLabel");
+              const counterDot = $("#liveFaceCountDot");
+              if (liveCount === 0) {
+                counterLabel.text('0 Faces in View');
+                counterDot.css({ 'background': '#94a3b8', 'box-shadow': 'none' });
+              } else if (liveCount === 1) {
+                counterLabel.text('1 Face in View');
+                counterDot.css({ 'background': '#10b981', 'box-shadow': '0 0 10px rgba(16, 185, 129, 0.8)' });
+              } else {
+                counterLabel.text(`${liveCount} Faces in View`);
+                counterDot.css({ 'background': '#38bdf8', 'box-shadow': '0 0 10px rgba(56, 189, 248, 0.8)' });
+              }
+
               let newDetection = false;
 
               resizedDetections.forEach(detection => {
                 let boxText = "Unknown Face";
-                let boxColor = "rgba(239, 68, 68, 1)"; // Red
+                let boxColor = "rgba(239, 68, 68, 1)"; // Red for unknown / unregistered faces
 
                 const { gender } = detection;
                 const genderIcon = gender === 'male' ? '[M]' : '[F]';
@@ -1502,6 +1556,7 @@
           // Stop stream visually
           $("#camera").attr("src", "").hide();
           $("#cameraErrorOverlay").hide();
+          $("#liveFaceCounter").fadeOut(200);
           const ctx = canvas.getContext('2d');
           ctx.clearRect(0, 0, canvas.width, canvas.height);
 
