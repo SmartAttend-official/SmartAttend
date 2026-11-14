@@ -2170,6 +2170,8 @@ app.post('/', authenticateToken, async (req, res) => {
       'delete_assignment': ['professor', 'admin'],
       'ask_gemini': ['professor', 'admin'],
       'generate_analytic_report': ['professor', 'admin'],
+      'save_encoding': ['professor', 'admin'],
+      'get_encoding': ['professor', 'admin'],
 
       // Student & Administrator Actions
       'submit_leave': ['student', 'admin'],
@@ -3140,21 +3142,66 @@ Return ONLY valid JSON:
     // ── Z. ENCODING ACTIONS ──
     if (action === 'save_encoding') {
       const studentIdStr = (req.body.id || req.body.studentId || '').toString().trim();
-      const encodingData = req.body.encoding;
+      let encodingData = req.body.encoding;
       
       if (!studentIdStr || !encodingData) {
-        return res.json({ status: 'error', message: 'Missing student ID or encoding data' });
+        return res.status(400).json({ status: 'error', message: 'Missing student ID or encoding data' });
+      }
+
+      // Parse and validate biometric vector data
+      let parsedPayload = encodingData;
+      if (typeof parsedPayload === 'string') {
+        try {
+          parsedPayload = JSON.parse(parsedPayload);
+        } catch (e) {
+          return res.status(400).json({ status: 'error', message: 'Invalid JSON format for encoding data' });
+        }
+      }
+
+      // Validation logic: Support both legacy single 128-float array and enhanced multi-template object
+      function isValidVector(vec) {
+        if (!Array.isArray(vec) || vec.length !== 128) return false;
+        return vec.every(n => typeof n === 'number' && !isNaN(n));
+      }
+
+      let payloadToPersist = null;
+
+      if (Array.isArray(parsedPayload)) {
+        // Legacy single 128-float vector
+        if (!isValidVector(parsedPayload)) {
+          return res.status(400).json({ status: 'error', message: 'Encoding vector must contain exactly 128 valid numbers.' });
+        }
+        payloadToPersist = JSON.stringify(parsedPayload);
+      } else if (parsedPayload && typeof parsedPayload === 'object') {
+        // Enhanced multi-template payload
+        if (!Array.isArray(parsedPayload.templates) || parsedPayload.templates.length === 0) {
+          return res.status(400).json({ status: 'error', message: 'Multi-template encoding must contain a non-empty templates array.' });
+        }
+        for (let i = 0; i < parsedPayload.templates.length; i++) {
+          if (!isValidVector(parsedPayload.templates[i])) {
+            return res.status(400).json({ status: 'error', message: `Template at index ${i} is not a valid 128-dimensional vector.` });
+          }
+        }
+        payloadToPersist = JSON.stringify({
+          version: parsedPayload.version || 2,
+          count: parsedPayload.templates.length,
+          enrolled_at: parsedPayload.enrolled_at || new Date().toISOString(),
+          templates: parsedPayload.templates
+        });
+      } else {
+        return res.status(400).json({ status: 'error', message: 'Unsupported biometric encoding structure.' });
       }
       
       const { error } = await supabase
         .from('students')
-        .update({ Face_Encoding: typeof encodingData === 'string' ? encodingData : JSON.stringify(encodingData) })
+        .update({ Face_Encoding: payloadToPersist })
         .ilike('ID', studentIdStr);
         
       if (error) {
-        return res.json({ status: 'error', message: error.message });
+        return res.status(500).json({ status: 'error', message: error.message });
       }
       
+      await logActivity('FACE_ENROLLMENT', `Biometric face encoding updated for student ${studentIdStr} by ${req.user ? req.user.email : 'Authorized Faculty'}`);
       return res.json({ status: 'success', message: 'Encoding saved to database successfully.' });
     }
 
@@ -3720,6 +3767,10 @@ Return ONLY valid JSON:
       const mappedData = {};
       if (data) {
         for (const k in data) {
+          // Biometric Security: Face_Encoding updates MUST be routed through authorized faculty/admin
+          if (k === 'Face_Encoding' && userRole !== 'admin' && userRole !== 'professor') {
+            return res.status(403).json({ status: 'error', message: 'Access Denied: Only faculty or administrators can update biometric face encodings.' });
+          }
           mappedData[k] = data[k];
         }
       }

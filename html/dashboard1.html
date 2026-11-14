@@ -1142,22 +1142,39 @@
             faceapi.nets.ageGenderNet.loadFromUri(MODEL_URL)
           ]);
 
-          // Read face encodings from Google Sheets (already fetched in students array)
+          // Read face encodings supporting both legacy 128-d arrays and v2 multi-template structures
           const labeledDescriptors = [];
           students.forEach(s => {
             if (s.rawEncoding) {
               try {
-                const arr = new Float32Array(JSON.parse(s.rawEncoding));
-                labeledDescriptors.push(new faceapi.LabeledFaceDescriptors(s.id, [arr]));
+                const parsed = JSON.parse(s.rawEncoding);
+                const descriptors = [];
+                if (Array.isArray(parsed)) {
+                  // Legacy single 128-d descriptor
+                  if (parsed.length === 128) {
+                    descriptors.push(new Float32Array(parsed));
+                  }
+                } else if (parsed && Array.isArray(parsed.templates)) {
+                  // Version 2 multi-sample templates
+                  parsed.templates.forEach(t => {
+                    if (Array.isArray(t) && t.length === 128) {
+                      descriptors.push(new Float32Array(t));
+                    }
+                  });
+                }
+                if (descriptors.length > 0) {
+                  labeledDescriptors.push(new faceapi.LabeledFaceDescriptors(s.id, descriptors));
+                }
               } catch (e) {
-                console.warn(`Corrupted encoding for student ${s.id}`);
+                console.warn(`Corrupted encoding for student ${s.id}:`, e);
               }
             }
           });
 
           if (labeledDescriptors.length > 0) {
-            faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.9);
-            showGlobalAlert(`✅ Ready! ${labeledDescriptors.length} student face(s) loaded.`);
+            // Calibrated strict Euclidean distance threshold: 0.45 (replaces loose 0.9 to eliminate false acceptances)
+            faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.45);
+            showGlobalAlert(`✅ Ready! ${labeledDescriptors.length} student face profile(s) loaded.`);
           } else {
             showGlobalAlert('ℹ️ No faces registered yet. Click "Register Student Faces" to register.');
           }
@@ -1340,6 +1357,8 @@
           $("#attendanceReport").show();
 
           let isProcessingFrame = false;
+          let currentDetectionFrame = 0;
+          const consensusTracker = new Map(); // studentId -> { hits: number, lastFrame: number }
 
           // Start Detection Loop
           detectionInterval = setInterval(async () => {
@@ -1351,9 +1370,18 @@
               const displaySize = { width: cameraImg.width, height: cameraImg.height };
               faceapi.matchDimensions(canvas, displaySize);
 
-              // MAXIMUM OPTIMIZATION: Reduced inputSize to 128 (absolute minimum) and added score threshold 
-              // to reject background noise before heavy descriptor calculation.
-              const detections = await faceapi.detectAllFaces(cameraImg, new faceapi.TinyFaceDetectorOptions({ inputSize: 128, scoreThreshold: 0.6 }))
+              currentDetectionFrame++;
+              // Prune stale tracker items every 100 frames
+              if (currentDetectionFrame % 100 === 0) {
+                for (const [stId, info] of consensusTracker.entries()) {
+                  if (currentDetectionFrame - info.lastFrame > 50) {
+                    consensusTracker.delete(stId);
+                  }
+                }
+              }
+
+              // Balanced classroom detection: inputSize 224 provides 2.5x distance coverage over 128
+              const detections = await faceapi.detectAllFaces(cameraImg, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.55 }))
                 .withFaceLandmarks()
                 .withFaceDescriptors()
                 .withAgeAndGender();
@@ -1364,7 +1392,7 @@
               let newDetection = false;
 
               resizedDetections.forEach(detection => {
-                let boxText = "Unknown";
+                let boxText = "Unknown Face";
                 let boxColor = "rgba(239, 68, 68, 1)"; // Red
 
                 const { gender } = detection;
@@ -1377,16 +1405,36 @@
                     const student = students.find(s => s.id === bestMatch.label);
 
                     if (student) {
-                      boxText = student.onLeave ? `${genderIcon} ${student.name} (On Leave)` : `${genderIcon} ${student.name}`;
-                      boxColor = student.onLeave ? "rgba(245, 158, 11, 1)" : "rgba(16, 185, 129, 1)"; // Amber if on leave, green if normal
-
+                      // Multi-frame temporal consensus (requires 3 consistent frames to avoid single-frame false triggers)
                       if (!student.detected) {
-                        student.detected = true;
-                        newDetection = true;
+                        const history = consensusTracker.get(student.id) || { hits: 0, lastFrame: 0 };
+                        if (currentDetectionFrame - history.lastFrame <= 8) {
+                          history.hits += 1;
+                        } else {
+                          history.hits = 1;
+                        }
+                        history.lastFrame = currentDetectionFrame;
+                        consensusTracker.set(student.id, history);
+
+                        if (history.hits >= 3) {
+                          student.detected = true;
+                          newDetection = true;
+                          boxText = student.onLeave ? `${genderIcon} ${student.name} (On Leave)` : `${genderIcon} ${student.name}`;
+                          boxColor = student.onLeave ? "rgba(245, 158, 11, 1)" : "rgba(16, 185, 129, 1)"; // Amber if on leave, green if normal
+                        } else {
+                          // Temporal consensus in progress
+                          boxText = `Confirming ${student.name} (${history.hits}/3)`;
+                          boxColor = "rgba(59, 130, 246, 0.9)"; // Blue
+                        }
+                      } else {
+                        // Confirmed present
+                        boxText = student.onLeave ? `${genderIcon} ${student.name} (On Leave)` : `${genderIcon} ${student.name}`;
+                        boxColor = student.onLeave ? "rgba(245, 158, 11, 1)" : "rgba(16, 185, 129, 1)";
                       }
                     }
                   } else {
                     boxText = "Unknown Face";
+                    boxColor = "rgba(239, 68, 68, 1)";
                   }
                 } else {
                   boxText = "Unverified";
@@ -1417,6 +1465,7 @@
           // Stop Scan
           isScanning = false;
           clearInterval(detectionInterval);
+          consensusTracker.clear();
           btn.html('<i class="fa-solid fa-expand"></i> Start Face Scan');
           btn.css('background', '');
           btn.css('border-color', '');

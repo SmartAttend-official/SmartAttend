@@ -231,14 +231,78 @@
       left: 0;
       right: 0;
       padding: 12px;
-      background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+      background: linear-gradient(to top, rgba(0, 0, 0, 0.85), transparent);
       text-align: center;
       font-weight: 600;
-      font-size: 14px;
-      min-height: 44px;
+      font-size: 13px;
+      min-height: 48px;
       display: flex;
       align-items: flex-end;
       justify-content: center;
+      z-index: 5;
+    }
+
+    /* Face Alignment Guide Oval */
+    .face-guide-oval {
+      position: absolute;
+      width: 170px;
+      height: 220px;
+      border: 2px dashed rgba(99, 102, 241, 0.4);
+      border-radius: 50%;
+      pointer-events: none;
+      display: none;
+      box-shadow: 0 0 20px rgba(99, 102, 241, 0.15);
+      transition: all 0.3s ease;
+      z-index: 4;
+    }
+
+    /* Pose cards */
+    .pose-guide-container {
+      margin-bottom: 16px;
+    }
+
+    .pose-cards {
+      display: flex;
+      gap: 8px;
+    }
+
+    .pose-card {
+      flex: 1;
+      padding: 10px 8px;
+      border-radius: 12px;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      text-align: center;
+      transition: all 0.25s ease;
+    }
+
+    .pose-card.active {
+      background: rgba(99, 102, 241, 0.18);
+      border-color: #818cf8;
+      box-shadow: 0 0 12px rgba(99, 102, 241, 0.3);
+      transform: translateY(-2px);
+    }
+
+    .pose-card.done {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: #34d399;
+    }
+
+    .pose-card-icon {
+      font-size: 18px;
+      margin-bottom: 4px;
+    }
+
+    .pose-card-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #f8fafc;
+    }
+
+    .pose-card-sub {
+      font-size: 10px;
+      color: #94a3b8;
+      margin-top: 2px;
     }
 
     /* Buttons */
@@ -418,7 +482,7 @@
       <div class="steps">
         <div class="step active" id="step1"><span>1️⃣</span>Select</div>
         <div class="step" id="step2"><span>2️⃣</span>Camera</div>
-        <div class="step" id="step3"><span>3️⃣</span>Capture</div>
+        <div class="step" id="step3"><span>3️⃣</span>Multi-Pose</div>
       </div>
 
       <!-- Loading state -->
@@ -450,11 +514,37 @@
           </select>
         </div>
 
+        <!-- Multi-Pose Guidance Bar -->
+        <div class="pose-guide-container" id="poseGuideContainer" style="display:none;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <span style="font-size:11px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.06em;">Multi-Sample Registration</span>
+            <span id="poseProgressText" style="font-size:12px; font-weight:700; color:#818cf8;">Sample 1 of 3</span>
+          </div>
+          <div class="pose-cards">
+            <div class="pose-card active" id="poseCard1">
+              <div class="pose-card-icon">😐</div>
+              <div class="pose-card-title">Pose 1: Front</div>
+              <div class="pose-card-sub" id="poseSub1">Ready</div>
+            </div>
+            <div class="pose-card" id="poseCard2">
+              <div class="pose-card-icon">👈</div>
+              <div class="pose-card-title">Pose 2: Left 15°</div>
+              <div class="pose-card-sub" id="poseSub2">Pending</div>
+            </div>
+            <div class="pose-card" id="poseCard3">
+              <div class="pose-card-icon">👉</div>
+              <div class="pose-card-title">Pose 3: Right 15°</div>
+              <div class="pose-card-sub" id="poseSub3">Pending</div>
+            </div>
+          </div>
+        </div>
+
         <div class="camera-box">
           <div id="placeholder">
             <i class="fa-solid fa-camera-slash"></i>
             <span>Click "Start Camera" to begin</span>
           </div>
+          <div class="face-guide-oval" id="faceGuideOval"></div>
           <video id="regVideo" autoplay playsinline muted style="display:none;"></video>
           <canvas id="regCanvas" style="display:none;"></canvas>
           <div id="statusBar"></div>
@@ -465,7 +555,10 @@
             <i class="fa-solid fa-video"></i> Start Camera
           </button>
           <button id="captureBtn" class="btn btn-primary" onclick="captureAndSave()" disabled>
-            <i class="fa-solid fa-camera"></i> Capture Face
+            <i class="fa-solid fa-camera"></i> Capture Pose 1 (Front)
+          </button>
+          <button id="resetBtn" class="btn btn-secondary" onclick="resetCaptureSession()" style="display:none; flex:0.4;" title="Reset captured samples">
+            <i class="fa-solid fa-rotate-left"></i> Reset
           </button>
         </div>
 
