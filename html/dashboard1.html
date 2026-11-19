@@ -850,9 +850,52 @@
             <i class="fa-solid fa-video-slash"></i>
             <span>Camera Feed Offline</span>
           </div>
+          <!-- Camera stream error overlay (shown when stream fails to load) -->
+          <div id="cameraErrorOverlay" style="display:none; position:absolute; inset:0; background:rgba(15,23,42,0.92); z-index:10; flex-direction:column; align-items:center; justify-content:center; gap:10px; color:#ef4444; border-radius:inherit;">
+            <i class="fa-solid fa-triangle-exclamation" style="font-size:32px;"></i>
+            <span style="font-size:14px; font-weight:600; text-align:center; max-width:280px; line-height:1.5;" id="cameraErrorMsg">
+              Camera not reachable. Check the URL and ensure the same Wi-Fi network.
+            </span>
+            <span style="font-size:12px; color:#94a3b8; text-align:center;">Go to Settings → Camera Configuration</span>
+          </div>
           <!-- The image tag where the IP Camera stream will load -->
-          <img id="camera" src="" alt="" crossorigin="anonymous">
+          <img id="camera" src="" alt="" crossorigin="anonymous"
+            onerror="showCameraError('Stream failed to load. Verify the URL ends with /video and camera is online.')">
           <canvas id="faceCanvas"></canvas>
+          <!-- Live Face Counter Badge (shows over the feed while scanning) -->
+          <div id="liveFaceCounter" style="
+            display: none;
+            position: absolute;
+            top: 14px;
+            left: 14px;
+            z-index: 20;
+            background: rgba(9, 13, 22, 0.88);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.18);
+            border-radius: 9999px;
+            padding: 6px 14px;
+            align-items: center;
+            gap: 8px;
+            font-family: 'Outfit', sans-serif;
+            user-select: none;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+          ">
+            <!-- Dot indicator -->
+            <span id="liveFaceCountDot" style="
+              width: 8px; height: 8px; border-radius: 50%;
+              background: #94a3b8;
+              display: inline-block;
+              flex-shrink: 0;
+              transition: all 0.25s ease;
+            "></span>
+            <span id="liveFaceCountLabel" style="
+              font-size: 13px;
+              font-weight: 700;
+              color: #f8fafc;
+              white-space: nowrap;
+            ">0 Faces Visible</span>
+          </div>
           <!-- Scanning Overlay -->
           <div class="scan-overlay" id="scanOverlay"></div>
         </div>
@@ -1142,22 +1185,39 @@
             faceapi.nets.ageGenderNet.loadFromUri(MODEL_URL)
           ]);
 
-          // Read face encodings from Google Sheets (already fetched in students array)
+          // Read face encodings supporting both legacy 128-d arrays and v2 multi-template structures
           const labeledDescriptors = [];
           students.forEach(s => {
             if (s.rawEncoding) {
               try {
-                const arr = new Float32Array(JSON.parse(s.rawEncoding));
-                labeledDescriptors.push(new faceapi.LabeledFaceDescriptors(s.id, [arr]));
+                const parsed = JSON.parse(s.rawEncoding);
+                const descriptors = [];
+                if (Array.isArray(parsed)) {
+                  // Legacy single 128-d descriptor
+                  if (parsed.length === 128) {
+                    descriptors.push(new Float32Array(parsed));
+                  }
+                } else if (parsed && Array.isArray(parsed.templates)) {
+                  // Version 2 multi-sample templates
+                  parsed.templates.forEach(t => {
+                    if (Array.isArray(t) && t.length === 128) {
+                      descriptors.push(new Float32Array(t));
+                    }
+                  });
+                }
+                if (descriptors.length > 0) {
+                  labeledDescriptors.push(new faceapi.LabeledFaceDescriptors(s.id, descriptors));
+                }
               } catch (e) {
-                console.warn(`Corrupted encoding for student ${s.id}`);
+                console.warn(`Corrupted encoding for student ${s.id}:`, e);
               }
             }
           });
 
           if (labeledDescriptors.length > 0) {
-            faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.9);
-            showGlobalAlert(`✅ Ready! ${labeledDescriptors.length} student face(s) loaded.`);
+            // Calibrated strict Euclidean distance threshold: 0.45 (replaces loose 0.9 to eliminate false acceptances)
+            faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.45);
+            showGlobalAlert(`✅ Ready! ${labeledDescriptors.length} student face profile(s) loaded.`);
           } else {
             showGlobalAlert('ℹ️ No faces registered yet. Click "Register Student Faces" to register.');
           }
@@ -1319,18 +1379,43 @@
 
           // Hide placeholder and show the image stream
           $(".feed-placeholder").hide();
-          const storedUrl = localStorage.getItem('ipCameraUrl') || '';
-          // Validate: must start with http and be longer than 10 chars to be a real URL
-          const cameraUrl = (storedUrl.startsWith('http') && storedUrl.length > 10)
+          $("#cameraErrorOverlay").hide();
+
+          let storedUrl = localStorage.getItem('ipCameraUrl') || '';
+
+          // Reject https:// — IP cameras on LAN cannot serve SSL
+          if (storedUrl.startsWith('https://')) {
+            storedUrl = storedUrl.replace('https://', 'http://');
+            localStorage.setItem('ipCameraUrl', storedUrl);
+            showGlobalAlert('⚠️ Camera URL changed from https:// to http:// — IP cameras on local Wi-Fi do not support SSL.');
+          }
+
+          // Auto-correct: use http:// URL only, fallback to default
+          let cameraUrl = (storedUrl.startsWith('http://') && storedUrl.length > 10)
             ? storedUrl
             : "http://100.80.76.38:8080/video";
+
+          // Auto-append /video if only host:port is set (no path beyond /)
+          try {
+            const parsedUrl = new URL(cameraUrl);
+            if (parsedUrl.pathname === '/' || parsedUrl.pathname === '') {
+              cameraUrl = cameraUrl.replace(/\/+$/, '') + '/video';
+            }
+          } catch(e) {}
+
           // Update badge to show the URL actually being used
           $("#ipCameraText").text(cameraUrl);
-          localStorage.setItem('ipCameraUrl', cameraUrl); // fix any bad stored value
+          localStorage.setItem('ipCameraUrl', cameraUrl);
+
           // Add cache-buster to force the browser to open a fresh connection to the MJPEG stream
           const freshUrl = cameraUrl + (cameraUrl.includes('?') ? '&' : '?') + 't=' + new Date().getTime();
           $("#camera").attr("src", freshUrl).show();
           $("#scanOverlay").fadeIn();
+
+          // Show and initialize the live face counter badge
+          $("#liveFaceCounter").css('display', 'flex').fadeIn(200);
+          $("#liveFaceCountLabel").text('Scanning for faces...');
+          $("#liveFaceCountDot").css({ 'background': '#94a3b8', 'box-shadow': 'none' });
 
           // Clear canvas
           const ctx = canvas.getContext('2d');
@@ -1340,6 +1425,8 @@
           $("#attendanceReport").show();
 
           let isProcessingFrame = false;
+          let currentDetectionFrame = 0;
+          const consensusTracker = new Map(); // studentId -> { hits: number, lastFrame: number }
 
           // Start Detection Loop
           detectionInterval = setInterval(async () => {
@@ -1351,9 +1438,18 @@
               const displaySize = { width: cameraImg.width, height: cameraImg.height };
               faceapi.matchDimensions(canvas, displaySize);
 
-              // MAXIMUM OPTIMIZATION: Reduced inputSize to 128 (absolute minimum) and added score threshold 
-              // to reject background noise before heavy descriptor calculation.
-              const detections = await faceapi.detectAllFaces(cameraImg, new faceapi.TinyFaceDetectorOptions({ inputSize: 128, scoreThreshold: 0.6 }))
+              currentDetectionFrame++;
+              // Prune stale tracker items every 100 frames
+              if (currentDetectionFrame % 100 === 0) {
+                for (const [stId, info] of consensusTracker.entries()) {
+                  if (currentDetectionFrame - info.lastFrame > 50) {
+                    consensusTracker.delete(stId);
+                  }
+                }
+              }
+
+              // Balanced multi-face classroom detection (scoreThreshold 0.45 detects all visible faces reliably)
+              const detections = await faceapi.detectAllFaces(cameraImg, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.45 }))
                 .withFaceLandmarks()
                 .withFaceDescriptors()
                 .withAgeAndGender();
@@ -1361,11 +1457,26 @@
               const resizedDetections = faceapi.resizeResults(detections, displaySize);
               ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+              // Live face count badge update
+              const liveCount = resizedDetections.length;
+              const counterLabel = $("#liveFaceCountLabel");
+              const counterDot = $("#liveFaceCountDot");
+              if (liveCount === 0) {
+                counterLabel.text('0 Faces in View');
+                counterDot.css({ 'background': '#94a3b8', 'box-shadow': 'none' });
+              } else if (liveCount === 1) {
+                counterLabel.text('1 Face in View');
+                counterDot.css({ 'background': '#10b981', 'box-shadow': '0 0 10px rgba(16, 185, 129, 0.8)' });
+              } else {
+                counterLabel.text(`${liveCount} Faces in View`);
+                counterDot.css({ 'background': '#38bdf8', 'box-shadow': '0 0 10px rgba(56, 189, 248, 0.8)' });
+              }
+
               let newDetection = false;
 
               resizedDetections.forEach(detection => {
-                let boxText = "Unknown";
-                let boxColor = "rgba(239, 68, 68, 1)"; // Red
+                let boxText = "Unknown Face";
+                let boxColor = "rgba(239, 68, 68, 1)"; // Red for unknown / unregistered faces
 
                 const { gender } = detection;
                 const genderIcon = gender === 'male' ? '[M]' : '[F]';
@@ -1377,16 +1488,36 @@
                     const student = students.find(s => s.id === bestMatch.label);
 
                     if (student) {
-                      boxText = student.onLeave ? `${genderIcon} ${student.name} (On Leave)` : `${genderIcon} ${student.name}`;
-                      boxColor = student.onLeave ? "rgba(245, 158, 11, 1)" : "rgba(16, 185, 129, 1)"; // Amber if on leave, green if normal
-
+                      // Multi-frame temporal consensus (requires 3 consistent frames to avoid single-frame false triggers)
                       if (!student.detected) {
-                        student.detected = true;
-                        newDetection = true;
+                        const history = consensusTracker.get(student.id) || { hits: 0, lastFrame: 0 };
+                        if (currentDetectionFrame - history.lastFrame <= 8) {
+                          history.hits += 1;
+                        } else {
+                          history.hits = 1;
+                        }
+                        history.lastFrame = currentDetectionFrame;
+                        consensusTracker.set(student.id, history);
+
+                        if (history.hits >= 3) {
+                          student.detected = true;
+                          newDetection = true;
+                          boxText = student.onLeave ? `${genderIcon} ${student.name} (On Leave)` : `${genderIcon} ${student.name}`;
+                          boxColor = student.onLeave ? "rgba(245, 158, 11, 1)" : "rgba(16, 185, 129, 1)"; // Amber if on leave, green if normal
+                        } else {
+                          // Temporal consensus in progress
+                          boxText = `Confirming ${student.name} (${history.hits}/3)`;
+                          boxColor = "rgba(59, 130, 246, 0.9)"; // Blue
+                        }
+                      } else {
+                        // Confirmed present
+                        boxText = student.onLeave ? `${genderIcon} ${student.name} (On Leave)` : `${genderIcon} ${student.name}`;
+                        boxColor = student.onLeave ? "rgba(245, 158, 11, 1)" : "rgba(16, 185, 129, 1)";
                       }
                     }
                   } else {
                     boxText = "Unknown Face";
+                    boxColor = "rgba(239, 68, 68, 1)";
                   }
                 } else {
                   boxText = "Unverified";
@@ -1417,12 +1548,15 @@
           // Stop Scan
           isScanning = false;
           clearInterval(detectionInterval);
+          consensusTracker.clear();
           btn.html('<i class="fa-solid fa-expand"></i> Start Face Scan');
           btn.css('background', '');
           btn.css('border-color', '');
 
           // Stop stream visually
           $("#camera").attr("src", "").hide();
+          $("#cameraErrorOverlay").hide();
+          $("#liveFaceCounter").fadeOut(200);
           const ctx = canvas.getContext('2d');
           ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -1438,6 +1572,18 @@
         }
       });
     });
+
+    // Camera error display function (called by onerror on the img tag)
+    window.showCameraError = function(msg) {
+      const overlay = document.getElementById('cameraErrorOverlay');
+      const msgEl = document.getElementById('cameraErrorMsg');
+      if (overlay) {
+        if (msgEl) msgEl.textContent = msg || 'Camera not reachable. Check the URL and ensure you are on the same Wi-Fi network.';
+        overlay.style.display = 'flex';
+      }
+      // Also update the badge to warn
+      $("#ipCameraText").text('⚠️ Stream Error — Check Settings');
+    };
 
     // Global function for manual override toggle
     window.overrideStatus = function (btn, status) {

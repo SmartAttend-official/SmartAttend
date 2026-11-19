@@ -6,9 +6,33 @@ yarn-error.log*
 
 # Environment files containing secrets
 .env
+.env.*
 .env.local
 .env.production
 .env.development
+**/.env
+**/.env.*
+!**/.env.example
+
+# Biometric Privacy & Real Student Data (LOCAL ONLY)
+images/students/*/
+!images/students/sample_student/
+images/students/*_encoding.*
+
+# Python caches & bytecode
+__pycache__/
+*/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local Backups
+backup_*/
+
+# Local ad-hoc debugging scripts
+server/check_*.js
+server/inspect_*.js
+server/test_*.js
 
 # OS files
 Thumbs.db
@@ -25,7 +49,7 @@ Thumbs.db
 *.sln
 *.sw?
 
-# Generated Documents and PDFs (Keep in local folder only)
+# Generated Documents and PDFs (Keep in local folder only per project policy)
 PDF/*.pdf
 *.pdf
 *.traineddata
@@ -33,6 +57,14 @@ scratch/
 
 # Daily Change Log — LOCAL ONLY, never push to GitHub
 TEXT FILE/Daily_Change_Log/
+
+# TEXT FILE/other — duplicate of files organised elsewhere
+TEXT FILE/other/
+
+# Old root-level TEXT FILE entries (superseded by organised subfolders)
+TEXT FILE/DONE/Error which we have to fix SmartAttend.txt
+TEXT FILE/DONE/Future plan for database and server logic.txt
+TEXT FILE/DONE/netlify_deployment_guide.txt
 
 # Local data cache
 server/data/

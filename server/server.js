@@ -21,7 +21,6 @@ try {
 }
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
-require('dotenv').config();
 
 // Automated Attendance Monitoring & Warning Notification System
 const {
@@ -43,7 +42,7 @@ app.use(helmet({
 }));
 
 // Enable CORS — allowing all origins temporarily (HIGH-1 — will re-restrict once frontend URLs confirmed)
-// Known safe origins are listed below for reference; dynamic check allows *.github.io, *.netlify.app
+// Allowed Origins for Cross-Origin Resource Sharing (CORS)
 const allowedOrigins = [
   'https://smartattend-official.github.io',
   'https://smartattend.netlify.app',
@@ -52,24 +51,41 @@ const allowedOrigins = [
   'http://localhost:5500',
   'http://127.0.0.1:5500'
 ];
+
+// Additional origins configured via environment variable
+const envCustomOrigins = (process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, curl, Postman, file://)
+    // Allow requests with no origin (mobile apps, APK, curl, Postman, file://, electron)
     if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) !== -1) {
+
+    // Explicitly allowed fixed origins
+    if (allowedOrigins.indexOf(origin) !== -1 || envCustomOrigins.indexOf(origin) !== -1) {
       return callback(null, true);
     }
-    // Allow any subdomain of github.io or netlify.app
-    if (/\.github\.io$/.test(origin) || /\.netlify\.app$/.test(origin)) {
+
+    // Allow any local development origin/port (localhost or 127.0.0.1)
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
       return callback(null, true);
     }
-    // Allow any onrender.com subdomain (covers the backend itself)
-    if (/\.onrender\.com$/.test(origin)) {
+
+    // Allow official production and hosting subdomains
+    if (/\.github\.io$/.test(origin) || /\.netlify\.app$/.test(origin) || /\.onrender\.com$/.test(origin)) {
       return callback(null, true);
     }
-    // Temporary: log and allow unknown origins instead of blocking
-    // Remove this line once all frontend URLs are confirmed
-    console.warn(`[CORS] Unknown origin allowed (temporary): ${origin}`);
+
+    // In production, block unauthorized external origins
+    if (process.env.NODE_ENV === 'production') {
+      console.warn(`[CORS] Blocked request from unauthorized origin: ${origin}`);
+      return callback(new Error(`Origin ${origin} is not allowed by CORS`));
+    }
+
+    // In development mode, allow and log warning
+    console.warn(`[CORS] Unknown origin allowed in development mode: ${origin}`);
     return callback(null, true);
   },
   credentials: true
@@ -227,11 +243,12 @@ if (!supabaseUrl || !supabaseServiceKey) {
 
 const supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', supabaseServiceKey || 'placeholder');
 
-// CRIT-1: JWT secret — use environment variable, fallback to known value if not set on Render
-// ACTION REQUIRED: Set JWT_SECRET in Render dashboard → Environment tab
-const JWT_SECRET = process.env.JWT_SECRET || '55ebcfc623910c59dd6c32145391bd76abf8c05763137976e106d9d1c9ef25bf';
-if (!process.env.JWT_SECRET) {
-  console.warn('WARNING: JWT_SECRET env var not set on server. Using fallback. Set it in Render Environment tab immediately.');
+// JWT Secret - Required for signing & verifying role-based authentication tokens
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('FATAL SECURITY ERROR: JWT_SECRET environment variable is missing.');
+  console.error('The server cannot start without a secure JWT_SECRET defined in the environment.');
+  process.exit(1);
 }
 
 // ── 2FA Column Bootstrap: Auto-add missing columns to ADMIN table on startup ──
@@ -463,16 +480,10 @@ async function sendEmail({ to, subject, html, text }) {
 
   // 1. Primary Engine: Google Apps Script Web App (HTTPS over port 443)
   // Bypasses cloud host SMTP blocking (Render, AWS, DigitalOcean) and sends via Gmail API
-  // MED-1: Use env var as primary; fallback to known URL so email always works on Render
-  // ACTION: Set EMAIL_SCRIPT_URL in Render Environment tab to remove the hardcoded fallback
-  const FALLBACK_GAS_URL = 'https://script.google.com/macros/s/AKfycbwbVUxhvM4pIvjO7FqMclGLg8UXxYSCnTfmWinj655VvVPtWRrcpuCRo9yvlCwv06Kv/exec';
   const rawEnvUrl = (process.env.EMAIL_SCRIPT_URL || '').trim();
-  const urlsToTry = Array.from(new Set([
-    rawEnvUrl,
-    FALLBACK_GAS_URL
-  ])).filter(u => u && u.startsWith('https://script.google.com/'));
-  if (!rawEnvUrl) {
-    console.warn('[sendEmail] EMAIL_SCRIPT_URL env var not set on Render — using fallback GAS URL. Set it in Render Environment tab.');
+  const urlsToTry = rawEnvUrl && rawEnvUrl.startsWith('https://script.google.com/') ? [rawEnvUrl] : [];
+  if (urlsToTry.length === 0) {
+    console.warn('[sendEmail] EMAIL_SCRIPT_URL not configured — falling back to Nodemailer/SMTP.');
   }
 
   const browserHeaders = {
@@ -1475,7 +1486,7 @@ app.get('/', authenticateToken, async (req, res) => {
 
     // Debug Email Dispatch Tester for Cloud Diagnostics
     if (action === 'debug_email') {
-      const targetEmail = (req.query.to || 'aman70dz@gmail.com').trim();
+      const targetEmail = (req.query.to || process.env.DEBUG_TEST_EMAIL || 'admin@smartattend.edu').trim();
       try {
         const sendResult = await sendEmail({
           to: targetEmail,
@@ -2170,6 +2181,8 @@ app.post('/', authenticateToken, async (req, res) => {
       'delete_assignment': ['professor', 'admin'],
       'ask_gemini': ['professor', 'admin'],
       'generate_analytic_report': ['professor', 'admin'],
+      'save_encoding': ['professor', 'admin'],
+      'get_encoding': ['professor', 'admin'],
 
       // Student & Administrator Actions
       'submit_leave': ['student', 'admin'],
@@ -2688,12 +2701,12 @@ ${pending.map(p => `• Student ${p.StudentID || p.Student_ID}: ${p.StartDate} t
       }
 
       // Check for Gemini API Key
-      const rawKey = process.env.GEMINI_API_KEY || '';
+      const rawKey = (process.env.GEMINI_API_KEY || '').trim();
       const apiKey = rawKey && 
                      !rawKey.includes('your_gemini_api_key') && 
                      !rawKey.includes('your_key') && 
-                     !rawKey.startsWith('AIzaSyBY60belKbg2wHUq') 
-                     ? rawKey.trim() : null;
+                     rawKey.length >= 20
+                     ? rawKey : null;
 
       if (!apiKey) {
         return res.json({ status: 'success', message: generateDeterministicFallback() });
@@ -2760,7 +2773,8 @@ ${ragData.contextSummary.length > 0 ? ragData.contextSummary.join('\n\n') : 'No 
     }
 
     if (action === 'list_ai_models') {
-      const apiKey = process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY.startsWith('AIzaSyBY60belKbg2wHUq') ? process.env.GEMINI_API_KEY.trim() : null;
+      const rawKey = (process.env.GEMINI_API_KEY || '').trim();
+      const apiKey = rawKey && !rawKey.includes('your_') && rawKey.length >= 20 ? rawKey : null;
       if (!apiKey) {
         return res.json({ status: 'error', message: 'Gemini API Key is unconfigured in server/.env' });
       }
@@ -2897,12 +2911,12 @@ ${ragData.contextSummary.length > 0 ? ragData.contextSummary.join('\n\n') : 'No 
       // Document is only academic if academic markers match and no genuine medical/hospital markers are found
       const isAcademicDoc = foundAcademic.length > 0 && foundMedical.length === 0;
 
-      const rawKey = process.env.GEMINI_API_KEY || '';
+      const rawKey = (process.env.GEMINI_API_KEY || '').trim();
       const apiKey = rawKey && 
-                     !rawKey.includes('your_gemini_api_key_here') && 
+                     !rawKey.includes('your_gemini_api_key') && 
                      !rawKey.includes('your_key') && 
-                     !rawKey.startsWith('AIzaSyBY60belKbg2wHUq') 
-                     ? rawKey.trim() : null;
+                     rawKey.length >= 20
+                     ? rawKey : null;
 
       if (apiKey) {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
@@ -3140,21 +3154,66 @@ Return ONLY valid JSON:
     // ── Z. ENCODING ACTIONS ──
     if (action === 'save_encoding') {
       const studentIdStr = (req.body.id || req.body.studentId || '').toString().trim();
-      const encodingData = req.body.encoding;
+      let encodingData = req.body.encoding;
       
       if (!studentIdStr || !encodingData) {
-        return res.json({ status: 'error', message: 'Missing student ID or encoding data' });
+        return res.status(400).json({ status: 'error', message: 'Missing student ID or encoding data' });
+      }
+
+      // Parse and validate biometric vector data
+      let parsedPayload = encodingData;
+      if (typeof parsedPayload === 'string') {
+        try {
+          parsedPayload = JSON.parse(parsedPayload);
+        } catch (e) {
+          return res.status(400).json({ status: 'error', message: 'Invalid JSON format for encoding data' });
+        }
+      }
+
+      // Validation logic: Support both legacy single 128-float array and enhanced multi-template object
+      function isValidVector(vec) {
+        if (!Array.isArray(vec) || vec.length !== 128) return false;
+        return vec.every(n => typeof n === 'number' && !isNaN(n));
+      }
+
+      let payloadToPersist = null;
+
+      if (Array.isArray(parsedPayload)) {
+        // Legacy single 128-float vector
+        if (!isValidVector(parsedPayload)) {
+          return res.status(400).json({ status: 'error', message: 'Encoding vector must contain exactly 128 valid numbers.' });
+        }
+        payloadToPersist = JSON.stringify(parsedPayload);
+      } else if (parsedPayload && typeof parsedPayload === 'object') {
+        // Enhanced multi-template payload
+        if (!Array.isArray(parsedPayload.templates) || parsedPayload.templates.length === 0) {
+          return res.status(400).json({ status: 'error', message: 'Multi-template encoding must contain a non-empty templates array.' });
+        }
+        for (let i = 0; i < parsedPayload.templates.length; i++) {
+          if (!isValidVector(parsedPayload.templates[i])) {
+            return res.status(400).json({ status: 'error', message: `Template at index ${i} is not a valid 128-dimensional vector.` });
+          }
+        }
+        payloadToPersist = JSON.stringify({
+          version: parsedPayload.version || 2,
+          count: parsedPayload.templates.length,
+          enrolled_at: parsedPayload.enrolled_at || new Date().toISOString(),
+          templates: parsedPayload.templates
+        });
+      } else {
+        return res.status(400).json({ status: 'error', message: 'Unsupported biometric encoding structure.' });
       }
       
       const { error } = await supabase
         .from('students')
-        .update({ Face_Encoding: typeof encodingData === 'string' ? encodingData : JSON.stringify(encodingData) })
+        .update({ Face_Encoding: payloadToPersist })
         .ilike('ID', studentIdStr);
         
       if (error) {
-        return res.json({ status: 'error', message: error.message });
+        return res.status(500).json({ status: 'error', message: error.message });
       }
       
+      await logActivity('FACE_ENROLLMENT', `Biometric face encoding updated for student ${studentIdStr} by ${req.user ? req.user.email : 'Authorized Faculty'}`);
       return res.json({ status: 'success', message: 'Encoding saved to database successfully.' });
     }
 
@@ -3720,6 +3779,10 @@ Return ONLY valid JSON:
       const mappedData = {};
       if (data) {
         for (const k in data) {
+          // Biometric Security: Face_Encoding updates MUST be routed through authorized faculty/admin
+          if (k === 'Face_Encoding' && userRole !== 'admin' && userRole !== 'professor') {
+            return res.status(403).json({ status: 'error', message: 'Access Denied: Only faculty or administrators can update biometric face encodings.' });
+          }
           mappedData[k] = data[k];
         }
       }

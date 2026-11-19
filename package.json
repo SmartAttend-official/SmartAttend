@@ -1,0 +1,21 @@
+{
+  "name": "smartattend",
+  "version": "2.0.0",
+  "description": "SmartAttend — Edge-AI Automated Biometric Attendance & Multimodal Leave Verification System",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "cd server && npm start",
+    "dev": "cd server && npm run dev",
+    "test": "node -c server/server.js && node -c server/attendanceWarningService.js && node -c backend/config.js && echo \"All syntax tests passed!\""
+  },
+  "keywords": [
+    "attendance",
+    "face-recognition",
+    "edge-ai",
+    "gemini",
+    "supabase",
+    "education-erp"
+  ],
+  "author": "SmartAttend Team",
+  "license": "MIT"
+}

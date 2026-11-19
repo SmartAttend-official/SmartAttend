@@ -22,11 +22,14 @@ print("========================================")
 print("     FACE ENCODING TESTER")
 print("========================================")
 
-# 1. Load the Average Encoding we just generated
-average_encoding_path = r"c:/Users/LENOVO/Desktop/SmartAttend2@/images/students/BCA051_average_encoding.npy"
+# 1. Load the Average Encoding
+default_student_encoding = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "images", "students", "BCA051_average_encoding.npy"))
+sample_encoding = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "images", "students", "sample_student", "sample_encoding.npy"))
+average_encoding_path = default_student_encoding if os.path.exists(default_student_encoding) else sample_encoding
+
 try:
     known_encoding = np.load(average_encoding_path)
-    print("✅ Successfully loaded the Average Encoding for BCA051.")
+    print(f"✅ Successfully loaded face encoding from: {os.path.basename(average_encoding_path)}")
 except Exception as e:
     print(f"Error loading encoding file. Make sure you generated it first! Error: {e}")
     sys.exit(1)

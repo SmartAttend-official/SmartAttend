@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartAttend AI — Startup Buildathon India 2026 Pitch Deck</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    :root {
+      --bg-dark: #080e1a;
+      --card-bg: rgba(15, 23, 42, 0.75);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --accent-cyan: #06b6d4;
+      --accent-blue: #3b82f6;
+      --accent-emerald: #10b981;
+      --accent-coral: #f43f5e;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: #030712;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px 0;
+      overflow-x: hidden;
+    }
+
+    /* Deck Controls Toolbar */
+    .toolbar {
+      position: fixed;
+      bottom: 20px;
+      z-index: 1000;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      padding: 10px 24px;
+      border-radius: 40px;
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+    }
+
+    .toolbar button {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+
+    .toolbar button:hover {
+      background: var(--accent-blue);
+      border-color: var(--accent-blue);
+    }
+
+    .toolbar .slide-counter {
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 600;
+      padding: 0 8px;
+    }
+
+    /* 16:9 Widescreen Slide Container */
+    .slide-wrapper {
+      width: 100%;
+      max-width: 1200px;
+      display: flex;
+      flex-direction: column;
+      gap: 30px;
+      margin-bottom: 80px;
+    }
+
+    .slide {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(circle at 10% 10%, rgba(6, 182, 212, 0.08), transparent 30%),
+        radial-gradient(circle at 90% 90%, rgba(59, 130, 246, 0.08), transparent 30%);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 44px 56px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+      page-break-after: always;
+    }
+
+    /* Slide Header */
+    .slide-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+
+    .slide-tag {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .slide-number {
+      font-size: 12px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.3);
+    }
+
+    .slide-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: #fff;
+      line-height: 1.2;
+    }
+
+    .slide-subtitle {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+      line-height: 1.4;
+    }
+
+    .slide-body {
+      flex: 1;
+      display: flex;
+      gap: 20px;
+    }
+
+    /* Grid cards */
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+      width: 100%;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      width: 100%;
+    }
+
+    .feature-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      position: relative;
+    }
+
+    .feature-card .icon-box {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      margin-bottom: 4px;
+    }
+
+    .icon-cyan { background: rgba(6, 182, 212, 0.15); color: var(--accent-cyan); }
+    .icon-blue { background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); }
+    .icon-emerald { background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald); }
+    .icon-coral { background: rgba(244, 63, 94, 0.15); color: var(--accent-coral); }
+
+    .feature-card h4 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .feature-card p {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .feature-card ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 4px;
+    }
+
+    .feature-card li {
+      font-size: 12px;
+      color: #cbd5e1;
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+    }
+
+    .feature-card li i {
+      color: var(--accent-cyan);
+      margin-top: 3px;
+      font-size: 10px;
+    }
+
+    /* Comparison Table */
+    .comparison-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .comparison-table th {
+      text-align: left;
+      padding: 10px 14px;
+      background: rgba(30, 41, 59, 0.5);
+      color: var(--text-muted);
+      font-weight: 600;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .comparison-table td {
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      color: #cbd5e1;
+    }
+
+    .comparison-table tr.highlight {
+      background: rgba(6, 182, 212, 0.08);
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .comparison-table tr.highlight td:first-child {
+      color: var(--accent-cyan);
+    }
+
+    /* Slide Footers */
+    .slide-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 14px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 11px;
+      color: rgba(148, 163, 184, 0.7);
+    }
+
+    .badge-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #cbd5e1;
+    }
+
+    /* Print settings for PDF export */
+    @media print {
+      body {
+        background: #000;
+        padding: 0;
+      }
+      .toolbar {
+        display: none !important;
+      }
+      .slide-wrapper {
+        margin-bottom: 0;
+        gap: 0;
+      }
+      .slide {
+        border-radius: 0;
+        border: none;
+        box-shadow: none;
+        width: 100vw;
+        height: 100vh;
+        page-break-after: always;
+        break-after: page;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Controls Toolbar -->
+  <div class="toolbar">
+    <button onclick="window.print()"><i class="fa-solid fa-file-pdf"></i> Save / Print PDF (16:9)</button>
+    <div class="slide-counter">10 Slides Widescreen</div>
+    <button onclick="document.documentElement.requestFullscreen()"><i class="fa-solid fa-expand"></i> Fullscreen</button>
+  </div>
+
+  <div class="slide-wrapper">
+
+    <!-- SLIDE 1: COVER -->
+    <section class="slide" id="slide-1" style="justify-content: center; align-items: center; text-align: center;">
+      <div style="position: absolute; top: 40px; left: 56px; display: flex; align-items: center; gap: 10px;">
+        <span class="badge-chip" style="border-color: rgba(6, 182, 212, 0.4); color: var(--accent-cyan);">
+          <i class="fa-solid fa-bolt"></i> Google DeepMind + Google Cloud Startup Buildathon India 2026
+        </span>
+      </div>
+      <div style="margin-bottom: 20px;">
+        <img src="APK_Student_Panel/images/bg1.1.png" alt="SmartAttend" style="height: 110px; filter: drop-shadow(0 10px 25px rgba(6, 182, 212, 0.4));" onerror="this.style.display='none'">
+      </div>
+      <h1 style="font-family: 'Outfit'; font-size: 52px; font-weight: 800; letter-spacing: -1px; margin-bottom: 8px;">
+        SmartAttend <span style="background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">AI</span>
+      </h1>
+      <p style="font-size: 18px; color: #94a3b8; max-width: 650px; line-height: 1.5; margin-bottom: 30px;">
+        The Intelligent Academic Management Platform.
+      </p>
+      <div style="display: flex; gap: 14px; align-items: center;">
+        <span class="badge-chip"><i class="fa-solid fa-user"></i> <strong>Aman Singh</strong> (Founder & Lead Developer)</span>
+        <span class="badge-chip"><i class="fa-solid fa-graduation-cap"></i> BCA Independent Builder</span>
+        <span class="badge-chip" style="background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.4); color: var(--accent-emerald);">
+          <i class="fa-solid fa-circle-check"></i> Working Prototype (MVP)
+        </span>
+      </div>
+      <div class="slide-footer" style="position: absolute; bottom: 20px; left: 56px; right: 56px;">
+        <span>CONFIDENTIAL & PROPRIETARY</span>
+        <span>Startup Buildathon India 2026 Submission</span>
+      </div>
+    </section>
+
+    <!-- SLIDE 2: PROBLEM STATEMENT -->
+    <section class="slide" id="slide-2">
+      <div class="slide-header">
+        <span class="slide-tag"><i class="fa-solid fa-circle-exclamation"></i> Problem Statement</span>
+        <span class="slide-number">02 / 10</span>
+      </div>
+      <h2 class="slide-title">The Hidden Cost of Traditional Campus Attendance</h2>
+      <p class="slide-subtitle">Paper registers, basic apps, and biometric hardware cause friction across 55,000+ Indian institutions.</p>
+      <div class="slide-body">
+        <div class="grid-3">
+          <div class="feature-card">
+            <div class="icon-box icon-coral"><i class="fa-solid fa-stopwatch"></i></div>
+            <h4>Massive Classroom Time Bleed</h4>
+            <p>Professors lose 10 to 15 minutes of every 60-minute lecture manually calling roll numbers across 60–120 students, wasting ~15% of annual instructional time.</p>
+          </div>
+          <div class="feature-card">
+            <div class="icon-box icon-coral"><i class="fa-solid fa-user-ninja"></i></div>
+            <h4>Rampant Proxy & Buddy Punching</h4>
+            <p>Manual callouts and static QR codes make proxy attendance effortless. Institutional attendance logs become unreliable and unverified.</p>
+          </div>
+          <div class="feature-card">
+            <div class="icon-box icon-coral"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <h4>The "75% Blind Spot"</h4>
+            <p>Students only discover they are below the mandatory 75% attendance threshold weeks before finals—when it is mathematically impossible to recover.</p>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Target Impact: Eliminating administrative friction & proxy manipulation across Indian higher education</span>
+        <span>SmartAttend AI</span>
+      </div>
+    </section>
+
+    <!-- SLIDE 3: OUR SOLUTION -->
+    <section class="slide" id="slide-3">
+      <div class="slide-header">
+        <span class="slide-tag"><i class="fa-solid fa-lightbulb"></i> The Solution</span>
+        <span class="slide-number">03 / 10</span>
+      </div>
+      <h2 class="slide-title">SmartAttend AI: Frictionless Verification & Student Transparency</h2>
+      <p class="slide-subtitle">A multi-modal intelligence platform built specifically for real campus lecture and lab environments.</p>
+      <div class="slide-body">
+        <div class="grid-2">
+          <div class="feature-card" style="border-left: 3px solid var(--accent-cyan);">
+            <div class="icon-box icon-cyan"><i class="fa-solid fa-camera"></i></div>
+            <h4>Lecture Halls: Contactless Face Recognition</h4>
+            <p>Rapid computer vision scans student faces via professor webcams. Converts facial descriptors into secure 128-d vector embeddings without expensive biometric hardware.</p>
+            <ul>
+              <li><i class="fa-solid fa-check"></i> Sub-second multi-face verification</li>
+              <li><i class="fa-solid fa-check"></i> Zero dedicated biometric machine maintenance</li>
+            </ul>
+          </div>
+          <div class="feature-card" style="border-left: 3px solid var(--accent-emerald);">
+            <div class="icon-box icon-emerald"><i class="fa-solid fa-shield-halved"></i></div>
+            <h4>Labs & Practicals: Anti-Proxy PIN + Device Lock</h4>
+            <p>Dynamic 6-digit rolling PIN combined with hardware-level device fingerprinting ensures students can only submit attendance from their own physical smartphone.</p>
+            <ul>
+              <li><i class="fa-solid fa-check"></i> Prevents multi-account proxy submissions</li>
+              <li><i class="fa-solid fa-check"></i> Real-time student recovery formula built into the mobile app</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Dual verification eliminates proxy submissions while protecting student time</span>
+        <span>SmartAttend AI</span>
+      </div>
+    </section>
+
+    <!-- SLIDE 4: EXISTING PRODUCT -->
+    <section class="slide" id="slide-4">
+      <div class="slide-header">
+        <span class="slide-tag"><i class="fa-solid fa-cube"></i> Current Product</span>
+        <span class="slide-number">04 / 10</span>
+      </div>
+      <h2 class="slide-title">Built & Functioning: Working MVP Architecture</h2>
+      <p class="slide-subtitle">Not a mockup—an operational prototype with cross-platform web and a physical-device tested Android app.</p>
+      <div class="slide-body">
+        <div class="grid-3">
+          <div class="feature-card">
+            <div class="icon-box icon-blue"><i class="fa-solid fa-mobile-screen"></i></div>
+            <h4>Dedicated Student Mobile App</h4>
+            <ul>
+              <li><i class="fa-solid fa-check"></i> Production v1.0.0 APK signed [v2/v3]</li>
+              <li><i class="fa-solid fa-check"></i> Interactive Chart.js Donut Visualization</li>
+              <li><i class="fa-solid fa-check"></i> 5-Category Bottom Nav (Attendance, Live Lab, Leaves, Timetable, Assignments)</li>
+              <li><i class="fa-solid fa-check"></i> Dual 3-button & gesture nav support</li>
+            </ul>
+          </div>
+          <div class="feature-card">
+            <div class="icon-box icon-emerald"><i class="fa-solid fa-calculator"></i></div>
+            <h4>Smart Recovery Engine</h4>
+            <ul>
+              <li><i class="fa-solid fa-check"></i> Real-time 75% threshold monitoring</li>
+              <li><i class="fa-solid fa-check"></i> "Classes Needed to Recover" formula</li>
+              <li><i class="fa-solid fa-check"></i> "Safe Classes to Miss" buffer count</li>
+              <li><i class="fa-solid fa-check"></i> Automated threshold email notifications</li>
+            </ul>
+          </div>
+          <div class="feature-card">
+            <div class="icon-box icon-cyan"><i class="fa-solid fa-chalkboard-user"></i></div>
+            <h4>Professor & Admin Hub</h4>
+            <ul>
+              <li><i class="fa-solid fa-check"></i> Real-time face-api camera scanner</li>
+              <li><i class="fa-solid fa-check"></i> Dynamic 6-digit lab code generation</li>
+              <li><i class="fa-solid fa-check"></i> Medical leave verification & approval</li>
+              <li><i class="fa-solid fa-check"></i> Institutional attendance audit logs</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Status: Working Prototype (MVP) currently under rigorous testing & demonstration</span>
+        <span>SmartAttend AI</span>
+      </div>
+    </section>
+
+    <!-- SLIDE 5: AI INNOVATIONS -->
+    <section class="slide" id="slide-5">
+      <div class="slide-header">
+        <span class="slide-tag" style="color: var(--accent-emerald);"><i class="fa-solid fa-wand-magic-sparkles"></i> Proposed AI Evolution</span>
+        <span class="slide-number">05 / 10</span>
+      </div>
+      <h2 class="slide-title">Proposed AI Innovations: From Tracking to Academic Intelligence</h2>
+      <p class="slide-subtitle">Extending the platform through Google DeepMind & Google Cloud AI technologies.</p>
+      <div class="slide-body">
+        <div class="grid-3">
+          <div class="feature-card" style="border-top: 2px solid var(--accent-cyan);">
+            <div class="icon-box icon-cyan"><i class="fa-solid fa-robot"></i></div>
+            <h4>AI Academic Copilot</h4>
+            <p>An in-app conversational assistant powered by the Gemini API that queries verified student attendance records in natural language.</p>
+            <ul>
+              <li><i class="fa-solid fa-arrow-right"></i> *"Can I miss tomorrow's Physics lecture?"*</li>
+              <li><i class="fa-solid fa-arrow-right"></i> Personalized study recovery roadmaps</li>
+            </ul>
+          </div>
+          <div class="feature-card" style="border-top: 2px solid var(--accent-blue);">
+            <div class="icon-box icon-blue"><i class="fa-solid fa-chart-line"></i></div>
+            <h4>Predictive Attendance Analytics</h4>
+            <p>Machine learning models analyzing historical attendance patterns, exam schedules, and leave trends to identify students at risk of threshold breaches weeks ahead.</p>
+            <ul>
+              <li><i class="fa-solid fa-arrow-right"></i> Early-warning risk triggers</li>
+              <li><i class="fa-solid fa-arrow-right"></i> Proactive corrective action pathways</li>
+            </ul>
+          </div>
+          <div class="feature-card" style="border-top: 2px solid var(--accent-emerald);">
+            <div class="icon-box icon-emerald"><i class="fa-solid fa-brain"></i></div>
+            <h4>AI Faculty Intelligence</h4>
+            <p>Automated weekly intelligence briefs highlighting irregular absenteeism trends, class engagement patterns, and students requiring intervention.</p>
+            <ul>
+              <li><i class="fa-solid fa-arrow-right"></i> Zero-effort administrative reports</li>
+              <li><i class="fa-solid fa-arrow-right"></i> Departmental retention analytics</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Proposed enhancements designed for implementation during the Buildathon sprint</span>
+        <span>SmartAttend AI</span>
+      </div>
+    </section>
+
+    <!-- SLIDE 6: TECHNICAL ARCHITECTURE -->
+    <section class="slide" id="slide-6">
+      <div class="slide-header">
+        <span class="slide-tag"><i class="fa-solid fa-network-wired"></i> Architecture</span>
+        <span class="slide-number">06 / 10</span>
+      </div>
+      <h2 class="slide-title">Technical Architecture & Planned Google Cloud Migration</h2>
+      <p class="slide-subtitle">Clear demarcation between current functioning prototype and production cloud target.</p>
+      <div class="slide-body">
+        <div class="grid-2">
+          <div class="feature-card">
+            <h4><i class="fa-solid fa-code"></i> Current Prototype Architecture</h4>
+            <ul>
+              <li><i class="fa-solid fa-laptop"></i> <strong>Frontend:</strong> Responsive HTML5, CSS3, Vanilla ES6 JavaScript</li>
+              <li><i class="fa-solid fa-mobile"></i> <strong>Mobile:</strong> Signed Android APK (WebView bridge, Cordova/PWA shell)</li>
+              <li><i class="fa-solid fa-server"></i> <strong>Backend:</strong> Node.js / Express microservices on Render + Google Apps Script</li>
+              <li><i class="fa-solid fa-database"></i> <strong>Database:</strong> Supabase PostgreSQL + Google Sheets for quick prototyping</li>
+              <li><i class="fa-solid fa-eye"></i> <strong>Vision:</strong> Python, OpenCV & face_recognition (128-d vector embeddings)</li>
+            </ul>
+          </div>
+          <div class="feature-card" style="background: rgba(6, 182, 212, 0.05); border-color: rgba(6, 182, 212, 0.3);">
+            <h4 style="color: var(--accent-cyan);"><i class="fa-brands fa-google"></i> Target Google Cloud & AI Migration</h4>
+            <ul>
+              <li><i class="fa-solid fa-cloud"></i> <strong>Google Cloud Run:</strong> Serverless container deployment auto-scaling for morning class-time spikes</li>
+              <li><i class="fa-solid fa-brain"></i> <strong>Google Gemini API:</strong> Academic Copilot & intelligent faculty summaries</li>
+              <li><i class="fa-solid fa-box-archive"></i> <strong>Google Cloud Storage:</strong> Secure storage for medical documents & certificates</li>
+              <li><i class="fa-solid fa-fire"></i> <strong>Firebase Auth:</strong> Institutional SSO & real-time messaging alerts</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Transparent technical roadmap ensuring zero downtime during cloud transition</span>
+        <span>SmartAttend AI</span>
+      </div>
+    </section>
+
+    <!-- SLIDE 7: TARGET MARKET & COMPETITORS -->
+    <section class="slide" id="slide-7">
+      <div class="slide-header">
+        <span class="slide-tag"><i class="fa-solid fa-bullseye"></i> Market & Moat</span>
+        <span class="slide-number">07 / 10</span>
+      </div>
+      <h2 class="slide-title">Market Opportunity & Strategic Differentiation</h2>
+      <p class="slide-subtitle">Addressing India's 40M+ higher education student population before expanding into South Asia.</p>
+      <div class="slide-body">
+        <div style="width: 100%; display: flex; flex-direction: column; gap: 14px;">
+          <table class="comparison-table">
+            <thead>
+              <tr>
+                <th>Feature / Dimension</th>
+                <th>Paper / Registers</th>
+                <th>Biometric Terminals</th>
+                <th>Legacy ERPs (Fedena, etc.)</th>
+                <th style="color: var(--accent-cyan);">SmartAttend AI</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Hardware Capex</td>
+                <td>None</td>
+                <td>High (₹15k–40k/room)</td>
+                <td>Moderate</td>
+                <td style="color: var(--accent-emerald); font-weight: 700;">Zero (BYOD / Webcams)</td>
+              </tr>
+              <tr>
+                <td>Anti-Proxy Security</td>
+                <td>None (Easy proxy)</td>
+                <td>Moderate (Queue delays)</td>
+                <td>Low (Shared credentials)</td>
+                <td style="color: var(--accent-emerald); font-weight: 700;">High (Face AI + Device Lock)</td>
+              </tr>
+              <tr>
+                <td>Student Recovery Formula</td>
+                <td>No</td>
+                <td>No</td>
+                <td>No</td>
+                <td style="color: var(--accent-emerald); font-weight: 700;">Yes (Live 75% Formula)</td>
+              </tr>
+              <tr>
+                <td>Dedicated Student App</td>
+                <td>No</td>
+                <td>No</td>
+                <td>Generic Web/App</td>
+                <td style="color: var(--accent-emerald); font-weight: 700;">Yes (5-Category Native APK)</td>
+              </tr>
+              <tr class="highlight">
+                <td>AI Academic Copilot</td>
+                <td>No</td>
+                <td>No</td>
+                <td>No</td>
+                <td style="color: var(--accent-cyan); font-weight: 700;">Yes (Gemini API Planned)</td>
+              </tr>
+            </tbody>
+          </table>
+          <p style="font-size: 11.5px; color: var(--text-muted);">
+            *Target Segments: Colleges, Universities, Engineering/Medical Institutes, and Coaching Centers in India, with future expansion to Nepal, Bangladesh & Sri Lanka.
+          </p>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Differentiated by combining multi-modal verification with proactive student academic intelligence</span>
+        <span>SmartAttend AI</span>
+      </div>
+    </section>
+
+    <!-- SLIDE 8: BUSINESS MODEL -->
+    <section class="slide" id="slide-8">
+      <div class="slide-header">
+        <span class="slide-tag"><i class="fa-solid fa-sack-dollar"></i> Business Model</span>
+        <span class="slide-number">08 / 10</span>
+      </div>
+      <h2 class="slide-title">Predictable B2B Institutional SaaS Model</h2>
+      <p class="slide-subtitle">Annual recurring institutional subscriptions structured to scale with campus enrollment.</p>
+      <div class="slide-body">
+        <div class="grid-3">
+          <div class="feature-card">
+            <div class="icon-box icon-blue"><i class="fa-solid fa-users"></i></div>
+            <h4>Per-Student Annual SaaS</h4>
+            <p>Annual subscription pricing based on active student headcount (targeted range: ₹30 – ₹60 / student / year), offering institutions predictable budgeting.</p>
+          </div>
+          <div class="feature-card">
+            <div class="icon-box icon-cyan"><i class="fa-solid fa-layer-group"></i></div>
+            <h4>Tiered Package Architecture</h4>
+            <ul>
+              <li><i class="fa-solid fa-check"></i> <strong>Standard:</strong> OTP/PIN attendance, student portal, email triggers</li>
+              <li><i class="fa-solid fa-check"></i> <strong>Enterprise AI:</strong> Facial recognition, device locks, Gemini Copilot, and predictive analytics</li>
+            </ul>
+          </div>
+          <div class="feature-card">
+            <div class="icon-box icon-emerald"><i class="fa-solid fa-vial-circle-check"></i></div>
+            <h4>Pilot Validation Strategy</h4>
+            <p>Pricing and deployment tiers will be validated through structured department-level pilots with partner colleges prior to full commercial rollout.</p>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>No institutional adoption claimed currently; pricing to be validated through upcoming academic pilots</span>
+        <span>SmartAttend AI</span>
+      </div>
+    </section>
+
+    <!-- SLIDE 9: GOOGLE AI & CLOUD INTEGRATION -->
+    <section class="slide" id="slide-9">
+      <div class="slide-header">
+        <span class="slide-tag" style="color: var(--accent-cyan);"><i class="fa-brands fa-google"></i> Google Synergy</span>
+        <span class="slide-number">09 / 10</span>
+      </div>
+      <h2 class="slide-title">Engineered for Google Cloud & DeepMind Technologies</h2>
+      <p class="slide-subtitle">Leveraging Google infrastructure for low-latency AI, serverless scalability, and responsible data security.</p>
+      <div class="slide-body">
+        <div class="grid-3">
+          <div class="feature-card">
+            <div class="icon-box icon-cyan"><i class="fa-solid fa-microchip"></i></div>
+            <h4>Gemini API Integration</h4>
+            <p>Gemini 1.5 Flash processes student attendance histories and academic guidelines in milliseconds, powering the in-app conversational Copilot.</p>
+          </div>
+          <div class="feature-card">
+            <div class="icon-box icon-blue"><i class="fa-solid fa-server"></i></div>
+            <h4>Google Cloud Run Scalability</h4>
+            <p>Containerized microservices dynamically scale to handle concurrent morning lecture attendance spikes across thousands of students with zero idle costs.</p>
+          </div>
+          <div class="feature-card">
+            <div class="icon-box icon-emerald"><i class="fa-solid fa-lock"></i></div>
+            <h4>Responsible AI & Security</h4>
+            <p>Privacy-by-design architecture: facial data is processed as non-reversible mathematical vector embeddings, protecting student privacy under the DPDP Act 2023.</p>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Google Cloud & Gemini provide the exact foundation needed to scale campus intelligence</span>
+        <span>SmartAttend AI</span>
+      </div>
+    </section>
+
+    <!-- SLIDE 10: FOUNDER & VISION -->
+    <section class="slide" id="slide-10">
+      <div class="slide-header">
+        <span class="slide-tag"><i class="fa-solid fa-compass"></i> Roadmap & Vision</span>
+        <span class="slide-number">10 / 10</span>
+      </div>
+      <h2 class="slide-title">Founder, Milestone Roadmap & Long-Term Vision</h2>
+      <p class="slide-subtitle">From solo prototype development to building India's premier academic intelligence platform.</p>
+      <div class="slide-body">
+        <div class="grid-2">
+          <div class="feature-card">
+            <h4><i class="fa-solid fa-user-astronaut"></i> Founder: Aman Singh</h4>
+            <p>BCA Student & Independent Full-Stack Developer with hands-on experience building Computer Vision pipelines, REST microservices, and native Android applications from first principles.</p>
+            <div style="margin-top: 10px; padding: 12px; background: rgba(6, 182, 212, 0.1); border-radius: 8px; border-left: 3px solid var(--accent-cyan); font-size: 12px; line-height: 1.5;">
+              <em>"SmartAttend AI is evolving from a traditional attendance management system into an intelligent academic platform that helps institutions manage attendance, identify risks and support student success."</em>
+            </div>
+          </div>
+          <div class="feature-card">
+            <h4><i class="fa-solid fa-route"></i> Milestone Roadmap</h4>
+            <ul>
+              <li><i class="fa-solid fa-circle-check" style="color: var(--accent-emerald);"></i> <strong>Current Phase:</strong> Working MVP Prototype tested on physical Android devices</li>
+              <li><i class="fa-solid fa-clock" style="color: var(--accent-cyan);"></i> <strong>Phase 1 (Buildathon):</strong> Gemini Copilot integration & Cloud Run containerization</li>
+              <li><i class="fa-solid fa-clock" style="color: var(--accent-blue);"></i> <strong>Phase 2 (Q2-Q3 2026):</strong> Departmental pilot rollouts across 2-3 partner institutions</li>
+              <li><i class="fa-solid fa-clock" style="color: var(--accent-blue);"></i> <strong>Phase 3 (2027):</strong> Expansion into comprehensive Academic ERP & South Asian markets</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Startup Buildathon India 2026 • Thank You</span>
+        <span>Founder: Aman Singh</span>
+      </div>
+    </section>
+
+  </div>
+
+</body>
+</html>
+

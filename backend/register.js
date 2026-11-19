@@ -238,6 +238,59 @@ function filterStudents() {
 }
 
 
+// Multi-Sample Pose Registration State
+let currentPoseIndex = 1; // 1: Front, 2: Left 15°, 3: Right 15°
+let capturedTemplates = [];
+
+function updatePoseUI() {
+  const guide = document.getElementById('poseGuideContainer');
+  const progText = document.getElementById('poseProgressText');
+  const captureBtn = document.getElementById('captureBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const oval = document.getElementById('faceGuideOval');
+
+  if (guide) guide.style.display = cameraStream ? 'block' : 'none';
+  if (resetBtn) resetBtn.style.display = (cameraStream && capturedTemplates.length > 0) ? 'inline-flex' : 'none';
+  if (oval) oval.style.display = cameraStream ? 'block' : 'none';
+
+  if (progText) {
+    progText.textContent = `Sample ${currentPoseIndex} of 3`;
+  }
+
+  for (let i = 1; i <= 3; i++) {
+    const card = document.getElementById(`poseCard${i}`);
+    const sub = document.getElementById(`poseSub${i}`);
+    if (!card) continue;
+
+    card.className = 'pose-card';
+    if (i < currentPoseIndex) {
+      card.classList.add('done');
+      if (sub) sub.textContent = '✅ Captured';
+    } else if (i === currentPoseIndex) {
+      card.classList.add('active');
+      if (sub) sub.textContent = 'Active Target';
+    } else {
+      if (sub) sub.textContent = 'Pending';
+    }
+  }
+
+  if (captureBtn && cameraStream) {
+    let label = 'Capture Pose 1 (Front)';
+    if (currentPoseIndex === 2) label = 'Capture Pose 2 (Left 15°)';
+    if (currentPoseIndex === 3) label = 'Capture Pose 3 (Right 15°)';
+    captureBtn.innerHTML = `<i class="fa-solid fa-camera"></i> ${label}`;
+  }
+}
+
+function resetCaptureSession() {
+  currentPoseIndex = 1;
+  capturedTemplates = [];
+  updatePoseUI();
+  setStatus('🔄 Session reset. Pose 1: Look straight at the camera.', '#94a3b8');
+  const captureBtn = document.getElementById('captureBtn');
+  if (captureBtn && cameraStream) captureBtn.disabled = false;
+}
+
 function startCamera() {
   const studentId = document.getElementById('studentSelect').value;
   if (!studentId) {
@@ -263,7 +316,9 @@ function startCamera() {
       cameraBtn.disabled = false;
       document.getElementById('captureBtn').disabled = false;
 
-      setStatus('✅ Camera ready — look straight at the camera and click Capture!', '#34d399');
+      resetCaptureSession();
+      updatePoseUI();
+      setStatus('✅ Camera ready — look straight at camera for Pose 1 (Front).', '#34d399');
     })
     .catch(err => {
       cameraBtn.disabled = false;
@@ -283,6 +338,9 @@ function stopCamera() {
   cameraBtn.innerHTML = '<i class="fa-solid fa-video"></i> Start Camera';
   cameraBtn.onclick = startCamera;
   document.getElementById('captureBtn').disabled = true;
+  
+  resetCaptureSession();
+  updatePoseUI();
   setStatus('');
   setStep(1);
 }
@@ -293,80 +351,192 @@ async function captureAndSave() {
 
   const captureBtn = document.getElementById('captureBtn');
   captureBtn.disabled = true;
-  captureBtn.innerHTML = '<i class="fa-solid fa-spinner spinner"></i> Processing...';
-  setStatus('🔍 Detecting face...', 'white');
+  captureBtn.innerHTML = '<i class="fa-solid fa-spinner spinner"></i> Analyzing sample...';
+  setStatus(`🔍 Quality check for Pose ${currentPoseIndex}/3...`, 'white');
   setStep(3);
 
   const video = document.getElementById('regVideo');
   const canvas = document.getElementById('regCanvas');
   canvas.width = video.videoWidth || 640;
   canvas.height = video.videoHeight || 480;
-  canvas.getContext('2d').drawImage(video, 0, 0);
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0);
 
   try {
-    const det = await faceapi
-      .detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 320 }))
+    // 1. Detect all faces to enforce single-face invariant
+    const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.6 });
+    const detections = await faceapi
+      .detectAllFaces(canvas, options)
       .withFaceLandmarks()
-      .withFaceDescriptor();
+      .withFaceDescriptors();
 
-    if (!det) {
-      setStatus('❌ No face detected! Move closer, ensure good lighting, and try again.', '#f87171');
+    if (!detections || detections.length === 0) {
+      setStatus('❌ No face detected! Center your face inside the guide oval with good lighting.', '#f87171');
       captureBtn.disabled = false;
-      captureBtn.innerHTML = '<i class="fa-solid fa-camera"></i> Capture Face';
+      updatePoseUI();
       setStep(2);
       return;
     }
 
-    // Save face descriptor to database
-    const arr = Array.from(det.descriptor);
-    const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
+    if (detections.length > 1) {
+      setStatus('❌ Multiple faces detected! Only the student should be in the camera frame.', '#f87171');
+      captureBtn.disabled = false;
+      updatePoseUI();
+      setStep(2);
+      return;
+    }
 
+    const det = detections[0];
+    const box = det.detection.box;
+
+    // 2. Face Size Check (Resolution gate: >= 110px width & height)
+    if (box.width < 110 || box.height < 110) {
+      setStatus(`⚠️ Face is too far away (${Math.round(box.width)}px). Please move closer to camera (min 110px).`, '#fbbf24');
+      captureBtn.disabled = false;
+      updatePoseUI();
+      setStep(2);
+      return;
+    }
+
+    // 3. Photometric Illumination Check (RGB Luma gate: 40 to 230)
+    const bx = Math.max(0, Math.floor(box.x));
+    const by = Math.max(0, Math.floor(box.y));
+    const bw = Math.min(canvas.width - bx, Math.floor(box.width));
+    const bh = Math.min(canvas.height - by, Math.floor(box.height));
+    const facePixels = ctx.getImageData(bx, by, bw, bh).data;
+    let sumLuma = 0;
+    for (let i = 0; i < facePixels.length; i += 4) {
+      sumLuma += (0.299 * facePixels[i] + 0.587 * facePixels[i + 1] + 0.114 * facePixels[i + 2]);
+    }
+    const avgLuma = Math.round(sumLuma / (facePixels.length / 4));
+    if (avgLuma < 40) {
+      setStatus(`⚠️ Illumination too dark (${avgLuma}/255). Please ensure adequate lighting on the face.`, '#fbbf24');
+      captureBtn.disabled = false;
+      updatePoseUI();
+      setStep(2);
+      return;
+    }
+    if (avgLuma > 230) {
+      setStatus(`⚠️ Illumination overexposed / harsh backlight (${avgLuma}/255). Reduce glare.`, '#fbbf24');
+      captureBtn.disabled = false;
+      updatePoseUI();
+      setStep(2);
+      return;
+    }
+
+    // 4. Pose Orientation Check using 68 Landmarks
+    const landmarks = det.landmarks.positions;
+    const noseTip = landmarks[30];
+    const jawLeft = landmarks[0];
+    const jawRight = landmarks[16];
+    const leftDist = Math.abs(noseTip.x - jawLeft.x);
+    const rightDist = Math.abs(jawRight.x - noseTip.x);
+    const yawRatio = leftDist / (rightDist || 0.001);
+
+    // Provide friendly feedback if angle is completely contrary to requested pose
+    if (currentPoseIndex === 1 && (yawRatio < 0.5 || yawRatio > 2.0)) {
+      setStatus('⚠️ Look directly at the camera with a neutral face for Pose 1.', '#fbbf24');
+      captureBtn.disabled = false;
+      updatePoseUI();
+      setStep(2);
+      return;
+    }
+
+    // Store descriptor
+    const descriptorArr = Array.from(det.descriptor);
+    capturedTemplates.push(descriptorArr);
+
+    if (currentPoseIndex < 3) {
+      currentPoseIndex++;
+      updatePoseUI();
+      captureBtn.disabled = false;
+      setStep(2);
+      const nextPoseName = currentPoseIndex === 2 ? 'turn head slightly LEFT (~15°) 👈' : 'turn head slightly RIGHT (~15°) 👉';
+      setStatus(`✅ Sample ${currentPoseIndex - 1}/3 passed quality gates! Next: ${nextPoseName}`, '#34d399');
+      return;
+    }
+
+    // All 3 samples successfully captured! Submit v2 multi-template payload
+    captureBtn.innerHTML = '<i class="fa-solid fa-spinner spinner"></i> Saving biometric templates...';
+    setStatus('💾 Saving 3 biometric face templates to secure server...', '#818cf8');
+
+    const multiTemplatePayload = {
+      version: 2,
+      count: capturedTemplates.length,
+      enrolled_at: new Date().toISOString(),
+      templates: capturedTemplates
+    };
+
+    const SCRIPT_URL = window.SMART_ATTEND_CONFIG.SCRIPT_URL;
     const token = sessionStorage.getItem('smartattend_token') || 
                   localStorage.getItem('smartattend_token') || 
                   sessionStorage.getItem('token') || 
                   localStorage.getItem('token') || '';
     const saveHeaders = { 'Content-Type': 'application/json' };
     if (token) saveHeaders['Authorization'] = `Bearer ${token}`;
-    
-    const saveRes = await fetch(SCRIPT_URL, {
+
+    // Try dedicated 'save_encoding' action first
+    let saveRes = await fetch(SCRIPT_URL, {
       method: 'POST',
       headers: saveHeaders,
       body: JSON.stringify({
-        sheet: 'student',
-        action: 'update',
-        id: studentId,
-        data: { Face_Encoding: JSON.stringify(arr) }
+        action: 'save_encoding',
+        studentId: studentId,
+        encoding: multiTemplatePayload
       })
     });
 
+    // Fallback to action: 'update' if save_encoding returned 404 or old route
+    if (!saveRes.ok) {
+      saveRes = await fetch(SCRIPT_URL, {
+        method: 'POST',
+        headers: saveHeaders,
+        body: JSON.stringify({
+          sheet: 'student',
+          action: 'update',
+          id: studentId,
+          data: { Face_Encoding: JSON.stringify(multiTemplatePayload) }
+        })
+      });
+    }
+
     const saveJson = await saveRes.json();
     if (!saveRes.ok || (saveJson && saveJson.status === 'error')) {
-      throw new Error((saveJson && saveJson.message) || `Failed to save face descriptor (Status ${saveRes.status})`);
+      throw new Error((saveJson && saveJson.message) || `Failed to save biometric templates (HTTP ${saveRes.status})`);
     }
 
     const student = students.find(s => (s.ID === studentId || s.id === studentId));
-    if (student) student.Face_Encoding = JSON.stringify(arr);
-    setStatus(`✅ ${student ? (student.Name || student.ID) : studentId} registered successfully!`, '#34d399');
+    if (student) student.Face_Encoding = JSON.stringify(multiTemplatePayload);
 
-    // Update dropdown option
+    setStatus(`🎉 Success! 3 pose templates registered for ${student ? (student.Name || student.ID) : studentId}.`, '#34d399');
+
+    // Update dropdown option with checkmark
     const sel = document.getElementById('studentSelect');
     const opt = Array.from(sel.options).find(o => o.value === studentId);
     if (opt && !opt.textContent.includes('✅')) opt.textContent += ' ✅';
 
-    // Reset for next student
+    // Mark all cards done
+    for (let i = 1; i <= 3; i++) {
+      const card = document.getElementById(`poseCard${i}`);
+      const sub = document.getElementById(`poseSub${i}`);
+      if (card) { card.className = 'pose-card done'; }
+      if (sub) { sub.textContent = '✅ Stored'; }
+    }
+
+    // Reset session after 2.5s for the next student
     setTimeout(() => {
-      captureBtn.disabled = false;
-      captureBtn.innerHTML = '<i class="fa-solid fa-camera"></i> Capture Face';
+      resetCaptureSession();
       sel.value = '';
-      setStatus('👆 Select the next student and capture again.', '#94a3b8');
+      setStatus('👆 Select the next student to register.', '#94a3b8');
       setStep(1);
       refreshResultList();
-    }, 2000);
+    }, 2500);
 
   } catch (e) {
-    setStatus('💥 Error: ' + (e.message || e), '#f87171');
+    console.error('Registration error:', e);
+    setStatus('💥 Registration error: ' + (e.message || e), '#f87171');
     captureBtn.disabled = false;
-    captureBtn.innerHTML = '<i class="fa-solid fa-camera"></i> Capture Face';
+    updatePoseUI();
     setStep(2);
   }
 }
@@ -381,9 +551,17 @@ function refreshResultList() {
   if (registered.length === 0) { wrap.style.display = 'none'; return; }
 
   registered.forEach(s => {
+    let sampleLabel = '1 Template';
+    try {
+      const parsed = JSON.parse(s.Face_Encoding);
+      if (parsed && parsed.templates && Array.isArray(parsed.templates)) {
+        sampleLabel = `${parsed.templates.length} Poses`;
+      }
+    } catch (e) {}
+
     const div = document.createElement('div');
     div.className = 'result-item';
-    div.innerHTML = `<div><strong>${s.ID || s.id}</strong> — ${s.Name || 'Student'}</div><span>✅</span>`;
+    div.innerHTML = `<div><strong>${s.ID || s.id}</strong> — ${s.Name || 'Student'} <span style="font-size:11px; margin-left:8px; padding:2px 8px; border-radius:6px; background:rgba(99, 102, 241, 0.2); color:#a5b4fc; font-weight:600;">${sampleLabel}</span></div><span>✅</span>`;
     items.appendChild(div);
   });
 

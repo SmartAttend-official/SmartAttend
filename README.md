@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="images/logo.png" alt="SmartAttend Logo" width="120" />
+</p>
+
 # 🎓 SmartAttend — AI-Powered Biometric Attendance & Educational ERP Platform
 
 [![Status](https://img.shields.io/badge/Status-Production%20Ready-success?style=for-the-badge&logo=render)](https://smartattend-o2te.onrender.com)
@@ -18,28 +22,33 @@ SmartAttend is an enterprise-grade Educational ERP and Biometric Attendance plat
    - [C. Student Hub & Mobile APK](#c-student-hub--mobile-apk)
 4. [Core Functional Modules](#4-core-functional-modules)
    - [Classroom Face-Scan & Anti-Proxy Engine](#classroom-face-scan--anti-proxy-engine)
+   - [Real-Time Live Face Counter & Multi-Face Box Rendering](#real-time-live-face-counter--multi-face-box-rendering)
    - [Edge-AI Biometric Vector Mathematics ($L_2$ Norm)](#edge-ai-biometric-vector-mathematics-l_2-norm)
    - [Self-Service Lab Attendance with PIN/QR](#self-service-lab-attendance-with-pinqr)
    - [Multi-Day Leave & Smart Exemption Engine](#multi-day-leave--smart-exemption-engine)
    - [AI Medical Document Fraud Audit](#ai-medical-document-fraud-audit)
    - [Enterprise Bulk Student CSV/Excel Importer](#enterprise-bulk-student-csvexcel-importer)
    - [Academic Timetable & Assignment Hub](#academic-timetable--assignment-hub)
-5. [The Smart Attendance Credit Model](#5-the-smart-attendance-credit-model)
-6. [Core REST API Contract Specification](#6-core-rest-api-contract-specification)
-7. [Relational Database Schema & Data Dictionary](#7-relational-database-schema--data-dictionary)
-8. [Role-Based Access Control (RBAC) Permission Matrix](#8-role-based-access-control-rbac-permission-matrix)
-9. [Security & Infrastructure Hardening](#9-security--infrastructure-hardening)
-10. [Technology Stack Matrix](#10-technology-stack-matrix)
-11. [Project Directory Structure](#11-project-directory-structure)
-12. [Installation & Deployment Guide](#12-installation--deployment-guide)
+5. [Application Showcase & Visual Walkthrough](#5-application-showcase--visual-walkthrough)
+6. [Video Demonstration (Devpost)](#6-video-demonstration-devpost)
+7. [AI Models, Architecture & Technical Attribution](#7-ai-models-architecture--technical-attribution)
+8. [Known Limitations & Engineering Trade-Offs](#8-known-limitations--engineering-trade-offs)
+9. [The Smart Attendance Credit Model](#9-the-smart-attendance-credit-model)
+10. [Core REST API Contract Specification](#10-core-rest-api-contract-specification)
+11. [Relational Database Schema & Data Dictionary](#11-relational-database-schema--data-dictionary)
+12. [Role-Based Access Control (RBAC) Permission Matrix](#12-role-based-access-control-rbac-permission-matrix)
+13. [Security & Infrastructure Hardening](#13-security--infrastructure-hardening)
+14. [Technology Stack Matrix](#14-technology-stack-matrix)
+15. [Project Directory Structure](#15-project-directory-structure)
+16. [Installation & Deployment Guide](#16-installation--deployment-guide)
     - [1. 60-Second Local Development Quick-Start](#1-60-second-local-development-quick-start)
     - [2. Cloud Database Initialization (Supabase)](#2-cloud-database-initialization-supabase)
     - [3. Backend API Setup (Render)](#3-backend-api-setup-render)
-    - [4. Frontend Configuration (Netlify)](#4-frontend-configuration-netlify)
+    - [4. Frontend Configuration (Netlify / Static Web)](#4-frontend-configuration-netlify--static-web)
     - [5. Environment Variables Reference Dictionary](#5-environment-variables-reference-dictionary)
-13. [Project Metrics & Scale](#13-project-metrics--scale)
-14. [Future Roadmap](#14-future-roadmap)
-15. [License & Authors](#15-license--authors)
+17. [Project Metrics & Scale](#17-project-metrics--scale)
+18. [Future Roadmap](#18-future-roadmap)
+19. [License & Authors](#19-license--authors)
 
 ---
 
@@ -62,6 +71,10 @@ SmartAttend is an enterprise-grade Educational ERP and Biometric Attendance plat
 ---
 
 ## 2. Global System Architecture
+
+<p align="center">
+  <img src="images/smartattend_dual_path_logic_1778569345888.jpg" alt="SmartAttend Dual-Path Architecture & Verification Logic" width="850" />
+</p>
 
 ```mermaid
 flowchart TD
@@ -358,7 +371,60 @@ $$\text{Video Frame} \xrightarrow{\text{SSD MobileNet v1}} \text{Face Box} \xrig
 
 ---
 
-## 5. The Smart Attendance Credit Model
+## 5. Application Showcase & Visual Walkthrough
+
+<p align="center">
+  <img src="images/1st%20screen%20img.png" alt="SmartAttend Classroom Attendance Scanner & Management Interface" width="850" />
+</p>
+
+SmartAttend provides responsive, glassmorphism-styled interfaces tailored to each institutional stakeholder:
+
+| Interface Panel | Source File | Primary Capabilities |
+| :--- | :--- | :--- |
+| **Professor Attendance Scanner** | `html/dashboard1.html` | Live biometric face detection with WebRTC camera and IP webcam support, multi-face bounding boxes, live face count badge, calibrated 0.45 threshold matching, amber leave status overlay, and 1-click attendance persistence. |
+| **Face Registration Portal** | `html/register.html` | 3-step multi-pose biometric enrollment studio. Captures Frontal ($0^\circ$), Left ($15^\circ$), and Right ($15^\circ$) face angles; generates version 2 biometric templates directly in browser. |
+| **Student Self-Service Hub** | `html/student_dashboard.html` | Transparent attendance analytics, SVG progress rings, subject-wise attendance breakdown, multi-day period leave submissions, medical certificate upload, and timetable access. |
+| **Administrator Command Center** | `html/admin_dashboard.html` | Institutional ERP governance, enterprise CSV/Excel bulk student importer, timetable management, 2FA administration, security event inspection, and audit logs. |
+| **Laboratory OTP Gateway** | `html/Lab_Attendance.html` | Dual-path laboratory verification portal with 6-digit expiring numeric OTP generation, QR code display, student verification, and automated lab attendance logging. |
+
+---
+
+## 6. Video Demonstration (Devpost)
+
+A comprehensive video walkthrough demonstrating SmartAttend's edge biometric recognition, multimodal Gemini AI leave verification, and anti-proxy security is available for evaluation:
+
+[![SmartAttend Video Demonstration](https://img.shields.io/badge/Devpost-Demo%20Video-003E54?style=for-the-badge&logo=devpost)](https://devpost.com)
+
+> 📺 **Demo Video Link**: `https://devpost.com/software/smartattend` *(Submission Video & Pitch Deck Walkthrough)*
+
+---
+
+## 7. AI Models, Architecture & Technical Attribution
+
+SmartAttend adheres to open-source attribution standards and clearly separates client-side edge inference from cloud multimodal reasoning:
+
+| Component | Model / Engine | Provider / Author | Role in SmartAttend | Execution Context |
+| :--- | :--- | :--- | :--- | :--- |
+| **Facial Landmark & Vector Generation** | `TinyFaceDetector` & `FaceLandmark68Net` | Vincent Mühler (`face-api.js`) | Real-time face localization and extraction of 128-dimensional Euclidean biometric embeddings. | Client-side in browser via WebGL / TensorFlow.js |
+| **Hardware Acceleration** | `TensorFlow.js` runtime | Google Brain / TensorFlow Community | Provides GPU-accelerated tensor math in the browser for low-latency ($\le 300\text{ms}$) video inference. | Client-side WebGL / CPU fallback |
+| **Multimodal Leave Forensics** | `Gemini 1.5 Flash` | Google DeepMind | Inspects uploaded medical certificates, identifies doctor signatures/stamps, verifies date consistency, and scores fraud risk. | Server-side proxy with prompt-injection defense |
+| **Smart ERP Assistant (SmartAssist)** | `Gemini 1.5 Flash` | Google DeepMind | Context-aware natural language assistant for professors and administrators with deterministic fallback. | Server-side proxy |
+| **Document Text Extraction Fallback** | `Tesseract.js` | Tesseract OCR Project | Pure JavaScript client-side OCR for parsing legacy PDF and image text when offline. | Client-side Web Worker |
+
+---
+
+## 8. Known Limitations & Engineering Trade-Offs
+
+In the interest of full technical transparency for hackathon judges:
+
+1. **Extreme Profile Yaw Angles ($>45^\circ$)**: Lightweight mobile face detectors (`TinyFaceDetector`) are optimized for frontal and semi-frontal poses. Extreme side-profile faces ($>75^\circ$ yaw) may not trigger a bounding box. *Mitigation: SmartAttend uses multi-pose enrollment (Front, Left, Right) and instructs students to glance towards the camera.*
+2. **Camera Lighting & Exposure**: Highly underexposed environments (such as dim lecture halls with strong backlighting from windows) can reduce landmark confidence scores below the 0.45 threshold. *Mitigation: Automatic fallback alerts recommend adjusting room lighting or input resolution.*
+3. **Client WebGL Dependency**: Real-time video scanning achieves $20+\text{ FPS}$ on systems with WebGL hardware acceleration enabled. Systems running on software CPU rendering may drop to $5\text{–}8\text{ FPS}$.
+4. **Third-Party Email Quotas**: High-volume email delivery relies on Google Apps Script and Gmail API limits (1,500 emails/day for Google Workspace). For enterprise scale beyond 10,000 students, an institutional SMTP relay is recommended.
+
+---
+
+## 9. The Smart Attendance Credit Model
 
 SmartAttend implements the **Credit Model** to ensure students on approved medical leave are not academically penalized:
 
@@ -387,7 +453,7 @@ $$\text{Overall Attendance \%} = \left( \frac{\text{Classes Attended (including 
 
 ---
 
-## 6. Core REST API Contract Specification
+## 10. Core REST API Contract Specification
 
 The Node.js middleware on Render exposes a unified REST API contract governed by action verbs and role-based JWT authentication:
 
@@ -409,7 +475,7 @@ The Node.js middleware on Render exposes a unified REST API contract governed by
 
 ---
 
-## 7. Relational Database Schema & Data Dictionary
+## 11. Relational Database Schema & Data Dictionary
 
 SmartAttend leverages Supabase Cloud PostgreSQL with active Row-Level Security (RLS) on all public tables. The data layer is structured across 6 core relational entities:
 
@@ -492,7 +558,7 @@ CREATE POLICY "Service Role Full Access" ON students
 
 ---
 
-## 8. Role-Based Access Control (RBAC) Permission Matrix
+## 12. Role-Based Access Control (RBAC) Permission Matrix
 
 SmartAttend enforces strict least-privilege separation of duties across the three institutional roles (Administrator, Professor, and Student):
 
@@ -516,7 +582,7 @@ SmartAttend enforces strict least-privilege separation of duties across the thre
 
 ---
 
-## 9. Security & Infrastructure Hardening
+## 13. Security & Infrastructure Hardening
 
 SmartAttend is hardened against the OWASP Top 10 vulnerabilities following a rigorous 19-point security audit:
 
@@ -532,7 +598,7 @@ SmartAttend is hardened against the OWASP Top 10 vulnerabilities following a rig
 
 ---
 
-## 10. Technology Stack Matrix
+## 14. Technology Stack Matrix
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐
@@ -561,43 +627,55 @@ SmartAttend is hardened against the OWASP Top 10 vulnerabilities following a rig
 
 ---
 
-## 11. Project Directory Structure
+## 15. Project Directory Structure
 
 ```text
 SmartAttend/
+├── database/                              # Complete PostgreSQL Database Schemas & Migrations
+│   ├── schema.sql                         # Full idempotent DDL: 19 tables, indexes, and RLS policies
+│   ├── seed_sample_data.sql               # Synthetic demo seed data for rapid hackathon evaluation
+│   └── README.md                          # Database architecture & Supabase setup guide
 ├── server/                                # Cloud API Middleware (Node.js & Express)
-│   ├── server.js                          # Core API Router, Auth, Supabase & AI Proxy
-│   └── package.json                       # Dependencies (express, supabase-js, bcrypt, helmet)
+│   ├── server.js                          # Core API Router, Auth, Supabase & Multimodal AI Proxy
+│   ├── attendanceWarningService.js        # Automated attendance monitoring & warning notifications
+│   ├── .env.example                       # Documented environment template (zero secrets)
+│   └── package.json                       # Backend dependencies (express, supabase-js, bcryptjs, helmet)
 ├── backend/                               # Client Controllers & Fetch Handlers
-│   ├── config.js                          # Global API configuration (SCRIPT_URL)
+│   ├── config.js                          # Central API resolver (auto-detects local vs production)
+│   ├── register.js                        # Multi-pose facial registration controller
 │   ├── admin_dashboard.js                 # Admin CRUD, Bulk CSV/Excel Importer, Diagnostics
 │   ├── admin_login.js                     # Admin 2FA authentication
-│   ├── dashboard1.html (Embedded JS)      # Classroom face-scan loop & date sync
 │   ├── leave_requests.js                  # Professor leave review & Gemini AI proof audit
 │   ├── student_dashboard.js               # Student progress ring, multi-day leave form
 │   ├── student_login.js / student_forget.js # Student authentication & OTP password reset
 │   └── history.js / record.js             # Attendance history logs & Excel ledger export
 ├── html/                                  # Responsive Glassmorphism Portals
 │   ├── admin_dashboard.html               # Admin Command Center
-│   ├── dashboard1.html                    # Professor Classroom Face-Scan Portal
+│   ├── dashboard1.html                    # Professor Classroom Face-Scan Portal & Live Counter
+│   ├── register.html                      # Multi-Pose Student Face Registration Portal
 │   ├── Lab_Attendance.html                # Professor Lab PIN/QR Code Portal
 │   ├── Leave_Requests.html                # Professor Leave Audit & AI Verification Panel
 │   ├── student_dashboard.html             # Student Hub Portal
 │   ├── Assignments.html                   # Professor Assignment Broadcast Hub
 │   ├── History.html / Record.html         # University Attendance Ledgers
-│   └── Login.html / admin_login.html      # Multi-role authentication views
+│   └── Login.html / student_login.html    # Multi-role authentication views
+├── images/                                # System Visuals & Biometric Template Guidance
+│   ├── 1st screen img.png                 # Main portal preview
+│   └── students/sample_student/           # Synthetic biometric test templates & documentation
 ├── Student panel app idea/                # Standalone Android Client
 │   ├── SmartAttend Student.debug.v1.0.0.apk # Compiled Android Application Package
 │   └── APK_Student_Panel/                 # Standalone APK source files
 ├── python files/                          # Offline Computer Vision & Vector Generators
 │   ├── generate_encoding.py               # Batch facial vector encoder (50-record chunks)
 │   └── test_live_webcam.py                # Standalone Python OpenCV webcam verification
+├── .env.example                           # Root environment variable template
+├── package.json                           # Root lifecycle convenience scripts (npm start, dev, test)
 └── manifest.json / sw.js                  # Progressive Web App (PWA) offline service worker
 ```
 
 ---
 
-## 12. Installation & Deployment Guide
+## 16. Installation & Deployment Guide
 
 ### 1. 60-Second Local Development Quick-Start
 
@@ -606,27 +684,34 @@ To run and test the complete SmartAttend platform locally in under 60 seconds:
 ```bash
 # 1. Clone the repository
 git clone https://github.com/SmartAttend-official/SmartAttend.git
-cd SmartAttend/server
+cd SmartAttend
 
 # 2. Install backend dependencies
-npm install
+cd server && npm install && cd ..
 
 # 3. Create your local environment file
-cp .env.example .env
-# (Populate your SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)
+cp .env.example server/.env
+# (Populate your SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and a secure JWT_SECRET)
 
 # 4. Start the Node.js API server
 npm start
-# Server listens on http://localhost:10000
+# Server listens on http://localhost:3000 (or PORT configured in server/.env)
 ```
-* **Frontend Access**: Open `html/Login.html` in your browser using VS Code **Live Server** or run `npx serve html` from the root directory.
+
+* **Frontend Access**: Open `html/Login.html` in your browser using VS Code **Live Server** (port 5500) or run `npx serve html` from the root directory.
+* **Intelligent API Auto-Detection**: `backend/config.js` automatically routes requests to `http://localhost:3000` when loaded from `localhost` or `127.0.0.1`, and falls back to production when deployed online.
+* **Switching Backend at Runtime**: Open your browser console (`F12`) and set `localStorage.setItem('SMARTATTEND_BACKEND_URL', 'http://localhost:3000')`.
 
 ---
 
 ### 2. Cloud Database Initialization (Supabase)
 1. Open your **Supabase Dashboard** and navigate to the **SQL Editor**.
-2. Execute the provided database setup script (`TEXT FILE/Future_Plans_and_Upgrades/Supabase_RLS_Setup.sql`) to initialize the tables (`students`, `professors`, `AttendanceHistory`, `LeaveRequests`, `SecurityEvents`).
-3. Under **Project Settings > API**, copy your `Project URL` and `service_role` private key.
+2. Run the master schema script [`database/schema.sql`](database/schema.sql) to initialize all 19 relational tables, indexes, and Row-Level Security (RLS) policies.
+3. *(Optional)* Run [`database/seed_sample_data.sql`](database/seed_sample_data.sql) to instantly populate pre-hashed demo accounts:
+   - **Admin**: `admin@smartattend.edu` / `Admin@123`
+   - **Professor**: `prof.sharma@smartattend.edu` / `Professor@123`
+   - **Student**: `aarav.patel@smartattend.edu` / `Student@123`
+4. Under **Project Settings > API**, copy your `Project URL` and `service_role` private key into `server/.env`.
 
 ---
 
@@ -641,14 +726,10 @@ npm start
 
 ---
 
-### 4. Frontend Configuration (Netlify)
-1. Open `backend/config.js` and set your live backend URL:
-   ```javascript
-   window.SMART_ATTEND_CONFIG = {
-     SCRIPT_URL: "https://smartattend-api.onrender.com"
-   };
-   ```
-2. Deploy the root directory to Netlify for global high-speed edge distribution.
+### 4. Frontend Configuration (Netlify / Static Web)
+1. The frontend auto-detects cloud production URL `https://smartattend-o2te.onrender.com` by default.
+2. If deploying to your own custom domain, update `SCRIPT_URL` in `backend/config.js` or set `localStorage.setItem('SMARTATTEND_BACKEND_URL', 'https://your-custom-api.onrender.com')`.
+3. Deploy the root directory to Netlify, Vercel, or GitHub Pages.
 
 ---
 
@@ -656,20 +737,22 @@ npm start
 
 | Variable Name | Data Type | Required? | Default Value | Functional Scope |
 | :--- | :---: | :---: | :---: | :--- |
-| `PORT` | Number | Optional | `10000` | Local and cloud HTTP port for Express server listener. |
+| `PORT` | Number | Optional | `3000` / `10000` | Local and cloud HTTP port for Express server listener. |
 | `SUPABASE_URL` | String (URL) | **Required** | `None` | HTTPS REST connection endpoint to your Supabase PostgreSQL project. |
 | `SUPABASE_SERVICE_ROLE_KEY` | String (Secret) | **Required** | `None` | High-privilege secret token required to execute administrative writes past RLS. |
 | `JWT_SECRET` | String (Secret) | **Required** | `None` | High-entropy cryptographic secret for signing stateless 12h bearer tokens. |
-| `GEMINI_API_KEY` | String (Secret) | **Required** | `None` | Google AI Studio API key powering Gemini 1.5 Flash medical audit proxy. |
-| `EMAIL_SCRIPT_URL` | String (URL) | Optional | `None` | Google Apps Script Web App webhook URL for high-volume, zero-cost email delivery. |
+| `GEMINI_API_KEY` | String (Secret) | **Required** | `None` | Google AI Studio API key powering Gemini 1.5 Flash medical audit & assistant. |
+| `EMAIL_SCRIPT_URL` | String (URL) | Optional | `None` | Google Apps Script Web App webhook URL for high-volume email delivery. |
+| `DEBUG_TEST_EMAIL` | String (Email) | Optional | `admin@smartattend.edu` | Recipient for server health diagnostic delivery tests. |
 | `SMTP_HOST` | String | Optional | `smtp.gmail.com` | Primary or fallback SMTP server host for Nodemailer. |
 | `SMTP_PORT` | Number | Optional | `587` | Secure SMTP port (TLS/STARTTLS). |
 | `SMTP_USER` | String (Email) | Optional | `None` | Authenticated email address for direct SMTP delivery. |
 | `SMTP_PASS` | String (Secret) | Optional | `None` | Dedicated application password for SMTP authentication. |
+| `CORS_ORIGIN` | String | Optional | `None` | Comma-separated list of additional allowed external domains. |
 
 ---
 
-## 13. Project Metrics & Scale
+## 17. Project Metrics & Scale
 
 * **Codebase Scale**: ~32,000+ lines of clean, handwritten, production-tested code across 65+ files.
 * **Edge Recognition Speed**: Under 300ms per frame on standard consumer laptop and phone cameras.
@@ -679,7 +762,7 @@ npm start
 
 ---
 
-## 14. Future Roadmap
+## 18. Future Roadmap
 
 - [x] **Database Migration to Cloud PostgreSQL (Supabase)** (Completed)
 - [x] **AI-Powered Medical Proof Fraud Detection (Gemini 1.5 Flash)** (Completed)
@@ -694,8 +777,14 @@ npm start
 
 ---
 
-## 15. License & Authors
+## 19. License & Authors
 
 * **Lead Architect**: aman7474ak@gmail.com
 * **Repository**: [SmartAttend-official/SmartAttend](https://github.com/SmartAttend-official/SmartAttend)
 * **License**: MIT License — see the [LICENSE](LICENSE) file for complete details.
+
+---
+
+## 20. Contributing
+
+Hackathon judges and developers: see [**CONTRIBUTING.md**](CONTRIBUTING.md) for a quick-start guide, test credentials, project structure map, and security notes for local setup.
