@@ -43,7 +43,7 @@ app.use(helmet({
 }));
 
 // Enable CORS — allowing all origins temporarily (HIGH-1 — will re-restrict once frontend URLs confirmed)
-// Known safe origins are listed below for reference; dynamic check allows *.github.io, *.netlify.app
+// Allowed Origins for Cross-Origin Resource Sharing (CORS)
 const allowedOrigins = [
   'https://smartattend-official.github.io',
   'https://smartattend.netlify.app',
@@ -52,24 +52,41 @@ const allowedOrigins = [
   'http://localhost:5500',
   'http://127.0.0.1:5500'
 ];
+
+// Additional origins configured via environment variable
+const envCustomOrigins = (process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, curl, Postman, file://)
+    // Allow requests with no origin (mobile apps, APK, curl, Postman, file://, electron)
     if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) !== -1) {
+
+    // Explicitly allowed fixed origins
+    if (allowedOrigins.indexOf(origin) !== -1 || envCustomOrigins.indexOf(origin) !== -1) {
       return callback(null, true);
     }
-    // Allow any subdomain of github.io or netlify.app
-    if (/\.github\.io$/.test(origin) || /\.netlify\.app$/.test(origin)) {
+
+    // Allow any local development origin/port (localhost or 127.0.0.1)
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
       return callback(null, true);
     }
-    // Allow any onrender.com subdomain (covers the backend itself)
-    if (/\.onrender\.com$/.test(origin)) {
+
+    // Allow official production and hosting subdomains
+    if (/\.github\.io$/.test(origin) || /\.netlify\.app$/.test(origin) || /\.onrender\.com$/.test(origin)) {
       return callback(null, true);
     }
-    // Temporary: log and allow unknown origins instead of blocking
-    // Remove this line once all frontend URLs are confirmed
-    console.warn(`[CORS] Unknown origin allowed (temporary): ${origin}`);
+
+    // In production, block unauthorized external origins
+    if (process.env.NODE_ENV === 'production') {
+      console.warn(`[CORS] Blocked request from unauthorized origin: ${origin}`);
+      return callback(new Error(`Origin ${origin} is not allowed by CORS`));
+    }
+
+    // In development mode, allow and log warning
+    console.warn(`[CORS] Unknown origin allowed in development mode: ${origin}`);
     return callback(null, true);
   },
   credentials: true
