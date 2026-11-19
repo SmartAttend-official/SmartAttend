@@ -21,6 +21,7 @@ try {
 }
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
+require('dotenv').config();
 
 // Automated Attendance Monitoring & Warning Notification System
 const {
@@ -42,7 +43,7 @@ app.use(helmet({
 }));
 
 // Enable CORS — allowing all origins temporarily (HIGH-1 — will re-restrict once frontend URLs confirmed)
-// Allowed Origins for Cross-Origin Resource Sharing (CORS)
+// Known safe origins are listed below for reference; dynamic check allows *.github.io, *.netlify.app
 const allowedOrigins = [
   'https://smartattend-official.github.io',
   'https://smartattend.netlify.app',
@@ -51,41 +52,24 @@ const allowedOrigins = [
   'http://localhost:5500',
   'http://127.0.0.1:5500'
 ];
-
-// Additional origins configured via environment variable
-const envCustomOrigins = (process.env.CORS_ORIGIN || '')
-  .split(',')
-  .map(o => o.trim())
-  .filter(Boolean);
-
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, APK, curl, Postman, file://, electron)
+    // Allow requests with no origin (mobile apps, curl, Postman, file://)
     if (!origin) return callback(null, true);
-
-    // Explicitly allowed fixed origins
-    if (allowedOrigins.indexOf(origin) !== -1 || envCustomOrigins.indexOf(origin) !== -1) {
+    if (allowedOrigins.indexOf(origin) !== -1) {
       return callback(null, true);
     }
-
-    // Allow any local development origin/port (localhost or 127.0.0.1)
-    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+    // Allow any subdomain of github.io or netlify.app
+    if (/\.github\.io$/.test(origin) || /\.netlify\.app$/.test(origin)) {
       return callback(null, true);
     }
-
-    // Allow official production and hosting subdomains
-    if (/\.github\.io$/.test(origin) || /\.netlify\.app$/.test(origin) || /\.onrender\.com$/.test(origin)) {
+    // Allow any onrender.com subdomain (covers the backend itself)
+    if (/\.onrender\.com$/.test(origin)) {
       return callback(null, true);
     }
-
-    // In production, block unauthorized external origins
-    if (process.env.NODE_ENV === 'production') {
-      console.warn(`[CORS] Blocked request from unauthorized origin: ${origin}`);
-      return callback(new Error(`Origin ${origin} is not allowed by CORS`));
-    }
-
-    // In development mode, allow and log warning
-    console.warn(`[CORS] Unknown origin allowed in development mode: ${origin}`);
+    // Temporary: log and allow unknown origins instead of blocking
+    // Remove this line once all frontend URLs are confirmed
+    console.warn(`[CORS] Unknown origin allowed (temporary): ${origin}`);
     return callback(null, true);
   },
   credentials: true
@@ -243,12 +227,11 @@ if (!supabaseUrl || !supabaseServiceKey) {
 
 const supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', supabaseServiceKey || 'placeholder');
 
-// JWT Secret - Required for signing & verifying role-based authentication tokens
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  console.error('FATAL SECURITY ERROR: JWT_SECRET environment variable is missing.');
-  console.error('The server cannot start without a secure JWT_SECRET defined in the environment.');
-  process.exit(1);
+// CRIT-1: JWT secret — use environment variable, fallback to known value if not set on Render
+// ACTION REQUIRED: Set JWT_SECRET in Render dashboard → Environment tab
+const JWT_SECRET = process.env.JWT_SECRET || '55ebcfc623910c59dd6c32145391bd76abf8c05763137976e106d9d1c9ef25bf';
+if (!process.env.JWT_SECRET) {
+  console.warn('WARNING: JWT_SECRET env var not set on server. Using fallback. Set it in Render Environment tab immediately.');
 }
 
 // ── 2FA Column Bootstrap: Auto-add missing columns to ADMIN table on startup ──
@@ -480,10 +463,16 @@ async function sendEmail({ to, subject, html, text }) {
 
   // 1. Primary Engine: Google Apps Script Web App (HTTPS over port 443)
   // Bypasses cloud host SMTP blocking (Render, AWS, DigitalOcean) and sends via Gmail API
+  // MED-1: Use env var as primary; fallback to known URL so email always works on Render
+  // ACTION: Set EMAIL_SCRIPT_URL in Render Environment tab to remove the hardcoded fallback
+  const FALLBACK_GAS_URL = 'https://script.google.com/macros/s/AKfycbwbVUxhvM4pIvjO7FqMclGLg8UXxYSCnTfmWinj655VvVPtWRrcpuCRo9yvlCwv06Kv/exec';
   const rawEnvUrl = (process.env.EMAIL_SCRIPT_URL || '').trim();
-  const urlsToTry = rawEnvUrl && rawEnvUrl.startsWith('https://script.google.com/') ? [rawEnvUrl] : [];
-  if (urlsToTry.length === 0) {
-    console.warn('[sendEmail] EMAIL_SCRIPT_URL not configured — falling back to Nodemailer/SMTP.');
+  const urlsToTry = Array.from(new Set([
+    rawEnvUrl,
+    FALLBACK_GAS_URL
+  ])).filter(u => u && u.startsWith('https://script.google.com/'));
+  if (!rawEnvUrl) {
+    console.warn('[sendEmail] EMAIL_SCRIPT_URL env var not set on Render — using fallback GAS URL. Set it in Render Environment tab.');
   }
 
   const browserHeaders = {
@@ -1486,7 +1475,7 @@ app.get('/', authenticateToken, async (req, res) => {
 
     // Debug Email Dispatch Tester for Cloud Diagnostics
     if (action === 'debug_email') {
-      const targetEmail = (req.query.to || process.env.DEBUG_TEST_EMAIL || 'admin@smartattend.edu').trim();
+      const targetEmail = (req.query.to || 'aman70dz@gmail.com').trim();
       try {
         const sendResult = await sendEmail({
           to: targetEmail,
@@ -2701,12 +2690,12 @@ ${pending.map(p => `• Student ${p.StudentID || p.Student_ID}: ${p.StartDate} t
       }
 
       // Check for Gemini API Key
-      const rawKey = (process.env.GEMINI_API_KEY || '').trim();
+      const rawKey = process.env.GEMINI_API_KEY || '';
       const apiKey = rawKey && 
                      !rawKey.includes('your_gemini_api_key') && 
                      !rawKey.includes('your_key') && 
-                     rawKey.length >= 20
-                     ? rawKey : null;
+                     !rawKey.startsWith('AIzaSyBY60belKbg2wHUq') 
+                     ? rawKey.trim() : null;
 
       if (!apiKey) {
         return res.json({ status: 'success', message: generateDeterministicFallback() });
@@ -2773,8 +2762,7 @@ ${ragData.contextSummary.length > 0 ? ragData.contextSummary.join('\n\n') : 'No 
     }
 
     if (action === 'list_ai_models') {
-      const rawKey = (process.env.GEMINI_API_KEY || '').trim();
-      const apiKey = rawKey && !rawKey.includes('your_') && rawKey.length >= 20 ? rawKey : null;
+      const apiKey = process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY.startsWith('AIzaSyBY60belKbg2wHUq') ? process.env.GEMINI_API_KEY.trim() : null;
       if (!apiKey) {
         return res.json({ status: 'error', message: 'Gemini API Key is unconfigured in server/.env' });
       }
@@ -2911,12 +2899,12 @@ ${ragData.contextSummary.length > 0 ? ragData.contextSummary.join('\n\n') : 'No 
       // Document is only academic if academic markers match and no genuine medical/hospital markers are found
       const isAcademicDoc = foundAcademic.length > 0 && foundMedical.length === 0;
 
-      const rawKey = (process.env.GEMINI_API_KEY || '').trim();
+      const rawKey = process.env.GEMINI_API_KEY || '';
       const apiKey = rawKey && 
-                     !rawKey.includes('your_gemini_api_key') && 
+                     !rawKey.includes('your_gemini_api_key_here') && 
                      !rawKey.includes('your_key') && 
-                     rawKey.length >= 20
-                     ? rawKey : null;
+                     !rawKey.startsWith('AIzaSyBY60belKbg2wHUq') 
+                     ? rawKey.trim() : null;
 
       if (apiKey) {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
