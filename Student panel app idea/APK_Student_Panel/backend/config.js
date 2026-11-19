@@ -1,7 +1,8 @@
 // SmartAttend Central Configuration
+// Auto-detect environment: use local server when running from localhost
+const _isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 window.SMART_ATTEND_CONFIG = {
-    // The Google Apps Script Web App URL
-    SCRIPT_URL: 'https://smartattend-o2te.onrender.com'
+    SCRIPT_URL: _isLocal ? 'http://localhost:10000' : 'https://smartattend-o2te.onrender.com'
 };
 
 // Global fetch interceptor to automatically inject JWT authentication headers
