@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="images/logo.png" alt="SmartAttend Logo" width="120" />
+</p>
+
 # 🎓 SmartAttend — AI-Powered Biometric Attendance & Educational ERP Platform
 
 [![Status](https://img.shields.io/badge/Status-Production%20Ready-success?style=for-the-badge&logo=render)](https://smartattend-o2te.onrender.com)
@@ -67,6 +71,10 @@ SmartAttend is an enterprise-grade Educational ERP and Biometric Attendance plat
 ---
 
 ## 2. Global System Architecture
+
+<p align="center">
+  <img src="images/smartattend_dual_path_logic_1778569345888.jpg" alt="SmartAttend Dual-Path Architecture & Verification Logic" width="850" />
+</p>
 
 ```mermaid
 flowchart TD
@@ -364,6 +372,10 @@ $$\text{Video Frame} \xrightarrow{\text{SSD MobileNet v1}} \text{Face Box} \xrig
 ---
 
 ## 5. Application Showcase & Visual Walkthrough
+
+<p align="center">
+  <img src="images/1st%20screen%20img.png" alt="SmartAttend Classroom Attendance Scanner & Management Interface" width="850" />
+</p>
 
 SmartAttend provides responsive, glassmorphism-styled interfaces tailored to each institutional stakeholder:
 
