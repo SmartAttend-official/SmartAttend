@@ -58,5 +58,13 @@ scratch/
 # Daily Change Log — LOCAL ONLY, never push to GitHub
 TEXT FILE/Daily_Change_Log/
 
+# TEXT FILE/other — duplicate of files organised elsewhere
+TEXT FILE/other/
+
+# Old root-level TEXT FILE entries (superseded by organised subfolders)
+TEXT FILE/DONE/Error which we have to fix SmartAttend.txt
+TEXT FILE/DONE/Future plan for database and server logic.txt
+TEXT FILE/DONE/netlify_deployment_guide.txt
+
 # Local data cache
 server/data/
