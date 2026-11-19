@@ -106,10 +106,11 @@ app.use((req, res, next) => {
 // ADVANCED SECURITY & RATE LIMITING SUITE (OWASP A07 & DoS Hardening)
 // =========================================================================
 
-// 1. Dedicated Strict Login Limiter (Max 5 attempts / 15 min per IP)
+// 1. Dedicated Strict Login Limiter (Max 50 attempts / 15 min per IP, skips successful logins)
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: 50,
+  skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
   statusCode: 429,
