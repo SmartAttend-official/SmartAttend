@@ -782,3 +782,9 @@ npm start
 * **Lead Architect**: aman7474ak@gmail.com
 * **Repository**: [SmartAttend-official/SmartAttend](https://github.com/SmartAttend-official/SmartAttend)
 * **License**: MIT License — see the [LICENSE](LICENSE) file for complete details.
+
+---
+
+## 20. Contributing
+
+Hackathon judges and developers: see [**CONTRIBUTING.md**](CONTRIBUTING.md) for a quick-start guide, test credentials, project structure map, and security notes for local setup.
