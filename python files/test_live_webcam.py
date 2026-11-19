@@ -35,7 +35,9 @@ except ImportError as e:
 STUDENT_ID = "BCA051"
 
 # Path to the locally saved .npy encoding file (from generate_encoding.py)
-LOCAL_ENCODING_PATH = r"c:/Users/LENOVO/Desktop/SmartAttend2@/images/students/BCA051_average_encoding.npy"
+_default_enc = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "images", "students", "BCA051_average_encoding.npy"))
+_sample_enc = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "images", "students", "sample_student", "sample_encoding.npy"))
+LOCAL_ENCODING_PATH = _default_enc if os.path.exists(_default_enc) else _sample_enc
 
 # ── IP Webcam URL (from the IP Webcam app on your phone) ──────
 # Open the IP Webcam app → tap "Start Server"

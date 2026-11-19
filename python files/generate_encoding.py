@@ -27,7 +27,7 @@ except ImportError as e:
     print(f"Error: Required libraries not found. {e}")
     sys.exit(1)
 
-BASE_DIR = r"c:/Users/LENOVO/Desktop/SmartAttend2@/images/students"
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "images", "students"))
 SERVER_URL = "https://smartattend-o2te.onrender.com/"
 BATCH_SIZE = 50
 

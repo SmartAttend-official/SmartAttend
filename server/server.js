@@ -227,11 +227,12 @@ if (!supabaseUrl || !supabaseServiceKey) {
 
 const supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', supabaseServiceKey || 'placeholder');
 
-// CRIT-1: JWT secret — use environment variable, fallback to known value if not set on Render
-// ACTION REQUIRED: Set JWT_SECRET in Render dashboard → Environment tab
-const JWT_SECRET = process.env.JWT_SECRET || '55ebcfc623910c59dd6c32145391bd76abf8c05763137976e106d9d1c9ef25bf';
-if (!process.env.JWT_SECRET) {
-  console.warn('WARNING: JWT_SECRET env var not set on server. Using fallback. Set it in Render Environment tab immediately.');
+// JWT Secret - Required for signing & verifying role-based authentication tokens
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('FATAL SECURITY ERROR: JWT_SECRET environment variable is missing.');
+  console.error('The server cannot start without a secure JWT_SECRET defined in the environment.');
+  process.exit(1);
 }
 
 // ── 2FA Column Bootstrap: Auto-add missing columns to ADMIN table on startup ──
@@ -463,16 +464,10 @@ async function sendEmail({ to, subject, html, text }) {
 
   // 1. Primary Engine: Google Apps Script Web App (HTTPS over port 443)
   // Bypasses cloud host SMTP blocking (Render, AWS, DigitalOcean) and sends via Gmail API
-  // MED-1: Use env var as primary; fallback to known URL so email always works on Render
-  // ACTION: Set EMAIL_SCRIPT_URL in Render Environment tab to remove the hardcoded fallback
-  const FALLBACK_GAS_URL = 'https://script.google.com/macros/s/AKfycbwbVUxhvM4pIvjO7FqMclGLg8UXxYSCnTfmWinj655VvVPtWRrcpuCRo9yvlCwv06Kv/exec';
   const rawEnvUrl = (process.env.EMAIL_SCRIPT_URL || '').trim();
-  const urlsToTry = Array.from(new Set([
-    rawEnvUrl,
-    FALLBACK_GAS_URL
-  ])).filter(u => u && u.startsWith('https://script.google.com/'));
-  if (!rawEnvUrl) {
-    console.warn('[sendEmail] EMAIL_SCRIPT_URL env var not set on Render — using fallback GAS URL. Set it in Render Environment tab.');
+  const urlsToTry = rawEnvUrl && rawEnvUrl.startsWith('https://script.google.com/') ? [rawEnvUrl] : [];
+  if (urlsToTry.length === 0) {
+    console.warn('[sendEmail] EMAIL_SCRIPT_URL not configured — falling back to Nodemailer/SMTP.');
   }
 
   const browserHeaders = {
@@ -1475,7 +1470,7 @@ app.get('/', authenticateToken, async (req, res) => {
 
     // Debug Email Dispatch Tester for Cloud Diagnostics
     if (action === 'debug_email') {
-      const targetEmail = (req.query.to || 'aman70dz@gmail.com').trim();
+      const targetEmail = (req.query.to || process.env.DEBUG_TEST_EMAIL || 'admin@smartattend.edu').trim();
       try {
         const sendResult = await sendEmail({
           to: targetEmail,
@@ -2690,12 +2685,12 @@ ${pending.map(p => `• Student ${p.StudentID || p.Student_ID}: ${p.StartDate} t
       }
 
       // Check for Gemini API Key
-      const rawKey = process.env.GEMINI_API_KEY || '';
+      const rawKey = (process.env.GEMINI_API_KEY || '').trim();
       const apiKey = rawKey && 
                      !rawKey.includes('your_gemini_api_key') && 
                      !rawKey.includes('your_key') && 
-                     !rawKey.startsWith('AIzaSyBY60belKbg2wHUq') 
-                     ? rawKey.trim() : null;
+                     rawKey.length >= 20
+                     ? rawKey : null;
 
       if (!apiKey) {
         return res.json({ status: 'success', message: generateDeterministicFallback() });
@@ -2762,7 +2757,8 @@ ${ragData.contextSummary.length > 0 ? ragData.contextSummary.join('\n\n') : 'No 
     }
 
     if (action === 'list_ai_models') {
-      const apiKey = process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY.startsWith('AIzaSyBY60belKbg2wHUq') ? process.env.GEMINI_API_KEY.trim() : null;
+      const rawKey = (process.env.GEMINI_API_KEY || '').trim();
+      const apiKey = rawKey && !rawKey.includes('your_') && rawKey.length >= 20 ? rawKey : null;
       if (!apiKey) {
         return res.json({ status: 'error', message: 'Gemini API Key is unconfigured in server/.env' });
       }
@@ -2899,12 +2895,12 @@ ${ragData.contextSummary.length > 0 ? ragData.contextSummary.join('\n\n') : 'No 
       // Document is only academic if academic markers match and no genuine medical/hospital markers are found
       const isAcademicDoc = foundAcademic.length > 0 && foundMedical.length === 0;
 
-      const rawKey = process.env.GEMINI_API_KEY || '';
+      const rawKey = (process.env.GEMINI_API_KEY || '').trim();
       const apiKey = rawKey && 
-                     !rawKey.includes('your_gemini_api_key_here') && 
+                     !rawKey.includes('your_gemini_api_key') && 
                      !rawKey.includes('your_key') && 
-                     !rawKey.startsWith('AIzaSyBY60belKbg2wHUq') 
-                     ? rawKey.trim() : null;
+                     rawKey.length >= 20
+                     ? rawKey : null;
 
       if (apiKey) {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
