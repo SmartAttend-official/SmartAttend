@@ -30,6 +30,8 @@ const {
   getWarningLogs
 } = require('./attendanceWarningService');
 const { calculateAttendanceMetrics } = require('./attendanceCalculator');
+const { encryptBiometric, decryptBiometric, isEncrypted } = require('./utils/biometricCrypto');
+const { tenantContextMiddleware, getTenantId, scopeQueryToTenant } = require('./middleware/tenantContext');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -38,9 +40,12 @@ const PORT = process.env.PORT || 3000;
 app.set('trust proxy', 1);
 
 // Security headers (OWASP A05 — helmet sets X-Frame-Options, HSTS, CSP, etc.)
+// crossOriginResourcePolicy is set to "cross-origin" to allow web & mobile apps to access the API without CORP blocking
 app.use(helmet({
   contentSecurityPolicy: false, // Disabled to avoid breaking inline scripts in legacy HTML
-  crossOriginEmbedderPolicy: false
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginOpenerPolicy: false
 }));
 
 // Enable CORS — allowing all origins temporarily (HIGH-1 — will re-restrict once frontend URLs confirmed)
@@ -90,6 +95,7 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+app.use(tenantContextMiddleware);
 
 // Logger middleware — NEVER log sensitive fields (MED-2: passwords, OTPs, face encodings)
 const SENSITIVE_FIELDS = ['password', 'Password', 'otp', 'OTP', 'encoding', 'face_encoding', 'token', 'Token'];
@@ -386,7 +392,10 @@ function authenticateToken(req, res, next) {
   if (action === 'login' || action === 'verify_login_otp' || action === 'resend_2fa_otp' || action === 'send_otp' || action === 'verify_otp' || action === 'verify_otp_only' || action === 'verify_student_email' || action === 'ask_gemini' || action === 'calculate_attendance' || (!action && !sheet)) {
     if (token) {
       jwt.verify(token, JWT_SECRET, (err, decoded) => {
-        if (!err && decoded) req.user = decoded;
+        if (!err && decoded) {
+          req.user = decoded;
+          req.tenantId = decoded.institution_id || 'INST_MAIN';
+        }
         next();
       });
       return;
@@ -403,6 +412,7 @@ function authenticateToken(req, res, next) {
       return res.status(403).json({ status: 'error', message: 'Session Expired: Please log in again.' });
     }
     req.user = decoded;
+    req.tenantId = decoded.institution_id || 'INST_MAIN';
     next();
   });
 }
@@ -782,6 +792,14 @@ function formatStudent(row) {
   const clone = { ...row };
   delete clone.Password;
   delete clone.password;
+  // Transparent decryption of biometric face encoding for authorized requests
+  if (clone.Face_Encoding && isEncrypted(clone.Face_Encoding)) {
+    try {
+      clone.Face_Encoding = decryptBiometric(clone.Face_Encoding);
+    } catch (e) {
+      console.warn(`[Biometric] Decryption failed for student ${row.ID}:`, e.message);
+    }
+  }
   return {
     ...clone,
     'id': row.ID,
@@ -1520,7 +1538,16 @@ app.get('/', authenticateToken, async (req, res) => {
         return res.json({ status: 'error', message: 'No encoding found in database.' });
       }
 
-      let parsedEncoding = data.Face_Encoding;
+      let rawEncoding = data.Face_Encoding;
+      if (rawEncoding && isEncrypted(rawEncoding)) {
+        try {
+          rawEncoding = decryptBiometric(rawEncoding);
+        } catch (e) {
+          console.warn(`[Biometric] Decrypt error for student ${studentIdStr}:`, e.message);
+        }
+      }
+
+      let parsedEncoding = rawEncoding;
       if (typeof parsedEncoding === 'string') {
         try { parsedEncoding = JSON.parse(parsedEncoding); } catch(e) {}
       }
@@ -1891,6 +1918,10 @@ app.get('/', authenticateToken, async (req, res) => {
     if (sheet === 'student') {
       let query = supabase.from('students').select('*');
       if (email) query = query.eq('Email', email);
+
+      // Multi-tenant data isolation boundary
+      const activeTenant = req.tenantId || 'INST_MAIN';
+      query = query.eq('institution_id', activeTenant);
 
       const { data, error } = await query;
       if (error) throw error;
@@ -3194,17 +3225,21 @@ Return ONLY valid JSON:
         return res.status(400).json({ status: 'error', message: 'Unsupported biometric encoding structure.' });
       }
       
+      // AES-256-GCM authenticated encryption for sensitive biometric vector at rest
+      const encryptedBiometric = encryptBiometric(payloadToPersist);
+      const persistentValue = JSON.stringify(encryptedBiometric);
+      
       const { error } = await supabase
         .from('students')
-        .update({ Face_Encoding: payloadToPersist })
+        .update({ Face_Encoding: persistentValue })
         .ilike('ID', studentIdStr);
         
       if (error) {
         return res.status(500).json({ status: 'error', message: error.message });
       }
       
-      await logActivity('FACE_ENROLLMENT', `Biometric face encoding updated for student ${studentIdStr} by ${req.user ? req.user.email : 'Authorized Faculty'}`);
-      return res.json({ status: 'success', message: 'Encoding saved to database successfully.' });
+      await logActivity('FACE_ENROLLMENT', `Biometric face encoding updated and AES-256-GCM encrypted for student ${studentIdStr} by ${req.user ? req.user.email : 'Authorized Faculty'}`);
+      return res.json({ status: 'success', message: 'Encoding encrypted and saved to database successfully.' });
     }
 
     if (action === 'get_encoding') {
@@ -3218,7 +3253,22 @@ Return ONLY valid JSON:
         .single();
         
       if (error || !student) return res.json({ status: 'error', message: 'Not found' });
-      return res.json({ status: 'success', encoding: student.Face_Encoding });
+
+      let rawEncoding = student.Face_Encoding;
+      if (rawEncoding && isEncrypted(rawEncoding)) {
+        try {
+          rawEncoding = decryptBiometric(rawEncoding);
+        } catch (e) {
+          console.warn(`[Biometric] Decrypt error for student ${studentIdStr}:`, e.message);
+        }
+      }
+
+      let parsedEncoding = rawEncoding;
+      if (typeof parsedEncoding === 'string') {
+        try { parsedEncoding = JSON.parse(parsedEncoding); } catch(e) {}
+      }
+
+      return res.json({ status: 'success', encoding: parsedEncoding });
     }
 
     // ── DPDP ACT 2023 / GDPR ARTICLE 17: RIGHT-TO-BE-FORGOTTEN (BIOMETRIC PURGE) ──
@@ -3460,11 +3510,12 @@ Return ONLY valid JSON:
         });
       }
 
-      // Generate a signed JWT
+      // Generate a signed JWT with tenant isolation binding
       const payload = {
         id: user.ID || user.id || user['Student ID'] || user['Professor id'] || user['Admin_id'] || '',
         email: cleanEmail,
-        role: role
+        role: role,
+        institution_id: user.institution_id || 'INST_MAIN'
       };
 
       const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '12h' }); // HIGH-3: reduced from 7d to 12h
@@ -3521,7 +3572,7 @@ Return ONLY valid JSON:
 
         await supabase.from('ADMIN').update({ OTP: null, OTP_Timestamp: null }).ilike('Email', cleanEmail);
 
-        const adminPayload = { id: adminUser.Admin_id || '', email: cleanEmail, role: 'admin' };
+        const adminPayload = { id: adminUser.Admin_id || '', email: cleanEmail, role: 'admin', institution_id: adminUser.institution_id || 'INST_MAIN' };
         const adminToken = jwt.sign(adminPayload, JWT_SECRET, { expiresIn: '12h' }); // HIGH-3: reduced from 7d to 12h
 
         const adminClone = { ...adminUser };
@@ -3580,7 +3631,8 @@ Return ONLY valid JSON:
       const payload2fa = {
         id: user2fa['Professor id'] || '',
         email: cleanEmail,
-        role: 'professor'
+        role: 'professor',
+        institution_id: user2fa.institution_id || 'INST_MAIN'
       };
       const token2fa = jwt.sign(payload2fa, JWT_SECRET, { expiresIn: '12h' }); // HIGH-3: reduced from 7d to 12h
       const sessionToken2fa = Date.now().toString() + Math.random().toString(36).substring(2);
@@ -3842,7 +3894,11 @@ Return ONLY valid JSON:
           if (k === 'Face_Encoding' && userRole !== 'admin' && userRole !== 'professor') {
             return res.status(403).json({ status: 'error', message: 'Access Denied: Only faculty or administrators can update biometric face encodings.' });
           }
-          mappedData[k] = data[k];
+          if (k === 'Face_Encoding' && data[k]) {
+            mappedData[k] = isEncrypted(data[k]) ? (typeof data[k] === 'string' ? data[k] : JSON.stringify(data[k])) : JSON.stringify(encryptBiometric(data[k]));
+          } else {
+            mappedData[k] = data[k];
+          }
         }
       }
 
