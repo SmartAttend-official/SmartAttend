@@ -29,6 +29,7 @@ __pycache__/
 # Local Backups
 backup_*/
 SMARTATTEND_PRE_TRANSFORMATION_BACKUP/
+SMARTATTEND_PRE_REMEDIATION_BACKUP/
 SMARTATTEND_*.txt
 
 # Local ad-hoc debugging scripts
