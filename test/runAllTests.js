@@ -15,7 +15,10 @@ const TEST_SUITES = [
   { name: 'Authentication & Anti-Brute Force', file: 'authService.test.js' },
   { name: 'Email Notification Engine', file: 'emailService.test.js' },
   { name: 'Phase 1 Security Regression (CWE-598, CWE-798, CWE-204, SEC-4)', file: 'phase1Security.test.js' },
-  { name: 'Phase 2 Ownership-Based Authorization (OWN-1 through OWN-6)', file: 'phase2Ownership.test.js' }
+  { name: 'Phase 2 Ownership-Based Authorization (OWN-1 through OWN-6)', file: 'phase2Ownership.test.js' },
+  { name: 'Phase 3 HTTP API Integration (Supertest)', file: 'apiIntegration.test.js' },
+  { name: 'Phase 3 Database Schema & Contract Integration', file: 'databaseIntegration.test.js' },
+  { name: 'Phase 3 End-to-End Workflow Integration', file: 'e2eWorkflows.test.js' }
 ];
 
 console.log('================================================================');

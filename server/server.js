@@ -5723,12 +5723,16 @@ async function cleanExpiredOtps() {
 }
 
 // Start Server
-app.listen(PORT, () => {
-  console.log(`🚀 SmartAttend Server is running on port ${PORT}`);
-  
-  // Run startup clean-up
-  cleanExpiredOtps();
-  
-  // Set up hourly automatic cleanup
-  setInterval(cleanExpiredOtps, 60 * 60 * 1000);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`🚀 SmartAttend Server is running on port ${PORT}`);
+    
+    // Run startup clean-up
+    cleanExpiredOtps();
+    
+    // Set up hourly automatic cleanup
+    setInterval(cleanExpiredOtps, 60 * 60 * 1000);
+  });
+}
+
+module.exports = { app, cleanExpiredOtps, supabase };
