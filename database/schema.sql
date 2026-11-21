@@ -10,6 +10,21 @@
 -- 1. Core Users & Academic Entities
 -- ------------------------------------------------------------------------------
 
+-- Institutions Registry (Multi-Tenancy Foundation)
+CREATE TABLE IF NOT EXISTS public."institutions" (
+    "id" VARCHAR(64) PRIMARY KEY,
+    "name" VARCHAR(255) NOT NULL,
+    "code" VARCHAR(32) UNIQUE NOT NULL,
+    "domain" VARCHAR(255),
+    "contact_email" VARCHAR(255),
+    "attendance_threshold" NUMERIC(5,2) DEFAULT 75.0,
+    "condonation_threshold" NUMERIC(5,2) DEFAULT 65.0,
+    "is_active" BOOLEAN DEFAULT TRUE,
+    "settings" JSONB DEFAULT '{}'::jsonb,
+    "created_at" TIMESTAMPTZ DEFAULT NOW(),
+    "updated_at" TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Administrator Accounts
 CREATE TABLE IF NOT EXISTS public."ADMIN" (
     "ID" BIGSERIAL PRIMARY KEY,
@@ -42,6 +57,7 @@ CREATE TABLE IF NOT EXISTS public."students" (
     "OTP" TEXT,
     "OTP_Timestamp" BIGINT,
     "ResetStatus" TEXT,
+    "institution_id" VARCHAR(64) DEFAULT 'INST_MAIN',
     "CreatedAt" TIMESTAMPTZ DEFAULT NOW()
 );
 

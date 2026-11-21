@@ -1031,6 +1031,7 @@
 
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <script src="../backend/livenessDetector.js"></script>
   <script>
     // Toggle Profile Dropdown
     function toggleProfile() {
@@ -1488,31 +1489,51 @@
                     const student = students.find(s => s.id === bestMatch.label);
 
                     if (student) {
-                      // Multi-frame temporal consensus (requires 3 consistent frames to avoid single-frame false triggers)
-                      if (!student.detected) {
-                        const history = consensusTracker.get(student.id) || { hits: 0, lastFrame: 0 };
-                        if (currentDetectionFrame - history.lastFrame <= 8) {
-                          history.hits += 1;
-                        } else {
-                          history.hits = 1;
-                        }
-                        history.lastFrame = currentDetectionFrame;
-                        consensusTracker.set(student.id, history);
+                      // Biometric Liveness Verification (Presentation Attack Detection)
+                      if (!window.smartAttendPAD && window.SmartAttendLiveness) {
+                        window.smartAttendPAD = new window.SmartAttendLiveness.LivenessTracker({
+                          windowSize: 8,
+                          minMicroMotionVariance: 0.00018
+                        });
+                      }
 
-                        if (history.hits >= 3) {
-                          student.detected = true;
-                          newDetection = true;
-                          boxText = student.onLeave ? `${genderIcon} ${student.name} (On Leave)` : `${genderIcon} ${student.name}`;
-                          boxColor = student.onLeave ? "rgba(245, 158, 11, 1)" : "rgba(16, 185, 129, 1)"; // Amber if on leave, green if normal
-                        } else {
-                          // Temporal consensus in progress
-                          boxText = `Confirming ${student.name} (${history.hits}/3)`;
-                          boxColor = "rgba(59, 130, 246, 0.9)"; // Blue
-                        }
+                      let padResult = { isLive: true, status: 'live' };
+                      if (window.smartAttendPAD && detection.landmarks) {
+                        padResult = window.smartAttendPAD.evaluate(student.id, detection.landmarks, detection.detection.box);
+                      }
+
+                      if (padResult.status === 'spoof_suspected') {
+                        // Reject spoof attempt: flag prominently and reset any consensus
+                        consensusTracker.delete(student.id);
+                        boxText = `⚠️ Spoof Suspected (${student.name})`;
+                        boxColor = "rgba(239, 68, 68, 1)"; // Red
                       } else {
-                        // Confirmed present
-                        boxText = student.onLeave ? `${genderIcon} ${student.name} (On Leave)` : `${genderIcon} ${student.name}`;
-                        boxColor = student.onLeave ? "rgba(245, 158, 11, 1)" : "rgba(16, 185, 129, 1)";
+                        // Multi-frame temporal consensus (requires 3 consistent frames to avoid single-frame false triggers)
+                        if (!student.detected) {
+                          const history = consensusTracker.get(student.id) || { hits: 0, lastFrame: 0 };
+                          if (currentDetectionFrame - history.lastFrame <= 8) {
+                            history.hits += 1;
+                          } else {
+                            history.hits = 1;
+                          }
+                          history.lastFrame = currentDetectionFrame;
+                          consensusTracker.set(student.id, history);
+
+                          if (history.hits >= 3) {
+                            student.detected = true;
+                            newDetection = true;
+                            boxText = student.onLeave ? `${genderIcon} ${student.name} (On Leave)` : `${genderIcon} ${student.name}`;
+                            boxColor = student.onLeave ? "rgba(245, 158, 11, 1)" : "rgba(16, 185, 129, 1)"; // Amber if on leave, green if normal
+                          } else {
+                            // Temporal consensus in progress
+                            boxText = `Confirming ${student.name} (${history.hits}/3)`;
+                            boxColor = "rgba(59, 130, 246, 0.9)"; // Blue
+                          }
+                        } else {
+                          // Confirmed present
+                          boxText = student.onLeave ? `${genderIcon} ${student.name} (On Leave)` : `${genderIcon} ${student.name}`;
+                          boxColor = student.onLeave ? "rgba(245, 158, 11, 1)" : "rgba(16, 185, 129, 1)";
+                        }
                       }
                     }
                   } else {
@@ -1549,6 +1570,7 @@
           isScanning = false;
           clearInterval(detectionInterval);
           consensusTracker.clear();
+          if (window.smartAttendPAD) window.smartAttendPAD.reset();
           btn.html('<i class="fa-solid fa-expand"></i> Start Face Scan');
           btn.css('background', '');
           btn.css('border-color', '');
@@ -1759,7 +1781,7 @@
             body: JSON.stringify(item.payload)
           });
           const data = await res.json();
-          if (data.status !== 'success') remainingQueue.push(item);
+          if (data.status !== 'success' && !data.duplicate) remainingQueue.push(item);
         } catch(err) {
           remainingQueue.push(item);
         }

@@ -29,6 +29,7 @@ const {
   evaluateAllStudents,
   getWarningLogs
 } = require('./attendanceWarningService');
+const { calculateAttendanceMetrics } = require('./attendanceCalculator');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -382,7 +383,7 @@ function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1]; // Format: Bearer <token>
 
-  if (action === 'login' || action === 'verify_login_otp' || action === 'resend_2fa_otp' || action === 'send_otp' || action === 'verify_otp' || action === 'verify_otp_only' || action === 'verify_student_email' || action === 'ask_gemini' || (!action && !sheet)) {
+  if (action === 'login' || action === 'verify_login_otp' || action === 'resend_2fa_otp' || action === 'send_otp' || action === 'verify_otp' || action === 'verify_otp_only' || action === 'verify_student_email' || action === 'ask_gemini' || action === 'calculate_attendance' || (!action && !sheet)) {
     if (token) {
       jwt.verify(token, JWT_SECRET, (err, decoded) => {
         if (!err && decoded) req.user = decoded;
@@ -3220,6 +3221,47 @@ Return ONLY valid JSON:
       return res.json({ status: 'success', encoding: student.Face_Encoding });
     }
 
+    // ── DPDP ACT 2023 / GDPR ARTICLE 17: RIGHT-TO-BE-FORGOTTEN (BIOMETRIC PURGE) ──
+    if (action === 'purge_biometric_data') {
+      const studentIdStr = (req.body.id || req.body.studentId || '').toString().trim();
+      const reason = req.body.reason || 'User consent withdrawal / DPDP Act 2023 Right to be Forgotten';
+      if (!studentIdStr) return res.status(400).json({ status: 'error', message: 'Missing student ID' });
+
+      const requesterRole = req.user ? req.user.role : null;
+      const requesterEmail = req.user ? req.user.email : 'system';
+
+      const { data: student, error: fetchErr } = await supabase
+        .from('students')
+        .select('ID, Name, Email, Face_Encoding')
+        .ilike('ID', studentIdStr)
+        .maybeSingle();
+
+      if (fetchErr || !student) {
+        return res.status(404).json({ status: 'error', message: 'Student not found' });
+      }
+
+      const { error: purgeErr } = await supabase
+        .from('students')
+        .update({ Face_Encoding: null })
+        .ilike('ID', studentIdStr);
+
+      if (purgeErr) {
+        return res.status(500).json({ status: 'error', message: purgeErr.message });
+      }
+
+      await logActivity(
+        'BIOMETRIC_PURGE_DPDP',
+        `Biometric template permanently purged for student ${student.Name} (${studentIdStr}) by ${requesterEmail} (${requesterRole || 'auth'}). Reason: ${reason}`
+      );
+
+      return res.json({
+        status: 'success',
+        message: `Biometric facial template for student ${studentIdStr} has been permanently deleted in accordance with DPDP Act 2023 / GDPR Article 17.`,
+        studentId: studentIdStr,
+        purgedAt: new Date().toISOString()
+      });
+    }
+
     // ── SECURE LOGIN ACTION ──
     if (action === 'login') {
       const { email: loginEmail, password: loginPassword, role } = req.body;
@@ -5376,6 +5418,17 @@ Return ONLY valid JSON:
       const { studentId, category, threshold, limit } = req.body;
       const logs = await getWarningLogs(supabase, { studentId, category, threshold, limit });
       return res.json({ status: 'success', logs });
+    }
+
+    if (action === 'calculate_attendance') {
+      const { attended, totalHeld, approvedLeaves, threshold } = req.body;
+      const metrics = calculateAttendanceMetrics({
+        attended: attended || 0,
+        totalHeld: totalHeld || 0,
+        approvedLeaves: approvedLeaves || 0,
+        threshold: threshold || 75
+      });
+      return res.json({ status: 'success', data: metrics });
     }
 
     // Fallback

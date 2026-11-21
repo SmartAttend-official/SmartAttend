@@ -52,7 +52,7 @@ Thumbs.db
 *.sw?
 
 # Generated Documents and PDFs (Keep in local folder only per project policy)
-PDF/*.pdf
+PDF/
 *.pdf
 *.traineddata
 scratch/

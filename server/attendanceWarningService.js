@@ -25,6 +25,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { calculateAttendanceMetrics } = require('./attendanceCalculator');
 
 // 7-Day Cooldown constant in milliseconds (7 days * 24h * 60m * 60s * 1000ms)
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -262,20 +263,30 @@ async function calculateStudentMetrics(supabase, studentId) {
 
   const totalClasses = uniqueOverallSessions.size;
   const attendedClasses = uniqueOverallAttended.size;
-  const overallPercentage = totalClasses > 0 ? parseFloat(((attendedClasses / totalClasses) * 100).toFixed(2)) : 0.0;
+  const overallMetrics = calculateAttendanceMetrics({
+    attended: attendedClasses,
+    totalHeld: totalClasses,
+    threshold: 75
+  });
+  const overallPercentage = overallMetrics.percentage;
 
   // Build subject list
   const subjects = Object.values(subjectAggregates).map(item => {
     const tot = item.sessions.size;
     const att = item.attended.size;
-    const pct = tot > 0 ? parseFloat(((att / tot) * 100).toFixed(2)) : 0.0;
+    const subMetrics = calculateAttendanceMetrics({
+      attended: att,
+      totalHeld: tot,
+      threshold: 75
+    });
     return {
       subject: item.subject,
       type: item.type,
       total: tot,
       attended: att,
-      percentage: pct,
-      below75: pct < 75.0
+      percentage: subMetrics.percentage,
+      below75: subMetrics.percentage < 75.0,
+      metrics: subMetrics
     };
   });
 
@@ -295,7 +306,8 @@ async function calculateStudentMetrics(supabase, studentId) {
       total: totalClasses,
       attended: attendedClasses,
       percentage: overallPercentage,
-      below75: overallPercentage < 75.0
+      below75: overallPercentage < 75.0,
+      metrics: overallMetrics
     },
     subjects
   };
@@ -403,6 +415,7 @@ function getOverallWarning60Template({ student, overall, subjects, dateStr }) {
             <div style="font-weight: 700; color: #f59e0b; font-size: 13px;">Action Required:</div>
             <div style="font-size: 13px; color: #cbd5e1; margin-top: 4px; line-height: 1.5;">
               University regulations strictly mandate a minimum of <strong>75% attendance</strong> to be eligible for semester examinations. Please attend upcoming lectures regularly to restore your eligibility.
+              ${overall.metrics && overall.metrics.classesNeeded > 0 ? `<div style="margin-top: 8px; padding: 8px 12px; background: rgba(56, 189, 248, 0.12); border-radius: 6px; color: #38bdf8; font-weight: 600;">🎯 Immediate Recovery Target: You must attend the next <strong>${overall.metrics.classesNeeded} consecutive class${overall.metrics.classesNeeded > 1 ? 'es' : ''}</strong> without missing any to regain the 75.0% threshold.</div>` : ''}
             </div>
           </div>
         </div>
@@ -521,6 +534,7 @@ function getOverallCritical50Template({ student, overall, subjects, dateStr, isP
             <div style="font-weight: 800; color: #f87171; font-size: 14px;">URGENT ACADEMIC RISK:</div>
             <div style="font-size: 13px; color: #fca5a5; margin-top: 6px; line-height: 1.5;">
               Under university academic regulations, students with attendance below 75% are <strong>strictly debarred from appearing in semester end examinations</strong>. Immediate daily attendance is required. Parents are requested to consult with the department head or academic advisor immediately.
+              ${overall.metrics && overall.metrics.classesNeeded > 0 ? `<div style="margin-top: 10px; padding: 8px 12px; background: rgba(239, 68, 68, 0.25); border-radius: 6px; color: #ffffff; font-weight: 700;">🚨 Consecutive Classes Needed: You must attend the next <strong>${overall.metrics.classesNeeded} consecutive class${overall.metrics.classesNeeded > 1 ? 'es' : ''}</strong> to recover to 75.0%.</div>` : ''}
             </div>
           </div>
         </div>
