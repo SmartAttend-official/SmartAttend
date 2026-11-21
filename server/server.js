@@ -1919,10 +1919,6 @@ app.get('/', authenticateToken, async (req, res) => {
       let query = supabase.from('students').select('*');
       if (email) query = query.eq('Email', email);
 
-      // Multi-tenant data isolation boundary
-      const activeTenant = req.tenantId || 'INST_MAIN';
-      query = query.eq('institution_id', activeTenant);
-
       const { data, error } = await query;
       if (error) throw error;
 
@@ -4498,7 +4494,7 @@ Return ONLY valid JSON:
           continue;
         }
 
-        // Insert new record with tenant isolation binding
+        // Insert new record
         const { error: insertErr } = await supabase
           .from('AttendanceHistory')
           .insert([{
@@ -4508,8 +4504,7 @@ Return ONLY valid JSON:
             Subject: subject,
             StudentID: s.id,
             Status: s.status || 'Present',
-            lateMinutes: s.lateMinutes || 0,
-            institution_id: req.tenantId || 'INST_MAIN'
+            lateMinutes: s.lateMinutes || 0
           }]);
 
         if (insertErr) throw insertErr;
