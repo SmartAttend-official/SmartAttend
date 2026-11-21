@@ -2237,12 +2237,32 @@ app.get('/', authenticateToken, async (req, res) => {
       const qDept = req.query.dept || req.query.Department;
       const qSem = req.query.sem || req.query.Semester;
       const qSub = req.query.sub || req.query.Subject;
+      const qStudentId = req.query.studentId || req.query.StudentID;
 
       let query = supabase.from('AttendanceHistory').select('*');
       if (qDate) query = query.eq('Date', qDate);
       if (qDept) query = query.eq('Department', qDept);
       if (qSem) query = query.eq('Semester', qSem);
       if (qSub) query = query.eq('Subject', qSub);
+
+      // ── OWN-1: IDOR PREVENTION — Students can only read their own attendance history ──
+      if (req.user && req.user.role === 'student') {
+        const jwtStudentId = ((req.user.id) || '').toString().trim().toLowerCase();
+        const jwtStudentEmail = ((req.user.email) || '').toString().trim().toLowerCase();
+        const requestedStudentId = (qStudentId || '').toString().trim().toLowerCase();
+        // If a studentId was requested and it doesn't match the JWT identity, deny it
+        if (requestedStudentId && jwtStudentId && requestedStudentId !== jwtStudentId && requestedStudentId !== jwtStudentEmail) {
+          await logActivity('SECURITY_ALERT', `IDOR attempt: Student ${req.user.email} tried to read attendance_history of studentId=${qStudentId}`);
+          return res.status(403).json({ status: 'error', message: 'Access Denied: You may only view your own attendance history.' });
+        }
+        // Always scope to the student's own ID (prevents enumeration without explicit studentId)
+        if (jwtStudentId) {
+          query = query.ilike('StudentID', jwtStudentId);
+        }
+      } else if (qStudentId) {
+        // For professor/admin: honour explicit studentId filter
+        query = query.ilike('StudentID', qStudentId);
+      }
 
       const { data, error } = await query;
       if (error) throw error;
@@ -3342,6 +3362,9 @@ Return ONLY valid JSON:
       const studentIdStr = (req.body.id || req.body.studentId || '').toString().trim();
       if (!studentIdStr) return res.json({ status: 'error', message: 'Missing ID' });
       
+      // ── OWN-5: Audit-log all biometric read access with actor identity ──
+      await logActivity('BIOMETRIC_ACCESS', `Biometric encoding READ for student ${studentIdStr} by ${req.user ? req.user.email : 'unknown'} (role: ${req.user ? req.user.role : 'unknown'})`);
+
       const { data: student, error } = await supabase
         .from('students')
         .select('Face_Encoding')
@@ -4302,6 +4325,17 @@ Return ONLY valid JSON:
 
     if (action === 'submit_leave') {
       const leaveData = req.body.data || req.body;
+      // ── OWN-2: OWNERSHIP ENFORCEMENT — Students can only submit leave for themselves ──
+      if (req.user && req.user.role === 'student') {
+        const jwtStudentId = ((req.user.id) || '').toString().trim().toLowerCase();
+        const jwtStudentEmail = ((req.user.email) || '').toString().trim().toLowerCase();
+        const submittedId = ((leaveData.studentId || leaveData.id) || '').toString().trim().toLowerCase();
+        // Verify submitted studentId matches the authenticated student's own ID or email
+        if (submittedId && jwtStudentId && submittedId !== jwtStudentId && submittedId !== jwtStudentEmail) {
+          await logActivity('SECURITY_ALERT', `IDOR attempt: Student ${req.user.email} tried to submit leave on behalf of studentId=${leaveData.studentId}`);
+          return res.status(403).json({ status: 'error', message: 'Access Denied: You may only submit leave requests for yourself.' });
+        }
+      }
       const {
         id: rawId,
         studentId,
@@ -4463,6 +4497,24 @@ Return ONLY valid JSON:
     if (action === 'resolve_leave') {
       const { id: leaveId, status: newStatus } = req.body;
 
+      // ── OWN-3: OWNERSHIP ENFORCEMENT — Professors can only resolve leaves addressed to them ──
+      if (req.user && req.user.role === 'professor') {
+        const profEmail = (req.user.email || '').toString().trim().toLowerCase();
+        // Pre-fetch the leave to check ownership before updating
+        const { data: preCheck } = await supabase
+          .from('LeaveRequests')
+          .select('targetProfessor')
+          .eq('id', leaveId)
+          .maybeSingle();
+        if (preCheck && preCheck.targetProfessor) {
+          const targetProf = (preCheck.targetProfessor || '').toString().trim().toLowerCase();
+          if (targetProf && targetProf !== profEmail) {
+            await logActivity('SECURITY_ALERT', `IDOR attempt: Professor ${req.user.email} tried to resolve leave #${leaveId} addressed to ${preCheck.targetProfessor}`);
+            return res.status(403).json({ status: 'error', message: 'Access Denied: You can only resolve leave requests addressed to you.' });
+          }
+        }
+      }
+
       // 1. Fetch leave request details
       const { data: leaveRecord } = await supabase
         .from('LeaveRequests')
@@ -4555,6 +4607,19 @@ Return ONLY valid JSON:
       
       if (!classInfo || !students || !Array.isArray(students)) {
         return res.status(400).json({ status: 'error', message: 'Missing classInfo or students data.' });
+      }
+
+      // ── OWN-4: OWNERSHIP ENFORCEMENT — Professors can only save sessions they own ──
+      if (req.user && req.user.role === 'professor') {
+        const jwtProfEmail = (req.user.email || '').toString().trim().toLowerCase();
+        const submittedProfEmail = (classInfo.professorEmail || classInfo.ProfessorEmail || '').toString().trim().toLowerCase();
+        // If the client includes a professorEmail in classInfo, it must match the JWT identity
+        if (submittedProfEmail && jwtProfEmail && submittedProfEmail !== jwtProfEmail) {
+          await logActivity('SECURITY_ALERT', `IDOR attempt: Professor ${req.user.email} tried to save session under email ${classInfo.professorEmail}`);
+          return res.status(403).json({ status: 'error', message: 'Access Denied: You cannot save attendance sessions on behalf of another professor.' });
+        }
+        // Stamp the session with the authenticated professor email (prevents spoofing if field absent)
+        classInfo.professorEmail = jwtProfEmail || classInfo.professorEmail;
       }
 
       const { subject, dept, sem, date } = classInfo;
