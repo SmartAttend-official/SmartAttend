@@ -79,6 +79,23 @@
       --text-muted: #94a3b8;
     }
 
+    :focus-visible {
+      outline: 2px solid var(--accent-color);
+      outline-offset: 2px;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
     body {
       margin: 0;
       padding: 0;
@@ -768,13 +785,13 @@
   </div>
 
   <!-- Sidebar -->
-  <aside class="sidebar">
+  <aside class="sidebar" role="complementary">
     <div class="brand">
       <img src="../images/bg1.1.png" alt="Logo"
         onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjM2I4MmY2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDJhMTAgMTAgMCAxIDAgMTAgMTAgMTAgMTAgMCAwIDAtMTAgMTB6Ii8+PC9zdmc+'">
       <h2>SmartAttend</h2>
     </div>
-    <nav class="nav-links">
+    <nav class="nav-links" role="navigation" aria-label="Faculty Navigation">
       <a href="dashboard1.html" class="active"><i class="fa-solid fa-house"></i> Dashboard</a>
       <a href="Start Attendance.html"><i class="fa-solid fa-user-check"></i> Start Attendance</a>
       <a href="Lab_Attendance.html"><i class="fa-solid fa-laptop-code"></i> Lab Attendance</a>
@@ -789,7 +806,7 @@
   </aside>
 
   <!-- Main Content -->
-  <main class="main-content">
+  <main class="main-content" role="main">
 
     <!-- Topbar -->
     <header class="topbar">
@@ -851,17 +868,19 @@
             <span>Camera Feed Offline</span>
           </div>
           <!-- Camera stream error overlay (shown when stream fails to load) -->
-          <div id="cameraErrorOverlay" style="display:none; position:absolute; inset:0; background:rgba(15,23,42,0.92); z-index:10; flex-direction:column; align-items:center; justify-content:center; gap:10px; color:#ef4444; border-radius:inherit;">
-            <i class="fa-solid fa-triangle-exclamation" style="font-size:32px;"></i>
+          <div id="cameraErrorOverlay" role="alert" aria-live="assertive" style="display:none; position:absolute; inset:0; background:rgba(15,23,42,0.92); z-index:10; flex-direction:column; align-items:center; justify-content:center; gap:10px; color:#ef4444; border-radius:inherit;">
+            <i class="fa-solid fa-triangle-exclamation" style="font-size:32px;" aria-hidden="true"></i>
             <span style="font-size:14px; font-weight:600; text-align:center; max-width:280px; line-height:1.5;" id="cameraErrorMsg">
               Camera not reachable. Check the URL and ensure the same Wi-Fi network.
             </span>
             <span style="font-size:12px; color:#94a3b8; text-align:center;">Go to Settings → Camera Configuration</span>
           </div>
           <!-- The image tag where the IP Camera stream will load -->
-          <img id="camera" src="" alt="" crossorigin="anonymous"
+          <img id="camera" src="" alt="Real-time attendance camera feed" crossorigin="anonymous"
             onerror="showCameraError('Stream failed to load. Verify the URL ends with /video and camera is online.')">
-          <canvas id="faceCanvas"></canvas>
+          <canvas id="faceCanvas" aria-hidden="true"></canvas>
+          <!-- Live Screen Reader Announcement Region -->
+          <div id="srAttendanceAnnouncements" class="sr-only" aria-live="polite" aria-atomic="true"></div>
           <!-- Live Face Counter Badge (shows over the feed while scanning) -->
           <div id="liveFaceCounter" style="
             display: none;
@@ -1356,6 +1375,17 @@
         }
       }
 
+      // Screen reader announcements for accessibility (WCAG 2.1 AA)
+      window.announceForScreenReader = function(msg) {
+        try {
+          const el = document.getElementById('srAttendanceAnnouncements');
+          if (el) {
+            el.textContent = '';
+            setTimeout(() => { el.textContent = msg; }, 50);
+          }
+        } catch(e) {}
+      };
+
       // Setup the IP Camera Feed and toggle
       $("#camera_btn").click(function () {
         const btn = $(this);
@@ -1370,6 +1400,7 @@
 
           // Start Scan
           isScanning = true;
+          announceForScreenReader('Real-time camera feed activated. Face scanning in progress.');
           btn.html('<i class="fa-solid fa-stop"></i> Stop Face Scan');
           btn.css('background', 'linear-gradient(135deg, #ef4444, #dc2626)'); // Red stop button
           btn.css('border-color', 'rgba(239, 68, 68, 0.4)');
@@ -1522,6 +1553,7 @@
                           if (history.hits >= 3) {
                             student.detected = true;
                             newDetection = true;
+                            announceForScreenReader(`Attendance confirmed present for ${student.name}`);
                             boxText = student.onLeave ? `${genderIcon} ${student.name} (On Leave)` : `${genderIcon} ${student.name}`;
                             boxColor = student.onLeave ? "rgba(245, 158, 11, 1)" : "rgba(16, 185, 129, 1)"; // Amber if on leave, green if normal
                           } else {
@@ -1568,6 +1600,7 @@
         } else {
           // Stop Scan
           isScanning = false;
+          announceForScreenReader('Camera feed stopped. Face scan complete.');
           clearInterval(detectionInterval);
           consensusTracker.clear();
           if (window.smartAttendPAD) window.smartAttendPAD.reset();

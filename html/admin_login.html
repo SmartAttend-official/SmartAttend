@@ -70,6 +70,23 @@
 			left: -5%;
 		}
 
+		:focus-visible {
+			outline: 2px solid var(--accent-color);
+			outline-offset: 2px;
+		}
+
+		.sr-only {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			padding: 0;
+			margin: -1px;
+			overflow: hidden;
+			clip: rect(0, 0, 0, 0);
+			white-space: nowrap;
+			border: 0;
+		}
+
 		/* Login Container */
 		.login-container {
 			display: flex;
@@ -410,11 +427,11 @@
 	<div class="glow-circle circle-1"></div>
 	<div class="glow-circle circle-2"></div>
 
-	<div class="login-container">
+	<main class="login-container" role="main">
 		<!-- Left Branding Side -->
 		<div class="branding-side">
 			<div class="admin-badge">
-				<i class="fa-solid fa-shield-halved"></i>
+				<i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
 				System Administrator
 			</div>
 			<img src="../images/bg1.1.png" alt="SmartAttend Logo" 
@@ -430,64 +447,73 @@
 				<p>Please authorize yourself to access management tools.</p>
 			</div>
 
-			<div id="loginError" class="error-msg"></div>
+			<!-- Role Selection Tabs -->
+			<div class="role-tabs" role="tablist" aria-label="User Portal Selection" style="display:flex; background:rgba(15,23,42,0.6); border-radius:12px; padding:6px; margin-bottom:24px; border:1px solid var(--glass-border);">
+				<div class="role-tab" role="tab" aria-selected="false" tabindex="0" onclick="window.location.href='Login.html'" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.location.href='Login.html';}" style="flex:1; padding:10px; text-align:center; color:var(--text-muted); font-size:14px; border-radius:8px; cursor:pointer;">Professor</div>
+				<div class="role-tab" role="tab" aria-selected="false" tabindex="0" onclick="window.location.href='student_login.html'" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.location.href='student_login.html';}" style="flex:1; padding:10px; text-align:center; color:var(--text-muted); font-size:14px; border-radius:8px; cursor:pointer;">Student</div>
+				<div class="role-tab active" role="tab" aria-selected="true" tabindex="0" style="flex:1; padding:10px; text-align:center; background:var(--accent-color); color:white; font-size:14px; border-radius:8px; cursor:pointer;">Admin</div>
+			</div>
+
+			<div id="loginError" class="error-msg" role="alert" aria-live="assertive"></div>
 
 			<form id="adminLoginForm">
 				<div class="form-group">
-					<label>Administrator Email</label>
-					<i class="fa-solid fa-user-shield"></i>
-					<input type="email" id="emailInput" class="form-control" placeholder="admin@university.edu" required>
+					<label for="emailInput">Administrator Email</label>
+					<i class="fa-solid fa-user-shield" aria-hidden="true"></i>
+					<input type="email" id="emailInput" class="form-control" placeholder="admin@university.edu" required autocomplete="email">
 				</div>
 
 				<div class="form-group">
-					<label>Security Key (Password)</label>
-					<i class="fa-solid fa-key"></i>
+					<label for="passwordInput">Security Key (Password)</label>
+					<i class="fa-solid fa-key" aria-hidden="true"></i>
 					<input type="password" id="passwordInput" class="form-control" placeholder="••••••••" required autocomplete="current-password">
-					<i class="fa-solid fa-eye toggle-password" onclick="const p=document.getElementById('passwordInput'); if(p.type==='password'){p.type='text';this.classList.remove('fa-eye');this.classList.add('fa-eye-slash');}else{p.type='password';this.classList.remove('fa-eye-slash');this.classList.add('fa-eye');}"></i>
+					<i class="fa-solid fa-eye toggle-password" role="button" tabindex="0" aria-label="Toggle password visibility" aria-pressed="false"
+						onclick="const p=document.getElementById('passwordInput'); if(p.type==='password'){p.type='text';this.classList.remove('fa-eye');this.classList.add('fa-eye-slash');this.setAttribute('aria-pressed','true');}else{p.type='password';this.classList.remove('fa-eye-slash');this.classList.add('fa-eye');this.setAttribute('aria-pressed','false');}"
+						onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}"></i>
 				</div>
 
 				<button type="submit" id="loginBtn" class="login-btn">
 					<span id="btnText">Verify & Enter</span>
-					<i id="btnIcon" class="fa-solid fa-unlock-keyhole"></i>
+					<i id="btnIcon" class="fa-solid fa-unlock-keyhole" aria-hidden="true"></i>
 				</button>
 			</form>
 
 			<!-- 2FA OTP Panel (hidden by default) -->
-			<div id="otpPanel" class="otp-panel">
+			<div id="otpPanel" class="otp-panel" role="region" aria-label="Two-Factor Authentication">
 				<div class="otp-header">
-					<div class="otp-icon">🔐</div>
+					<div class="otp-icon" aria-hidden="true">🔐</div>
 					<h3 style="margin: 0 0 8px 0; font-size: 22px; font-weight: 600;">Two-Factor Authentication</h3>
 					<p style="color: var(--text-muted); font-size: 14px; margin: 0;" id="otpEmailHint">Enter the 6-digit OTP sent to your email.</p>
 				</div>
 
-				<div id="otpError" class="error-msg"></div>
+				<div id="otpError" class="error-msg" role="alert" aria-live="assertive"></div>
 
-				<div class="otp-inputs" id="otpInputs">
-					<input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp0" autocomplete="off">
-					<input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp1" autocomplete="off">
-					<input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp2" autocomplete="off">
-					<input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp3" autocomplete="off">
-					<input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp4" autocomplete="off">
-					<input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp5" autocomplete="off">
+				<div class="otp-inputs" id="otpInputs" role="group" aria-label="6-digit verification code">
+					<input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp0" aria-label="Digit 1 of 6" autocomplete="off">
+					<input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp1" aria-label="Digit 2 of 6" autocomplete="off">
+					<input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp2" aria-label="Digit 3 of 6" autocomplete="off">
+					<input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp3" aria-label="Digit 4 of 6" autocomplete="off">
+					<input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp4" aria-label="Digit 5 of 6" autocomplete="off">
+					<input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" id="otp5" aria-label="Digit 6 of 6" autocomplete="off">
 				</div>
 
-				<p class="otp-hint" id="otpTimer">OTP valid for <strong>10:00</strong></p>
+				<p class="otp-hint" id="otpTimer" aria-live="polite">OTP valid for <strong>10:00</strong></p>
 
 				<button type="button" id="verifyOtpBtn" class="login-btn" onclick="verifyAdmin2FAOTP()">
 					<span id="verifyBtnText">Verify OTP</span>
-					<i id="verifyBtnIcon" class="fa-solid fa-shield-halved"></i>
+					<i id="verifyBtnIcon" class="fa-solid fa-shield-halved" aria-hidden="true"></i>
 				</button>
 
-				<span class="resend-link" id="resendLink" onclick="resendAdminOTP()">Resend OTP</span>
-				<span class="back-link" onclick="backToAdminLogin()"><i class="fa-solid fa-arrow-left"></i> Back to Login</span>
+				<span class="resend-link" id="resendLink" role="button" tabindex="0" onclick="resendAdminOTP()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();resendAdminOTP();}">Resend OTP</span>
+				<span class="back-link" role="button" tabindex="0" onclick="backToAdminLogin()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();backToAdminLogin();}"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Back to Login</span>
 			</div>
 
 			<div class="security-note">
-				<i class="fa-solid fa-circle-check"></i>
+				<i class="fa-solid fa-circle-check" aria-hidden="true"></i>
 				256-bit Encrypted Session
 			</div>
 		</div>
-	</div>
+	</main>
 
 	<script src="../backend/config.js"></script>
 	<script src="../backend/admin_login.js"></script>

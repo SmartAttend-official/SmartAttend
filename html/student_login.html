@@ -69,6 +69,23 @@
 			left: -5%;
 		}
 
+		:focus-visible {
+			outline: 2px solid var(--accent-color);
+			outline-offset: 2px;
+		}
+
+		.sr-only {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			padding: 0;
+			margin: -1px;
+			overflow: hidden;
+			clip: rect(0, 0, 0, 0);
+			white-space: nowrap;
+			border: 0;
+		}
+
 		/* Login Container */
 		.login-container {
 			display: flex;
@@ -367,7 +384,7 @@
 	<div class="glow-circle circle-1"></div>
 	<div class="glow-circle circle-2"></div>
 
-	<div class="login-container">
+	<main class="login-container" role="main">
 
 		<!-- Branding Section -->
 		<div class="branding-side">
@@ -386,26 +403,28 @@
 			</div>
 
 			<!-- Feature: Role Selection -->
-			<div class="role-tabs">
-				<div class="role-tab" onclick="window.location.href='Login.html'">Professor</div>
-				<div class="role-tab active">Student</div>
-				<div class="role-tab" onclick="window.location.href='admin_login.html'">Admin</div>
+			<div class="role-tabs" role="tablist" aria-label="User Portal Selection">
+				<div class="role-tab" role="tab" aria-selected="false" tabindex="0" onclick="window.location.href='Login.html'" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.location.href='Login.html';}">Professor</div>
+				<div class="role-tab active" role="tab" aria-selected="true" tabindex="0">Student</div>
+				<div class="role-tab" role="tab" aria-selected="false" tabindex="0" onclick="window.location.href='admin_login.html'" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.location.href='admin_login.html';}">Admin</div>
 			</div>
 
 			<form action="student_dashboard.html" id="studentLoginForm">
 
 				<div class="form-group">
-					<label>University Email Address</label>
-					<i class="fa-solid fa-envelope"></i>
-					<input type="email" id="emailInput" class="form-control" placeholder="student@gmail.com" required>
+					<label for="emailInput">University Email Address</label>
+					<i class="fa-solid fa-envelope" aria-hidden="true"></i>
+					<input type="email" id="emailInput" class="form-control" placeholder="student@gmail.com" required autocomplete="email">
 				</div>
 
 				<div class="form-group">
-					<label>Enrollment Number (Password)</label>
-					<i class="fa-solid fa-id-card"></i>
+					<label for="studentPasswordInput">Enrollment Number (Password)</label>
+					<i class="fa-solid fa-id-card" aria-hidden="true"></i>
 					<input type="password" id="studentPasswordInput" class="form-control" placeholder="e.g., BAPP000"
-						required autocomplete="off">
-					<i class="fa-solid fa-eye toggle-password" onclick="const p=document.getElementById('studentPasswordInput'); if(p.type==='password'){p.type='text';this.classList.remove('fa-eye');this.classList.add('fa-eye-slash');}else{p.type='password';this.classList.remove('fa-eye-slash');this.classList.add('fa-eye');}"></i>
+						required autocomplete="current-password">
+					<i class="fa-solid fa-eye toggle-password" role="button" tabindex="0" aria-label="Toggle password visibility" aria-pressed="false"
+						onclick="const p=document.getElementById('studentPasswordInput'); if(p.type==='password'){p.type='text';this.classList.remove('fa-eye');this.classList.add('fa-eye-slash');this.setAttribute('aria-pressed','true');}else{p.type='password';this.classList.remove('fa-eye-slash');this.classList.add('fa-eye');this.setAttribute('aria-pressed','false');}"
+						onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}"></i>
 				</div>
 
 				<div class="form-options">
@@ -416,19 +435,19 @@
 					<a href="student_forget.html" class="forgot-pass">Forgot Password?</a>
 				</div>
 
-				<div id="loginError"
+				<div id="loginError" role="alert" aria-live="assertive"
 					style="color: #ef4444; margin-bottom: 16px; font-size: 14px; text-align: center; display: none;">
 				</div>
 
 				<button type="submit" id="loginBtn" class="login-btn">
 					<span id="btnText">Access Portal</span> <i id="btnIcon"
-						class="fa-solid fa-arrow-right-to-bracket"></i>
+						class="fa-solid fa-arrow-right-to-bracket" aria-hidden="true"></i>
 				</button>
 
 			</form>
 
 		</div>
-	</div>
+	</main>
 
 	<script src="../backend/config.js"></script>
 	<script src="../backend/student_login.js"></script>

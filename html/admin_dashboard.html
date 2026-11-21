@@ -26,6 +26,23 @@
             --transition: all 0.3s ease;
         }
 
+        :focus-visible {
+            outline: 2px solid var(--accent-color);
+            outline-offset: 2px;
+        }
+
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
         body {
             margin: 0;
             padding: 0;
@@ -854,13 +871,13 @@
     <div id="toast-container" class="toast-container"></div>
 
     <!-- Sidebar -->
-    <aside class="sidebar">
+    <aside class="sidebar" role="complementary">
         <div class="sidebar-header">
             <img src="../images/bg1.1.png" alt="Logo" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZjU5ZTBiIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDJhMTAgMTAgMCAxIDAgMTAgMTAgMTAgMTAgMCAwIDAtMTAgMTB6Ii8+PC9zdmc+'">
             <h2>SmartAttend</h2>
         </div>
 
-        <nav class="nav-menu">
+        <nav class="nav-menu" role="navigation" aria-label="Admin Navigation">
             <div class="nav-section">
                 <div class="nav-section-title">Overview</div>
                 <a href="#" class="nav-item" data-view="dashboard">

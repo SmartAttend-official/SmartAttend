@@ -508,11 +508,56 @@ function renderProfRows(data) {
 
 window.showModal = (id) => {
     const modal = document.getElementById(id);
-    if (modal) modal.style.display = 'flex';
+    if (!modal) return;
+    modal._triggerElement = document.activeElement;
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    const headerTitle = modal.querySelector('.modal-header h3');
+    if (headerTitle) {
+        if (!headerTitle.id) headerTitle.id = `${id}-title`;
+        modal.setAttribute('aria-labelledby', headerTitle.id);
+    }
+    modal.style.display = 'flex';
+
+    // Focus trap and keyboard dismiss for WCAG 2.1 AA
+    const focusable = modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    const firstEl = focusable[0];
+    const lastEl = focusable[focusable.length - 1];
+    if (firstEl) setTimeout(() => firstEl.focus(), 50);
+
+    if (modal._keyHandler) modal.removeEventListener('keydown', modal._keyHandler);
+    modal._keyHandler = (e) => {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            window.closeModal(id);
+        } else if (e.key === 'Tab') {
+            if (e.shiftKey) {
+                if (document.activeElement === firstEl) {
+                    e.preventDefault();
+                    if (lastEl) lastEl.focus();
+                }
+            } else {
+                if (document.activeElement === lastEl) {
+                    e.preventDefault();
+                    if (firstEl) firstEl.focus();
+                }
+            }
+        }
+    };
+    modal.addEventListener('keydown', modal._keyHandler);
 };
 window.closeModal = (id) => {
     const modal = document.getElementById(id);
-    if (modal) modal.style.display = 'none';
+    if (!modal) return;
+    if (modal._keyHandler) {
+        modal.removeEventListener('keydown', modal._keyHandler);
+        delete modal._keyHandler;
+    }
+    modal.style.display = 'none';
+    if (modal._triggerElement && typeof modal._triggerElement.focus === 'function') {
+        modal._triggerElement.focus();
+        delete modal._triggerElement;
+    }
 };
 
 window.deleteProfessor = async (email) => {
