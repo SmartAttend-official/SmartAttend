@@ -287,11 +287,81 @@
         details: { totalVariance, varEAR, currentEAR, pose }
       };
     }
+
+    /**
+     * Generates a randomized active challenge for anti-replay verification
+     * @param {number} [timeoutMs=8000] - 8-second default validity window
+     * @returns {{ id: string, type: string, prompt: string, issuedAt: number, expiresAt: number }}
+     */
+    generateChallenge(timeoutMs = 8000) {
+      const types = [
+        { type: 'BLINK', prompt: 'Please blink your eyes naturally' },
+        { type: 'TURN_LEFT', prompt: 'Please turn your head slightly to the left' },
+        { type: 'TURN_RIGHT', prompt: 'Please turn your head slightly to the right' },
+        { type: 'NOD', prompt: 'Please nod your head downwards slightly' }
+      ];
+      const selected = types[Math.floor(Math.random() * types.length)];
+      return {
+        id: 'chal_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
+        type: selected.type,
+        prompt: selected.prompt,
+        issuedAt: Date.now(),
+        expiresAt: Date.now() + timeoutMs
+      };
+    }
+
+    /**
+     * Validates whether an active challenge was successfully completed by the subject.
+     * @param {object} challenge
+     * @param {object} evaluationResult - Output from evaluate()
+     * @returns {{ completed: boolean, reason: string }}
+     */
+    verifyChallenge(challenge, evaluationResult) {
+      if (!challenge || !evaluationResult) return { completed: false, reason: 'Invalid parameters' };
+      if (Date.now() > challenge.expiresAt) {
+        return { completed: false, reason: 'Challenge expired. Please try again.' };
+      }
+
+      const pose = evaluationResult.details && evaluationResult.details.pose;
+      if (!pose) return { completed: false, reason: 'Head pose data not available' };
+
+      switch (challenge.type) {
+        case 'BLINK':
+          if (evaluationResult.blinkDetected) {
+            return { completed: true, reason: 'Natural blink verified.' };
+          }
+          return { completed: false, reason: 'Awaiting blink...' };
+
+        case 'TURN_LEFT':
+          if (pose.yawRatio < 0.65) {
+            return { completed: true, reason: 'Left head turn verified.' };
+          }
+          return { completed: false, reason: 'Awaiting left head turn...' };
+
+        case 'TURN_RIGHT':
+          if (pose.yawRatio > 1.5) {
+            return { completed: true, reason: 'Right head turn verified.' };
+          }
+          return { completed: false, reason: 'Awaiting right head turn...' };
+
+        case 'NOD':
+          if (pose.pitchRatio < 0.75 || pose.pitchRatio > 1.4) {
+            return { completed: true, reason: 'Head nod verified.' };
+          }
+          return { completed: false, reason: 'Awaiting head nod...' };
+
+        default:
+          return { completed: false, reason: 'Unknown challenge type' };
+      }
+    }
   }
+
+  const CHALLENGE_TYPES = ['BLINK', 'TURN_LEFT', 'TURN_RIGHT', 'NOD'];
 
   return {
     calculateEAR,
     estimateHeadPose,
-    LivenessTracker
+    LivenessTracker,
+    CHALLENGE_TYPES
   };
 });

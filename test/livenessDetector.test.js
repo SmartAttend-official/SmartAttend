@@ -118,4 +118,44 @@ function createSyntheticLandmarks(options = {}) {
   console.log(`✓ Test 4 Passed: Live human verified with blink & tremor (Score: ${lastResult.score}, Blink: ${lastResult.blinkDetected})`);
 }
 
-console.log('All 4 Biometric Liveness tests passed successfully!\n');
+// Test 5: Active randomized challenge generation
+{
+  const tracker = new LivenessTracker();
+  const challenge = tracker.generateChallenge(8000);
+  assert(typeof challenge.id === 'string' && challenge.id.startsWith('chal_'), 'Test 5 Failed: Challenge ID format');
+  assert(['BLINK', 'TURN_LEFT', 'TURN_RIGHT', 'NOD'].includes(challenge.type), 'Test 5 Failed: Challenge type unknown');
+  assert(typeof challenge.prompt === 'string' && challenge.prompt.length > 5, 'Test 5 Failed: Prompt missing');
+  assert(challenge.expiresAt > Date.now(), 'Test 5 Failed: Expiry must be in future');
+  console.log(`✓ Test 5 Passed: Randomized active challenge generated (${challenge.type}: "${challenge.prompt}")`);
+}
+
+// Test 6: Active challenge fulfillment and timeout verification
+{
+  const tracker = new LivenessTracker();
+  const blinkChallenge = { id: 'c1', type: 'BLINK', prompt: 'Blink', expiresAt: Date.now() + 5000 };
+  const mockBlinkResult = {
+    isLive: true,
+    blinkDetected: true,
+    details: { pose: { yawRatio: 1.0, pitchRatio: 1.0, isFrontal: true } }
+  };
+  const verification = tracker.verifyChallenge(blinkChallenge, mockBlinkResult);
+  assert.strictEqual(verification.completed, true, 'Test 6 Failed: Blink challenge should be completed');
+
+  // Turn left challenge fulfillment
+  const turnLeftChallenge = { id: 'c2', type: 'TURN_LEFT', prompt: 'Turn left', expiresAt: Date.now() + 5000 };
+  const mockTurnLeftResult = {
+    isLive: true,
+    blinkDetected: false,
+    details: { pose: { yawRatio: 0.5, pitchRatio: 1.0, isFrontal: false } }
+  };
+  const leftVerification = tracker.verifyChallenge(turnLeftChallenge, mockTurnLeftResult);
+  assert.strictEqual(leftVerification.completed, true, 'Test 6 Failed: Turn left challenge should be completed');
+
+  // Expired challenge rejection
+  const expiredChallenge = { id: 'c3', type: 'BLINK', prompt: 'Blink', expiresAt: Date.now() - 1000 };
+  const expiredVerification = tracker.verifyChallenge(expiredChallenge, mockBlinkResult);
+  assert.strictEqual(expiredVerification.completed, false, 'Test 6 Failed: Expired challenge must be rejected');
+  console.log('✓ Test 6 Passed: Dynamic challenge completion and expiration semantics verified');
+}
+
+console.log('All 6 Biometric Liveness tests passed successfully!\n');

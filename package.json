@@ -6,7 +6,7 @@
   "scripts": {
     "start": "cd server && npm start",
     "dev": "cd server && npm run dev",
-    "test": "node -c server/server.js && node -c server/attendanceWarningService.js && node -c backend/config.js && echo \"All syntax tests passed!\""
+    "test": "node test/runAllTests.js"
   },
   "keywords": [
     "attendance",
