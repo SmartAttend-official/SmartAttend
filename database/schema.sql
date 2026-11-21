@@ -45,7 +45,25 @@ CREATE TABLE IF NOT EXISTS public."students" (
     "CreatedAt" TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Department Faculty / Professor Tables
+-- Unified Faculty Table (Normalized Multi-Tenant Architecture)
+CREATE TABLE IF NOT EXISTS public."professors" (
+    "ID" TEXT,
+    "Email" TEXT PRIMARY KEY,
+    "Password" TEXT NOT NULL,
+    "Name" TEXT,
+    "Professor  first_name" TEXT,
+    "Professor  last_name" TEXT,
+    "Department" TEXT NOT NULL DEFAULT 'General',
+    "Designation" TEXT DEFAULT 'Assistant Professor',
+    "TwoFactorEnabled" BOOLEAN DEFAULT FALSE,
+    "OTP" TEXT,
+    "OTP_Timestamp" BIGINT,
+    "institution_id" UUID DEFAULT NULL,
+    "created_at" TIMESTAMPTZ DEFAULT NOW(),
+    "updated_at" TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Legacy Department Faculty Tables (Maintained for Backward Compatibility)
 CREATE TABLE IF NOT EXISTS public."BCA" (
     "ID" TEXT,
     "Email" TEXT PRIMARY KEY,

@@ -74,7 +74,8 @@ SmartAttend uses Supabase PostgreSQL as its central data store. The architecture
 ### 1. Identity & Academic
 - `ADMIN`: Administrator credentials, 2FA states, and recovery tokens.
 - `students`: Student roster, department, semester, contact information, attendance percentages, and client-side face recognition templates (`Face_Encoding`).
-- `BCA`, `MCA`, `BBA`, `MBA`: Faculty accounts segregated by academic department.
+- `professors`: Unified institutional faculty registry with department foreign keys and multi-tenant partition.
+- `BCA`, `MCA`, `BBA`, `MBA`: Legacy department faculty tables (maintained for 100% backward compatibility).
 - `Departments`, `Classes`, `Subjects`: Academic curriculum structure.
 - `Camera_IPs`: Classroom-to-IP-camera hardware routing.
 - `Proxies`: Substitute faculty assignments.

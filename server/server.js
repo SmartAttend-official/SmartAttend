@@ -3260,17 +3260,33 @@ Return ONLY valid JSON:
         user = dbUser;
         matchedTable = 'ADMIN';
       } else if (role === 'professor') {
-        const deptSheets = ['BCA', 'MCA', 'BBA', 'MBA'];
-        for (const t of deptSheets) {
-          const { data: prof } = await supabase
-            .from(t)
+        // 1. Try unified professors table first (fast single lookup)
+        try {
+          const { data: unifiedProf } = await supabase
+            .from('professors')
             .select('*')
             .ilike('Email', cleanEmail)
             .single();
-          if (prof) {
-            user = prof;
-            matchedTable = t;
-            break;
+          if (unifiedProf) {
+            user = unifiedProf;
+            matchedTable = 'professors';
+          }
+        } catch (_) { /* fallback to legacy department tables */ }
+
+        // 2. Legacy fallback: check specific department tables if not found in unified table
+        if (!user) {
+          const deptSheets = ['BCA', 'MCA', 'BBA', 'MBA'];
+          for (const t of deptSheets) {
+            const { data: prof } = await supabase
+              .from(t)
+              .select('*')
+              .ilike('Email', cleanEmail)
+              .single();
+            if (prof) {
+              user = prof;
+              matchedTable = t;
+              break;
+            }
           }
         }
       }
@@ -3476,16 +3492,28 @@ Return ONLY valid JSON:
       }
 
       // ── Professor OTP Verify ──
-      const deptSheets = ['BCA', 'MCA', 'BBA', 'MBA'];
       let targetTable2fa = null;
       let user2fa = null;
 
-      for (const t of deptSheets) {
-        const { data: prof } = await supabase.from(t).select('*').ilike('Email', cleanEmail).single();
+      // 1. Try unified professors table first
+      try {
+        const { data: prof } = await supabase.from('professors').select('*').ilike('Email', cleanEmail).single();
         if (prof) {
           user2fa = prof;
-          targetTable2fa = t;
-          break;
+          targetTable2fa = 'professors';
+        }
+      } catch (_) { /* fallback */ }
+
+      // 2. Legacy fallback
+      if (!user2fa) {
+        const deptSheets = ['BCA', 'MCA', 'BBA', 'MBA'];
+        for (const t of deptSheets) {
+          const { data: prof } = await supabase.from(t).select('*').ilike('Email', cleanEmail).single();
+          if (prof) {
+            user2fa = prof;
+            targetTable2fa = t;
+            break;
+          }
         }
       }
 

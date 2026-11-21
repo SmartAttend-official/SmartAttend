@@ -38,7 +38,25 @@ VALUES
     ('Master of Business Administration', 'MBA', 'MBA')
 ON CONFLICT ("Department_Name") DO NOTHING;
 
--- 3. Insert Demo Faculty in BCA Department
+-- 3. Insert Demo Faculty in BCA Department & Unified Professors Table
+INSERT INTO public."professors" (
+    "ID", "Email", "Password", "Name",
+    "Professor  first_name", "Professor  last_name",
+    "Department", "Designation", "TwoFactorEnabled"
+)
+VALUES (
+    'PROF001',
+    'prof.sharma@smartattend.edu',
+    '$2b$10$r/ow1tEZB/bzHMtNyp9xluhbdBKSROmhSQd7KAZ3oCZ.Z/IhLnpSy',
+    'Dr. Rajesh Sharma',
+    'Rajesh',
+    'Sharma',
+    'BCA',
+    'Head of Department',
+    FALSE
+)
+ON CONFLICT ("Email") DO NOTHING;
+
 INSERT INTO public."BCA" (
     "ID", "Email", "Password", "Name",
     "Professor  first_name", "Professor  last_name",
