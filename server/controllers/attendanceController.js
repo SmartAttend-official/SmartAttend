@@ -67,8 +67,66 @@ async function checkDuplicateSession(supabase, date, subject) {
   }
 }
 
+const crypto = require('crypto');
+
+/**
+ * Generate a cryptographic HMAC signature for an offline attendance payload
+ * @param {object} payload
+ * @param {string} timestamp
+ * @param {string} secretKey
+ * @returns {string} hex signature
+ */
+function signOfflinePayload(payload, timestamp, secretKey) {
+  const cleanPayload = { ...payload };
+  delete cleanPayload._offlineMeta;
+  const data = JSON.stringify(cleanPayload) + '|' + timestamp;
+  return crypto.createHmac('sha256', secretKey || 'smartattend_default_offline_key').update(data).digest('hex');
+}
+
+/**
+ * Verify an offline attendance sync payload against tampering and time boundaries
+ * @param {object} payload
+ * @param {object} offlineMeta
+ * @param {string} secretKey
+ * @param {number} [maxAgeMs=86400000] 24 hours max age
+ * @returns {{ valid: boolean, reason?: string }}
+ */
+function verifyOfflinePayload(payload, offlineMeta, secretKey, maxAgeMs = 86400000) {
+  if (!offlineMeta || !offlineMeta.timestamp || !offlineMeta.signature) {
+    return { valid: false, reason: 'Missing offline cryptographic signature metadata' };
+  }
+
+  const recordTime = new Date(offlineMeta.timestamp).getTime();
+  if (isNaN(recordTime)) {
+    return { valid: false, reason: 'Invalid offline timestamp format' };
+  }
+
+  const now = Date.now();
+  // Reject future timestamps (> 5 minutes clock drift allowance)
+  if (recordTime > now + 300000) {
+    return { valid: false, reason: 'Offline timestamp cannot be in the future' };
+  }
+
+  // Reject stale records (> 24 hours old)
+  if (now - recordTime > maxAgeMs) {
+    return { valid: false, reason: 'Offline record has expired (older than 24 hours)' };
+  }
+
+  const expectedSig = signOfflinePayload(payload, offlineMeta.timestamp, secretKey);
+  const sigBuffer = Buffer.from(offlineMeta.signature, 'hex');
+  const expBuffer = Buffer.from(expectedSig, 'hex');
+
+  if (sigBuffer.length !== expBuffer.length || !crypto.timingSafeEqual(sigBuffer, expBuffer)) {
+    return { valid: false, reason: 'Cryptographic signature mismatch: offline record was tampered with' };
+  }
+
+  return { valid: true };
+}
+
 module.exports = {
   acquireSessionLock,
   releaseSessionLock,
-  checkDuplicateSession
+  checkDuplicateSession,
+  signOfflinePayload,
+  verifyOfflinePayload
 };

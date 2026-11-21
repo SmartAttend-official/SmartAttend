@@ -1766,16 +1766,38 @@
         }
       } catch (e) {
         console.error("Network error while saving attendance:", e);
-        // Save to offline queue
+        // Save to offline queue with cryptographic signature (Phase 7 tamper barrier)
         let queue = [];
         try { queue = JSON.parse(localStorage.getItem('smartattend_offline_queue') || '[]'); } catch(err){}
-        // LOW-2: Purge stale entries older than 24h before pushing new ones
         const MAX_Q_AGE_MS = 24 * 60 * 60 * 1000;
         const nowMs = Date.now();
+        const timestamp = new Date().toISOString();
         queue = queue.filter(item => item.timestamp && (nowMs - new Date(item.timestamp).getTime()) < MAX_Q_AGE_MS);
-        queue.push({ payload: payload, timestamp: new Date().toISOString() });
+        
+        // Cryptographic signature over offline payload using session credentials
+        const rawToken = sessionStorage.getItem('smartattend_token') || localStorage.getItem('smartattend_token') || 'smartattend_default_offline_key';
+        let signature = '';
+        try {
+          const enc = new TextEncoder();
+          const cleanPayload = { ...payload };
+          delete cleanPayload._offlineMeta;
+          const dataToSign = JSON.stringify(cleanPayload) + '|' + timestamp;
+          const keyData = await crypto.subtle.importKey('raw', enc.encode(rawToken), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+          const sigBuf = await crypto.subtle.sign('HMAC', keyData, enc.encode(dataToSign));
+          signature = Array.from(new Uint8Array(sigBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+        } catch(sigErr) {
+          signature = 'sig_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+        }
+
+        payload._offlineMeta = {
+          timestamp: timestamp,
+          signature: signature,
+          signer: sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail')
+        };
+
+        queue.push({ payload: payload, timestamp: timestamp, signature: signature });
         localStorage.setItem('smartattend_offline_queue', JSON.stringify(queue));
-        showGlobalAlert('⚠️ Wi-Fi Disconnected! Attendance saved safely to device memory. It will auto-sync when connection is restored. 💾');
+        showGlobalAlert('⚠️ Wi-Fi Disconnected! Attendance signed and saved safely to device memory. It will auto-sync when connection is restored. 💾');
       } finally {
         btn.innerHTML = originalText;
         btn.disabled = false;
@@ -1808,6 +1830,9 @@
 
       for (const item of queue) {
         try {
+          if (item.payload && !item.payload._offlineMeta) {
+            item.payload._offlineMeta = { timestamp: item.timestamp, signature: item.signature };
+          }
           const res = await fetch(SCRIPT_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

@@ -34,6 +34,8 @@ const { calculateAttendanceMetrics } = require('./attendanceCalculator');
 const { encryptBiometric, decryptBiometric, isEncrypted } = require('./utils/biometricCrypto');
 const { tenantContextMiddleware, getTenantId, scopeQueryToTenant } = require('./middleware/tenantContext');
 const authController = require('./controllers/authController');
+const attendanceController = require('./controllers/attendanceController');
+const authService = require('./services/authService');
 const createAttendanceRoutes = require('./routes/attendanceRoutes');
 
 const app = express();
@@ -628,14 +630,14 @@ async function persistLockoutToDb(email, state) {
   } catch (e) { /* silent — in-memory still works */ }
 }
 
-// MED-5: Load lockout state from Supabase on startup
+// MED-5: Load lockout state from Supabase on startup (Phase 7)
 async function hydrateLockedAccountsFromDb() {
   try {
     const { data, error } = await supabase
       .from('SecurityEvents')
       .select('Email, FailedAttempts, LockedUntil, LastAttempt')
       .gt('LockedUntil', Date.now());
-    if (error || !data) return;
+    if (error || !data) return 0;
     for (const row of data) {
       accountLockouts.set(row.Email, {
         failedAttempts: row.FailedAttempts,
@@ -643,10 +645,44 @@ async function hydrateLockedAccountsFromDb() {
         lastAttempt: row.LastAttempt
       });
     }
-    if (data.length > 0) console.log(`[Startup] Hydrated ${data.length} active account lockout(s) from DB.`);
-  } catch (e) { /* silent */ }
+    if (data.length > 0) {
+      console.log(`[Startup] Hydrated ${data.length} active account lockout(s) from DB.`);
+      if (authService && typeof authService.hydrateLockouts === 'function') {
+        authService.hydrateLockouts(data.map(r => ({ email: r.Email, lockedUntil: r.LockedUntil, count: r.FailedAttempts })));
+      }
+    }
+    return data.length;
+  } catch (e) {
+    return 0;
+  }
 }
 setTimeout(hydrateLockedAccountsFromDb, 3000); // Run 3s after startup (Supabase client ready)
+
+// Render Free-Tier Keep-Alive Self-Ping (Phase 7)
+function initKeepAlive(serverUrl) {
+  if (process.env.NODE_ENV === 'test' || (!process.env.ENABLE_KEEP_ALIVE && !process.env.RENDER && !serverUrl)) {
+    return null;
+  }
+  const targetUrl = serverUrl || process.env.RENDER_EXTERNAL_URL || 'https://smartattend-o2te.onrender.com';
+  if (!targetUrl) return null;
+
+  const PING_INTERVAL_MS = 14 * 60 * 1000;
+  const timer = setInterval(() => {
+    try {
+      const client = targetUrl.startsWith('https') ? require('https') : require('http');
+      client.get(`${targetUrl}/health`, (res) => {
+        if (res.statusCode === 200) {
+          console.log(`[KeepAlive] Warmup ping successful (${new Date().toISOString()})`);
+        }
+      }).on('error', (err) => {
+        console.warn('[KeepAlive] Warmup ping non-fatal notice:', err.message);
+      });
+    } catch (e) {}
+  }, PING_INTERVAL_MS);
+
+  if (timer.unref) timer.unref();
+  return timer;
+}
 
 function getAccountLockout(email) {
   if (!email) return null;
@@ -1248,6 +1284,33 @@ app.post('/api/reset-password', async (req, res) => {
 
 // Modularized Attendance REST endpoints
 app.use('/api/attendance', createAttendanceRoutes({ supabase, logActivity, _savingSessionLocks }));
+
+// Lightweight Self-Hosted Health & Telemetry Dashboard (Phase 7)
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
+app.get('/api/metrics', (req, res) => {
+  const mem = process.memoryUsage();
+  res.json({
+    status: 'success',
+    timestamp: new Date().toISOString(),
+    uptimeSeconds: Math.floor(process.uptime()),
+    environment: process.env.NODE_ENV || 'production',
+    nodeVersion: process.version,
+    memory: {
+      rssMb: Math.round((mem.rss / 1024 / 1024) * 100) / 100,
+      heapTotalMb: Math.round((mem.heapTotal / 1024 / 1024) * 100) / 100,
+      heapUsedMb: Math.round((mem.heapUsed / 1024 / 1024) * 100) / 100
+    },
+    activeSessionLocks: _savingSessionLocks ? _savingSessionLocks.size : 0,
+    activeOtpSessions: emailOtpRequests ? emailOtpRequests.size : 0
+  });
+});
 
 // ==========================================
 // 2. GET ROUTE (Replicates doGet)
@@ -1991,6 +2054,7 @@ app.post('/', authenticateToken, async (req, res) => {
       'email_report': ['professor', 'admin'],
       'resolve_leave': ['professor', 'admin'],
       'save_session': ['professor', 'admin'],
+      'sync_offline_attendance': ['professor', 'admin'],
       'upload_assignment': ['professor', 'admin'],
       'delete_assignment': ['professor', 'admin'],
       'ask_gemini': ['professor', 'admin'],
@@ -4345,12 +4409,53 @@ Return ONLY valid JSON:
       return res.json({ status: 'success' });
     }
 
+    // ── E.0 BATCH OFFLINE ATTENDANCE SYNCHRONIZATION (PHASE 7) ──
+    if (action === 'sync_offline_attendance') {
+      const { sessions } = req.body;
+      if (!Array.isArray(sessions) || sessions.length === 0) {
+        return res.status(400).json({ status: 'error', message: 'Missing or empty sessions array.' });
+      }
+      if (sessions.length > 50) {
+        return res.status(400).json({ status: 'error', message: 'Batch size exceeds limit: maximum 50 sessions allowed per sync.' });
+      }
+
+      const results = [];
+      for (const sessionPayload of sessions) {
+        if (!sessionPayload || !sessionPayload._offlineMeta) {
+          results.push({ status: 'error', code: 'MISSING_SIGNATURE', message: 'Session missing cryptographic signature' });
+          continue;
+        }
+        const offlineCheck = attendanceController.verifyOfflinePayload(sessionPayload, sessionPayload._offlineMeta, JWT_SECRET);
+        if (!offlineCheck.valid) {
+          await logActivity('SECURITY_ALERT', `Tampered offline sync session rejected: ${offlineCheck.reason}`);
+          results.push({ status: 'error', code: 'TAMPERED_OFFLINE_RECORD', message: offlineCheck.reason });
+          continue;
+        }
+        results.push({ status: 'verified', subject: sessionPayload.classInfo?.subject, date: sessionPayload.classInfo?.date });
+      }
+
+      return res.json({ status: 'success', synced: results.filter(r => r.status === 'verified').length, results });
+    }
+
     // ── E. BATCH ATTENDANCE LOGGING (SAVE SESSION) ──
     if (action === 'save_session') {
       const { classInfo, students } = req.body;
       
       if (!classInfo || !students || !Array.isArray(students)) {
         return res.status(400).json({ status: 'error', message: 'Missing classInfo or students data.' });
+      }
+
+      // ── VERIFY OFFLINE CRYPTOGRAPHIC SIGNATURE & TIMESTAMPS (PHASE 7) ──
+      if (req.body._offlineMeta) {
+        const offlineCheck = attendanceController.verifyOfflinePayload(req.body, req.body._offlineMeta, JWT_SECRET);
+        if (!offlineCheck.valid) {
+          await logActivity('SECURITY_ALERT', `Tampered offline attendance rejected: ${offlineCheck.reason}`);
+          return res.status(400).json({
+            status: 'error',
+            code: 'TAMPERED_OFFLINE_RECORD',
+            message: `Offline synchronization rejected: ${offlineCheck.reason}`
+          });
+        }
       }
 
       // ── OWN-4: OWNERSHIP ENFORCEMENT — Professors can only save sessions they own ──
@@ -5479,4 +5584,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, cleanExpiredOtps, supabase };
+module.exports = { app, cleanExpiredOtps, supabase, _savingSessionLocks, hydrateLockedAccountsFromDb, accountLockouts, initKeepAlive };

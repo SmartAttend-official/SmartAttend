@@ -202,6 +202,28 @@ function isAccountLocked(email) {
   return Boolean(lockout && lockout.lockedUntil && Date.now() < lockout.lockedUntil);
 }
 
+/**
+ * Hydrates lockout state from historical security event records
+ * @param {Array<{ email: string, lockedUntil: number, count?: number }>} records
+ * @returns {number} count of hydrated active lockouts
+ */
+function hydrateLockouts(records) {
+  if (!Array.isArray(records)) return 0;
+  let count = 0;
+  const now = Date.now();
+  for (const r of records) {
+    if (r && r.email && r.lockedUntil && r.lockedUntil > now) {
+      const key = r.email.toLowerCase().trim();
+      accountLockouts.set(key, {
+        count: r.count || MAX_FAILED_ATTEMPTS,
+        lockedUntil: r.lockedUntil
+      });
+      count++;
+    }
+  }
+  return count;
+}
+
 module.exports = {
   MAX_FAILED_ATTEMPTS,
   LOCKOUT_DURATION_MS,
@@ -217,5 +239,6 @@ module.exports = {
   resetOtpFailure,
   getLabCodeFailure,
   recordLabCodeFailure,
-  resetLabCodeFailure
+  resetLabCodeFailure,
+  hydrateLockouts
 };
