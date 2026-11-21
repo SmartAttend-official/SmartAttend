@@ -235,11 +235,13 @@ if (!supabaseUrl || !supabaseServiceKey) {
 
 const supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', supabaseServiceKey || 'placeholder');
 
-// CRIT-1: JWT secret — use environment variable, fallback to known value if not set on Render
-// ACTION REQUIRED: Set JWT_SECRET in Render dashboard → Environment tab
-const JWT_SECRET = process.env.JWT_SECRET || '55ebcfc623910c59dd6c32145391bd76abf8c05763137976e106d9d1c9ef25bf';
-if (!process.env.JWT_SECRET) {
-  console.warn('WARNING: JWT_SECRET env var not set on server. Using fallback. Set it in Render Environment tab immediately.');
+// CRIT-1: JWT secret — MUST be set in environment. No fallback allowed.
+// ACTION REQUIRED: Set JWT_SECRET in Render dashboard → Environment tab (minimum 32 characters)
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET || JWT_SECRET.length < 32) {
+  console.error('FATAL: JWT_SECRET environment variable is missing or too short (minimum 32 characters).');
+  console.error('Set JWT_SECRET in your .env file or Render Environment tab, then restart the server.');
+  process.exit(1);
 }
 
 // ── 2FA Column Bootstrap: Auto-add missing columns to ADMIN table on startup ──
@@ -926,24 +928,31 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
-// HTML Email Template for Welcome/New Student
-function getWelcomeEmailTemplate(name, id, password) {
+// HTML Email Template for Welcome/New Student — SEC-4: No default passwords shown
+// Students receive a secure password-setup link, not a plaintext credential
+function getWelcomeEmailTemplate(name, id, activationToken) {
   const safeName = escapeHtml(name);
   const safeId = escapeHtml(id);
-  const safePassword = escapeHtml(password);
+  const safeToken = escapeHtml(activationToken || '');
+  // Build a password-setup URL pointing to reset_password.html with the token
+  const baseUrl = process.env.FRONTEND_URL || 'https://smartattend2.netlify.app';
+  const setupUrl = `${baseUrl}/html/reset_password.html?token=${encodeURIComponent(safeToken)}&id=${encodeURIComponent(safeId)}`;
   return `
   <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f4f7f6; color: #333;">
     <div style="max-width: 600px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 8px; border-top: 4px solid #10b981; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
       <h2 style="color: #10b981; margin-bottom: 20px;">Welcome to SmartAttend!</h2>
       <p>Hello <strong>${safeName}</strong>,</p>
-      <p>Your student account has been successfully created. You can now log into the SmartAttend portal using the credentials below:</p>
-      <div style="background: #f8fafc; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #10b981;">
-        <p style="margin: 5px 0;"><strong>Student ID:</strong> ${safeId}</p>
-        <p style="margin: 5px 0;"><strong>Password:</strong> ${safePassword}</p>
+      <p>Your student account has been successfully created. Your Student ID is <strong>${safeId}</strong>.</p>
+      <p>To activate your account and set your own password, click the button below. This link is valid for <strong>48 hours</strong> and can only be used once.</p>
+      <div style="text-align:center; margin: 24px 0;">
+        <a href="${setupUrl}" style="background:#10b981;color:white;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block;">
+          Activate Your Account &amp; Set Password
+        </a>
       </div>
-      <p>Please log in and ensure your information is up to date.</p>
+      <p style="font-size:13px;color:#555;">If the button doesn't work, copy and paste this link into your browser:</p>
+      <p style="font-size:12px;word-break:break-all;color:#3b82f6;">${setupUrl}</p>
       <hr style="border: none; border-top: 1px solid #eaeaea; margin: 20px 0;" />
-      <p style="font-size: 12px; color: #888;">If you did not request this, please contact the administration.</p>
+      <p style="font-size: 12px; color: #888;">If you did not request this, please contact the administration immediately.</p>
     </div>
   </div>`;
 }
@@ -1482,11 +1491,95 @@ app.get('/timetables/file/:id', async (req, res) => {
 });
 
 // ==========================================
+// SEC-1 FIX: Dedicated POST /api/reset-password endpoint
+// Passwords NEVER travel through GET query strings or URLs
+// ==========================================
+app.post('/api/reset-password', async (req, res) => {
+  try {
+    const { email, otp, newPassword, role } = req.body || {};
+
+    const cleanEmail = (email || '').toString().toLowerCase().trim();
+    const cleanOtp   = (otp || '').toString().trim();
+    const cleanPass  = (newPassword || '').toString(); // do NOT trim — passwords may have leading/trailing chars intentionally
+
+    if (!cleanEmail || !cleanOtp || !cleanPass) {
+      return res.status(400).json({ status: 'error', message: 'Email, OTP, and new password are required.' });
+    }
+
+    if (cleanPass.length < 8) {
+      return res.status(400).json({ status: 'error', message: 'Password must be at least 8 characters long.' });
+    }
+
+    // Determine whether this is a student or professor reset
+    const isStudent = (role === 'student');
+    let targetTable = 'students';
+    let users = [];
+
+    if (isStudent) {
+      const { data } = await supabase.from('students').select('*').eq('Email', cleanEmail);
+      users = data || [];
+    } else {
+      const deptSheets = ['BCA', 'MCA', 'BBA', 'MBA'];
+      for (const table of deptSheets) {
+        const { data } = await supabase.from(table).select('*').eq('Email', cleanEmail);
+        if (data && data.length > 0) { targetTable = table; users = data; break; }
+      }
+    }
+
+    // SEC-5 (Anti-Enumeration): Do NOT reveal whether email exists in the system
+    if (users.length === 0) {
+      await logActivity('PASSWORD_RESET_ATTEMPT', `Reset attempted for unregistered email: ${cleanEmail}`);
+      return res.status(400).json({ status: 'error', message: 'Invalid or expired verification code.' });
+    }
+
+    const user = users[0];
+
+    // OTP match check
+    if (!user.OTP || user.OTP.toString().trim() !== cleanOtp) {
+      const failures = recordOtpFailure(cleanEmail);
+      if (failures >= MAX_OTP_FAILED_ATTEMPTS) {
+        await supabase.from(targetTable).update({ OTP: null, OTP_Timestamp: null }).eq('Email', cleanEmail);
+        resetOtpFailure(cleanEmail);
+        await logActivity('SECURITY_ALERT', `OTP for ${cleanEmail} permanently invalidated after ${MAX_OTP_FAILED_ATTEMPTS} incorrect attempts.`);
+        return res.status(429).json({ status: 'error', message: 'Maximum attempts exceeded. Please request a new verification code.' });
+      }
+      return res.status(400).json({ status: 'error', message: 'Invalid or expired verification code.' });
+    }
+
+    // OTP expiry check
+    if (user.OTP_Timestamp) {
+      const expiry = new Date(user.OTP_Timestamp).getTime();
+      if (Date.now() > expiry) {
+        await supabase.from(targetTable).update({ OTP: null, OTP_Timestamp: null }).eq('Email', cleanEmail);
+        resetOtpFailure(cleanEmail);
+        return res.status(400).json({ status: 'error', message: 'Verification code has expired. Please request a new one.' });
+      }
+    }
+
+    resetOtpFailure(cleanEmail);
+
+    // Hash the new password with bcrypt — password never logged
+    const hashedPass = await bcrypt.hash(cleanPass, 10);
+    await supabase.from(targetTable)
+      .update({ Password: hashedPass, OTP: null, OTP_Timestamp: null, ResetStatus: 'USED' })
+      .eq('Email', cleanEmail);
+
+    await logActivity('PASSWORD_RESET', `${isStudent ? 'Student' : 'Professor'} ${cleanEmail} reset password via secure POST endpoint.`);
+    return res.json({ status: 'success', message: 'Password updated successfully.' });
+
+  } catch (err) {
+    console.error('[POST /api/reset-password] Error:', err.message);
+    return res.status(500).json({ status: 'error', message: 'Server error. Please try again.' });
+  }
+});
+
+// ==========================================
 // 2. GET ROUTE (Replicates doGet)
 // ==========================================
 app.get('/', authenticateToken, async (req, res) => {
   try {
-    const { action, sheet, email, studentId, department, semester, dept, sem, token, newPassword } = req.query;
+    const { action, sheet, email, studentId, department, semester, dept, sem, token } = req.query;
+    // NOTE: newPassword is NEVER read from req.query — passwords must arrive via POST body only (SEC-1)
 
     // Health Check Ping for Render
     if (!action && !sheet && Object.keys(req.query).length === 0) {
@@ -1634,7 +1727,10 @@ app.get('/', authenticateToken, async (req, res) => {
       }
 
       if (!targetProf) {
-        return res.json({ status: 'error', message: 'Email not found in our system.' });
+        // SEC-5 (Account Enumeration): Return identical message regardless of whether email exists
+        // Internal audit log captures the actual result for administrative visibility
+        await logActivity('PASSWORD_RESET_ATTEMPT', `OTP requested for unregistered professor email: ${cleanEmail}`);
+        return res.json({ status: 'success', message: 'If an account with that email address exists, a 6-digit verification code has been dispatched.' });
       }
 
       const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digit OTP
@@ -1727,7 +1823,9 @@ app.get('/', authenticateToken, async (req, res) => {
       if (error) throw error;
 
       if (!data || data.length === 0) {
-        return res.json({ status: 'error', message: 'This email is not registered in the student database.' });
+        // SEC-5 (Account Enumeration): Return identical message regardless of whether email exists
+        await logActivity('PASSWORD_RESET_ATTEMPT', `OTP requested for unregistered student email: ${cleanEmail}`);
+        return res.json({ status: 'success', message: 'If an account with that email address exists, a 6-digit verification code has been dispatched.' });
       }
 
       const studentName = data[0].Name || 'Student';
@@ -1812,8 +1910,10 @@ app.get('/', authenticateToken, async (req, res) => {
       // Successful verification: reset failure tracker
       resetOtpFailure(cleanEmail);
 
-      // Validate and hash password with salted bcrypt
-      const cleanNewPass = (newPassword || '').toString().trim();
+      // SEC-1: newPassword MUST come from request BODY only, never from query parameters
+      // This handler is called from the POST /api/reset-password endpoint (see below)
+      // If reached via legacy GET route, req.body will be empty and we reject the request safely
+      const cleanNewPass = ((req.body && req.body.newPassword) || '').toString().trim();
       if (!cleanNewPass || cleanNewPass.length < 8) {
         return res.status(400).json({ status: 'error', message: 'Password must be at least 8 characters long.' });
       }
@@ -3931,8 +4031,26 @@ Return ONLY valid JSON:
       }
 
       const { ID, Name, Email, Password, Department, Semester, Parent_Email, Mobile } = data;
-      const rawPassword = (Password || '').toString().trim() || 'Welcome@123';
-      const hashedPassword = await bcrypt.hash(rawPassword, 10);
+
+      // SEC-4: Never set a predictable default password.
+      // If admin provides a custom password (from a form), hash and use it.
+      // If none is provided, generate a cryptographically random one-time activation token
+      // and store a locked bcrypt hash — the student MUST use the activation email to set their own password.
+      const crypto = require('crypto');
+      let hashedPassword;
+      let activationToken = null;
+      const providedPass = (Password || '').toString().trim();
+
+      if (providedPass && providedPass.length >= 8) {
+        // Admin explicitly set a password (e.g. during manual registration)
+        hashedPassword = await bcrypt.hash(providedPass, 10);
+      } else {
+        // No password provided — generate a secure random activation token (64 hex chars = 256 bits)
+        activationToken = crypto.randomBytes(32).toString('hex');
+        // Store a locked bcrypt hash of a random secret — the student cannot log in without resetting via email link
+        const tempSecret = crypto.randomBytes(48).toString('hex');
+        hashedPassword = await bcrypt.hash(tempSecret, 10);
+      }
 
       const { error } = await supabase
         .from('students')
@@ -3947,20 +4065,24 @@ Return ONLY valid JSON:
           Mobile: Mobile,
           Total_Classes: 0,
           Classes_Attended: 0,
-          Attendance_Percentage: 0.00
+          Attendance_Percentage: 0.00,
+          ResetStatus: activationToken ? 'PENDING' : 'ACTIVE',
+          OTP: activationToken ? activationToken.substring(0, 32) : null,
+          OTP_Timestamp: activationToken ? new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString() : null
         }]);
 
       if (error) throw error;
 
       if (Email && Email.includes('@')) {
+        const tokenToSend = activationToken || null;
         sendEmail({
           to: Email.trim(),
-          subject: 'SmartAttend — Your Student Account Details',
-          html: getWelcomeEmailTemplate(Name || 'Student', ID, rawPassword),
+          subject: 'SmartAttend — Activate Your Student Account',
+          html: getWelcomeEmailTemplate(Name || 'Student', ID, tokenToSend || ''),
         }).catch(e => console.error('Failed to send welcome email:', e.message));
       }
 
-      await logActivity('ADD_STUDENT', `Student added: ${Name} (${ID})`);
+      await logActivity('ADD_STUDENT', `Student added: ${Name} (${ID}) — activation ${activationToken ? 'link sent' : 'password set by admin'}`);
       return res.json({ status: 'success' });
     }
 
@@ -3990,8 +4112,8 @@ Return ONLY valid JSON:
       const batchIds = new Set();
       const batchEmails = new Set();
 
-      // Pre-hash default password for speed
-      const defaultPasswordHash = await bcrypt.hash('Welcome@123', 10);
+      // SEC-4: Pre-generate random activation tokens per student — no shared default password
+      const crypto = require('crypto');
 
       for (const s of studentList) {
         const rawId = String(s.ID || s.id || '').trim();
@@ -4021,40 +4143,51 @@ Return ONLY valid JSON:
         batchIds.add(lowerId);
         batchEmails.add(rawEmail);
 
+        // SEC-4: Generate per-student unique cryptographic activation token
+        const activationToken = crypto.randomBytes(32).toString('hex');
+        const tempSecret = crypto.randomBytes(48).toString('hex');
+        const hashedTempPwd = await bcrypt.hash(tempSecret, 10);
+
         toInsert.push({
           ID: rawId,
           Name: rawName,
           Email: rawEmail,
-          Password: defaultPasswordHash,
+          Password: hashedTempPwd,
           Department: rawDept,
           Semester: rawSem,
           Parent_Email: rawParentEmail,
           Mobile: rawMobile,
           Total_Classes: 0,
           Classes_Attended: 0,
-          Attendance_Percentage: 0.00
+          Attendance_Percentage: 0.00,
+          ResetStatus: 'PENDING',
+          OTP: activationToken.substring(0, 32),
+          OTP_Timestamp: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+          _activationToken: activationToken // temp field stripped below
         });
       }
 
       if (toInsert.length > 0) {
+        // Strip internal _activationToken before inserting — not a real DB column
+        const dbRecords = toInsert.map(({ _activationToken, ...rest }) => rest);
         const { error: insertErr } = await supabase
           .from('students')
-          .insert(toInsert);
+          .insert(dbRecords);
 
         if (insertErr) throw insertErr;
 
-        // Asynchronously dispatch welcome emails without blocking response
+        // Asynchronously dispatch secure activation emails without blocking response
         (async () => {
           for (const s of toInsert) {
             if (s.Email && s.Email.includes('@')) {
               try {
                 await sendEmail({
                   to: s.Email,
-                  subject: 'SmartAttend — Your Student Account Details',
-                  html: getWelcomeEmailTemplate(s.Name || 'Student', s.ID, 'Welcome@123')
+                  subject: 'SmartAttend — Activate Your Student Account',
+                  html: getWelcomeEmailTemplate(s.Name || 'Student', s.ID, s._activationToken || '')
                 });
               } catch (e) {
-                console.error(`[bulk_add_students] Welcome email failed for ${s.Email}:`, e.message);
+                console.error(`[bulk_add_students] Activation email failed for ${s.Email}:`, e.message);
               }
             }
           }
@@ -4073,7 +4206,12 @@ Return ONLY valid JSON:
 
     if (action === 'add_professor') {
       const { Name, Email, Password, Department } = data;
-      const rawProfPass = (Password || '').toString().trim() || 'Prof@123';
+      // SEC-4: If admin provides a password, use it. Otherwise require password to be set.
+      // Professor accounts always require an explicitly set password — no predictable defaults.
+      const rawProfPass = (Password || '').toString().trim();
+      if (!rawProfPass || rawProfPass.length < 8) {
+        return res.status(400).json({ status: 'error', message: 'A valid password (minimum 8 characters) must be provided when adding a professor account.' });
+      }
       const hashedProfPass = await bcrypt.hash(rawProfPass, 10);
 
       const nameParts = (Name || '').split(' ');

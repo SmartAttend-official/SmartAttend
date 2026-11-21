@@ -13,7 +13,8 @@ const TEST_SUITES = [
   { name: 'Application Tenant Isolation', file: 'tenantIsolation.test.js' },
   { name: 'Input Validation & Anti-XSS', file: 'validators.test.js' },
   { name: 'Authentication & Anti-Brute Force', file: 'authService.test.js' },
-  { name: 'Email Notification Engine', file: 'emailService.test.js' }
+  { name: 'Email Notification Engine', file: 'emailService.test.js' },
+  { name: 'Phase 1 Security Regression (CWE-598, CWE-798, CWE-204, SEC-4)', file: 'phase1Security.test.js' }
 ];
 
 console.log('================================================================');

@@ -90,6 +90,7 @@ async function handleVerifyOTP() {
 
 // ─────────────────────────────────────
 // STEP 3: Reset Password
+// SEC-1 FIX: Password is sent via POST body — never in a URL or query string
 // ─────────────────────────────────────
 async function handleResetPassword() {
   hideError('step3-error');
@@ -107,7 +108,17 @@ async function handleResetPassword() {
   btn.disabled = true;
 
   try {
-    const res = await fetch(`${API_BASE}?sheet=student&action=verify_otp&email=${encodeURIComponent(verifiedEmail)}&otp=${encodeURIComponent(otp)}&newPassword=${encodeURIComponent(newPass)}`);
+    // SEC-1: Password travels in the JSON request BODY via POST, never in the URL
+    const res = await fetch(`${API_BASE.replace(/\?.*$/, '')}/api/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: verifiedEmail,
+        otp: otp,
+        newPassword: newPass,
+        role: 'student'
+      })
+    });
     const data = await res.json();
 
     if (data.status === 'success') {
