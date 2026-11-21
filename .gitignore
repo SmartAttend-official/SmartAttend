@@ -28,6 +28,8 @@ __pycache__/
 
 # Local Backups
 backup_*/
+SMARTATTEND_PRE_TRANSFORMATION_BACKUP/
+SMARTATTEND_*.txt
 
 # Local ad-hoc debugging scripts
 server/check_*.js
