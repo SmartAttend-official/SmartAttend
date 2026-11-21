@@ -19,7 +19,8 @@ const TEST_SUITES = [
   { name: 'Phase 3 HTTP API Integration (Supertest)', file: 'apiIntegration.test.js' },
   { name: 'Phase 3 Database Schema & Contract Integration', file: 'databaseIntegration.test.js' },
   { name: 'Phase 3 End-to-End Workflow Integration', file: 'e2eWorkflows.test.js' },
-  { name: 'Phase 4 Biometric Security & Active PAD Engine', file: 'phase4Biometrics.test.js' }
+  { name: 'Phase 4 Biometric Security & Active PAD Engine', file: 'phase4Biometrics.test.js' },
+  { name: 'Phase 5 Architectural Modularization', file: 'phase5Modularization.test.js' }
 ];
 
 console.log('================================================================');
