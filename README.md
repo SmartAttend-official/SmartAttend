@@ -741,6 +741,7 @@ npm start
 | `SUPABASE_URL` | String (URL) | **Required** | `None` | HTTPS REST connection endpoint to your Supabase PostgreSQL project. |
 | `SUPABASE_SERVICE_ROLE_KEY` | String (Secret) | **Required** | `None` | High-privilege secret token required to execute administrative writes past RLS. |
 | `JWT_SECRET` | String (Secret) | **Required** | `None` | High-entropy cryptographic secret for signing stateless 12h bearer tokens. |
+| `BIOMETRIC_ENCRYPTION_KEY` | String (Secret) | **Required** | `Transitional Key` | 256-bit (64 hex char) AES-256-GCM key for encrypted biometric vectors (DPDP Act). |
 | `GEMINI_API_KEY` | String (Secret) | **Required** | `None` | Google AI Studio API key powering Gemini 1.5 Flash medical audit & assistant. |
 | `EMAIL_SCRIPT_URL` | String (URL) | Optional | `None` | Google Apps Script Web App webhook URL for high-volume email delivery. |
 | `DEBUG_TEST_EMAIL` | String (Email) | Optional | `admin@smartattend.edu` | Recipient for server health diagnostic delivery tests. |
