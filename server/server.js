@@ -6,6 +6,7 @@ const bcrypt = require('bcryptjs');
 const { createClient } = require('@supabase/supabase-js');
 const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const zlib = require('zlib');
 let Tesseract = null;
 try {
@@ -197,6 +198,20 @@ const generalLimiter = rateLimit({
 // Prevents two simultaneous requests from both passing the DB check and
 // creating duplicate records before either one has finished writing.
 const _savingSessionLocks = new Set();
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── BIOMETRIC LIVENESS ANTI-REPLAY & HMAC VALIDATION (Phase 4) ───────────────
+const _usedLivenessChallenges = new Set();
+setInterval(() => {
+  _usedLivenessChallenges.clear();
+}, 10 * 60 * 1000);
+
+function generateLivenessHmac(challengeId, type, expiresAt) {
+  return crypto
+    .createHmac('sha256', process.env.JWT_SECRET || 'smartattend_liveness_default_secret')
+    .update(`${challengeId}:${type}:${expiresAt}`)
+    .digest('hex');
+}
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Dynamic Rate Limiting Middleware: routes each request to its dedicated limiter
@@ -391,7 +406,7 @@ function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1]; // Format: Bearer <token>
 
-  if (action === 'login' || action === 'verify_login_otp' || action === 'resend_2fa_otp' || action === 'send_otp' || action === 'verify_otp' || action === 'verify_otp_only' || action === 'verify_student_email' || action === 'ask_gemini' || action === 'calculate_attendance' || (!action && !sheet)) {
+  if (action === 'login' || action === 'verify_login_otp' || action === 'resend_2fa_otp' || action === 'send_otp' || action === 'verify_otp' || action === 'verify_otp_only' || action === 'verify_student_email' || action === 'ask_gemini' || action === 'calculate_attendance' || action === 'get_liveness_challenge' || action === 'verify_liveness_challenge' || (!action && !sheet)) {
     if (token) {
       jwt.verify(token, JWT_SECRET, (err, decoded) => {
         if (!err && decoded) {
@@ -3428,6 +3443,74 @@ Return ONLY valid JSON:
         message: `Biometric facial template for student ${studentIdStr} has been permanently deleted in accordance with DPDP Act 2023 / GDPR Article 17.`,
         studentId: studentIdStr,
         purgedAt: new Date().toISOString()
+      });
+    }
+
+    // ── BIOMETRIC ACTIVE CHALLENGE GENERATION (SERVER-SIDE HMAC SIGNED — Phase 4) ──
+    if (action === 'get_liveness_challenge') {
+      const challengeId = 'chal_' + Date.now().toString(36) + crypto.randomBytes(6).toString('hex');
+      const challengePool = [
+        { type: 'BLINK', prompt: 'Please blink your eyes naturally' },
+        { type: 'TURN_LEFT', prompt: 'Please turn your head slightly to the left' },
+        { type: 'TURN_RIGHT', prompt: 'Please turn your head slightly to the right' },
+        { type: 'NOD', prompt: 'Please nod your head downwards slightly' },
+        { type: 'COMPOUND_BLINK_AND_TURN_LEFT', prompt: 'Please blink naturally and turn your head slightly to the left' },
+        { type: 'COMPOUND_BLINK_AND_TURN_RIGHT', prompt: 'Please blink naturally and turn your head slightly to the right' }
+      ];
+      const selected = challengePool[Math.floor(Math.random() * challengePool.length)];
+      const issuedAt = Date.now();
+      const validityMs = parseInt(req.body && req.body.timeoutMs) || 5000;
+      const expiresAt = issuedAt + Math.min(validityMs, 10000);
+      const signature = generateLivenessHmac(challengeId, selected.type, expiresAt);
+
+      return res.json({
+        status: 'success',
+        challenge: {
+          challengeId,
+          type: selected.type,
+          prompt: selected.prompt,
+          issuedAt,
+          expiresAt,
+          signature
+        }
+      });
+    }
+
+    // ── BIOMETRIC ACTIVE CHALLENGE VERIFICATION (ANTI-REPLAY & CRYPTOGRAPHIC TAMPER CHECK — Phase 4) ──
+    if (action === 'verify_liveness_challenge') {
+      const { challengeId, type, expiresAt, signature, proof } = req.body || {};
+
+      if (!challengeId || !type || !expiresAt || !signature) {
+        return res.status(400).json({ status: 'error', message: 'Missing challenge verification parameters.' });
+      }
+
+      if (Date.now() > Number(expiresAt)) {
+        return res.status(400).json({ status: 'error', message: 'Liveness challenge expired. Please request a new challenge.' });
+      }
+
+      if (_usedLivenessChallenges.has(challengeId)) {
+        await logActivity('SECURITY_ALERT', `Biometric replay attack detected: Challenge ${challengeId} reused`);
+        return res.status(403).json({ status: 'error', message: 'Liveness challenge has already been consumed (replay attack detected).' });
+      }
+
+      const expectedSignature = generateLivenessHmac(challengeId, type, expiresAt);
+      const sigBuffer = Buffer.from(signature, 'hex');
+      const expectedBuffer = Buffer.from(expectedSignature, 'hex');
+
+      if (sigBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(sigBuffer, expectedBuffer)) {
+        await logActivity('SECURITY_ALERT', `Biometric challenge signature forgery detected for ${challengeId}`);
+        return res.status(403).json({ status: 'error', message: 'Invalid liveness challenge signature. Cryptographic tamper detected.' });
+      }
+
+      _usedLivenessChallenges.add(challengeId);
+      await logActivity('LIVENESS_VERIFIED', `Liveness challenge ${challengeId} (${type}) successfully verified for ${req.user ? req.user.email : 'attendance client'}`);
+
+      return res.json({
+        status: 'success',
+        verified: true,
+        challengeId,
+        type,
+        verifiedAt: new Date().toISOString()
       });
     }
 

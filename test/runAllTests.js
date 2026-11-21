@@ -18,7 +18,8 @@ const TEST_SUITES = [
   { name: 'Phase 2 Ownership-Based Authorization (OWN-1 through OWN-6)', file: 'phase2Ownership.test.js' },
   { name: 'Phase 3 HTTP API Integration (Supertest)', file: 'apiIntegration.test.js' },
   { name: 'Phase 3 Database Schema & Contract Integration', file: 'databaseIntegration.test.js' },
-  { name: 'Phase 3 End-to-End Workflow Integration', file: 'e2eWorkflows.test.js' }
+  { name: 'Phase 3 End-to-End Workflow Integration', file: 'e2eWorkflows.test.js' },
+  { name: 'Phase 4 Biometric Security & Active PAD Engine', file: 'phase4Biometrics.test.js' }
 ];
 
 console.log('================================================================');

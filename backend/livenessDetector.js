@@ -194,6 +194,27 @@
       }
       this.history.set(faceId, frames);
 
+      // 5b. Temporal jump cut / splice attack detection
+      // Detects instantaneous unnatural landmark displacement between successive frames
+      if (frames.length >= 2) {
+        const prevFrame = frames[frames.length - 2];
+        const currFrame = frames[frames.length - 1];
+        const dt = Math.max(1, currFrame.timestamp - prevFrame.timestamp);
+        const dNose = euclideanDist(prevFrame.noseTip, currFrame.noseTip);
+        // Normalized displacement velocity: > 0.45 normalized units in under 60ms indicates video splice
+        if (dt < 60 && dNose > 0.45) {
+          return {
+            isLive: false,
+            score: 0.05,
+            status: 'spoof_suspected',
+            blinkDetected: false,
+            microMotionScore: 0,
+            reason: '⚠️ Presentation Attack Suspected: Unnatural landmark jump cut detected (video splice/photo swap).',
+            details: { dNose, dt, pose }
+          };
+        }
+      }
+
       // Need at least 3 frames to assess motion or blinks
       if (frames.length < 3) {
         return {
@@ -289,29 +310,64 @@
     }
 
     /**
-     * Generates a randomized active challenge for anti-replay verification
-     * @param {number} [timeoutMs=8000] - 8-second default validity window
-     * @returns {{ id: string, type: string, prompt: string, issuedAt: number, expiresAt: number }}
+     * Generates a randomized active challenge for anti-replay verification.
+     * Default timeout tightened to 5000ms (5s) for enhanced security.
+     * 
+     * @param {number} [timeoutMs=5000] - Challenge validity window in ms
+     * @param {object} [options] - Configuration options { includeCompound: boolean, type: string }
+     * @returns {{ id: string, type: string, prompt: string, issuedAt: number, expiresAt: number, isCompound: boolean }}
      */
-    generateChallenge(timeoutMs = 8000) {
-      const types = [
-        { type: 'BLINK', prompt: 'Please blink your eyes naturally' },
-        { type: 'TURN_LEFT', prompt: 'Please turn your head slightly to the left' },
-        { type: 'TURN_RIGHT', prompt: 'Please turn your head slightly to the right' },
-        { type: 'NOD', prompt: 'Please nod your head downwards slightly' }
+    generateChallenge(timeoutMs = 5000, options = {}) {
+      const basicTypes = [
+        { type: 'BLINK', prompt: 'Please blink your eyes naturally', isCompound: false },
+        { type: 'TURN_LEFT', prompt: 'Please turn your head slightly to the left', isCompound: false },
+        { type: 'TURN_RIGHT', prompt: 'Please turn your head slightly to the right', isCompound: false },
+        { type: 'NOD', prompt: 'Please nod your head downwards slightly', isCompound: false }
       ];
-      const selected = types[Math.floor(Math.random() * types.length)];
+
+      const compoundTypes = [
+        { type: 'COMPOUND_BLINK_AND_TURN_LEFT', prompt: 'Please blink naturally and turn your head slightly to the left', isCompound: true },
+        { type: 'COMPOUND_BLINK_AND_TURN_RIGHT', prompt: 'Please blink naturally and turn your head slightly to the right', isCompound: true },
+        { type: 'BLINK_AND_NOD', prompt: 'Please blink naturally and nod your head slightly downwards', isCompound: true }
+      ];
+
+      let candidatePool = basicTypes;
+      if (options.compoundOnly) {
+        candidatePool = compoundTypes;
+      } else if (options.includeCompound) {
+        candidatePool = [...basicTypes, ...compoundTypes];
+      }
+
+      if (options.type) {
+        const matched = [...basicTypes, ...compoundTypes].find(t => t.type === options.type);
+        if (matched) candidatePool = [matched];
+      }
+
+      const selected = candidatePool[Math.floor(Math.random() * candidatePool.length)];
       return {
         id: 'chal_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
         type: selected.type,
         prompt: selected.prompt,
+        isCompound: selected.isCompound,
         issuedAt: Date.now(),
         expiresAt: Date.now() + timeoutMs
       };
     }
 
     /**
+     * Generates a compound micro-challenge requiring simultaneous / sequential actions
+     * (e.g. natural blink combined with lateral head pose rotation)
+     * @param {number} [timeoutMs=5000]
+     * @returns {{ id: string, type: string, prompt: string, issuedAt: number, expiresAt: number, isCompound: boolean }}
+     */
+    generateCompoundChallenge(timeoutMs = 5000) {
+      return this.generateChallenge(timeoutMs, { compoundOnly: true });
+    }
+
+    /**
      * Validates whether an active challenge was successfully completed by the subject.
+     * Supports both single micro-actions and compound multi-factor behavioral gestures.
+     * 
      * @param {object} challenge
      * @param {object} evaluationResult - Output from evaluate()
      * @returns {{ completed: boolean, reason: string }}
@@ -350,6 +406,28 @@
           }
           return { completed: false, reason: 'Awaiting head nod...' };
 
+        // ── Phase 4: Compound Micro-Challenge Handlers ──
+        case 'COMPOUND_BLINK_AND_TURN_LEFT':
+          if (evaluationResult.blinkDetected && pose.yawRatio < 0.65) {
+            return { completed: true, reason: 'Compound gesture verified (blink + left turn).' };
+          }
+          if (!evaluationResult.blinkDetected) return { completed: false, reason: 'Awaiting natural blink...' };
+          return { completed: false, reason: 'Awaiting left head turn...' };
+
+        case 'COMPOUND_BLINK_AND_TURN_RIGHT':
+          if (evaluationResult.blinkDetected && pose.yawRatio > 1.5) {
+            return { completed: true, reason: 'Compound gesture verified (blink + right turn).' };
+          }
+          if (!evaluationResult.blinkDetected) return { completed: false, reason: 'Awaiting natural blink...' };
+          return { completed: false, reason: 'Awaiting right head turn...' };
+
+        case 'BLINK_AND_NOD':
+          if (evaluationResult.blinkDetected && (pose.pitchRatio < 0.75 || pose.pitchRatio > 1.4)) {
+            return { completed: true, reason: 'Compound gesture verified (blink + head nod).' };
+          }
+          if (!evaluationResult.blinkDetected) return { completed: false, reason: 'Awaiting natural blink...' };
+          return { completed: false, reason: 'Awaiting downward head nod...' };
+
         default:
           return { completed: false, reason: 'Unknown challenge type' };
       }
@@ -357,11 +435,15 @@
   }
 
   const CHALLENGE_TYPES = ['BLINK', 'TURN_LEFT', 'TURN_RIGHT', 'NOD'];
+  const COMPOUND_CHALLENGE_TYPES = ['COMPOUND_BLINK_AND_TURN_LEFT', 'COMPOUND_BLINK_AND_TURN_RIGHT', 'BLINK_AND_NOD'];
+  const ALL_CHALLENGE_TYPES = [...CHALLENGE_TYPES, ...COMPOUND_CHALLENGE_TYPES];
 
   return {
     calculateEAR,
     estimateHeadPose,
     LivenessTracker,
-    CHALLENGE_TYPES
+    CHALLENGE_TYPES,
+    COMPOUND_CHALLENGE_TYPES,
+    ALL_CHALLENGE_TYPES
   };
 });
