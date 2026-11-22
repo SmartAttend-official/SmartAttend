@@ -35,6 +35,8 @@ const { encryptBiometric, decryptBiometric, isEncrypted } = require('./utils/bio
 const { tenantContextMiddleware, getTenantId, scopeQueryToTenant } = require('./middleware/tenantContext');
 const authController = require('./controllers/authController');
 const attendanceController = require('./controllers/attendanceController');
+const leaveController = require('./controllers/leaveController');
+const academicController = require('./controllers/academicController');
 const authService = require('./services/authService');
 const createAttendanceRoutes = require('./routes/attendanceRoutes');
 
@@ -4173,18 +4175,7 @@ Return ONLY valid JSON:
       }
 
       // Helper to format any date into YYYY-MM-DD
-      const normalizeDateString = (d) => {
-        if (!d) return null;
-        const trimmed = String(d).trim();
-        if (trimmed.includes('/')) {
-          const parts = trimmed.split('/');
-          if (parts.length === 3) {
-            if (parts[2].length === 4) return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-            if (parts[0].length === 4) return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
-          }
-        }
-        return trimmed.split('T')[0];
-      };
+      const normalizeDateString = leaveController.normalizeDateString;
 
       const todayStr = new Date().toISOString().split('T')[0];
       let normStartDate = normalizeDateString(rawStartDate) || normalizeDateString(date) || todayStr;
@@ -4198,35 +4189,19 @@ Return ONLY valid JSON:
       }
 
       // Calculate duration in calendar days (inclusive)
-      const startMs = new Date(normStartDate).getTime();
-      const endMs = new Date(normEndDate).getTime();
-      const calculatedDuration = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)) + 1);
-      const durationDays = parseInt(rawDuration) || calculatedDuration;
+      const durationDays = leaveController.calculateLeaveDuration(normStartDate, normEndDate, rawDuration);
 
       // ── Overlap Prevention Check ──
       try {
-        const { data: existingLeaves } = await supabase
-          .from('LeaveRequests')
-          .select('id, startDate, endDate, date, status')
-          .ilike('studentId', studentId.trim())
-          .in('status', ['Approved', 'Pending']);
-
-        if (existingLeaves && existingLeaves.length > 0) {
-          const overlap = existingLeaves.find(ex => {
-            const exStart = normalizeDateString(ex.startDate) || normalizeDateString(ex.date);
-            const exEnd = normalizeDateString(ex.endDate) || normalizeDateString(ex.date) || exStart;
-            if (!exStart) return false;
-            return (normStartDate <= exEnd && normEndDate >= exStart);
+        const overlapCheck = await leaveController.checkLeaveOverlap(supabase, studentId, normStartDate, normEndDate);
+        if (overlapCheck.hasOverlap && overlapCheck.overlap) {
+          const overlap = overlapCheck.overlap;
+          const oStart = overlap.startDate || overlap.date;
+          const oEnd = overlap.endDate || overlap.date || oStart;
+          return res.json({
+            status: 'error',
+            message: `You already have a ${overlap.status} leave request covering this window (${oStart} to ${oEnd}). Multiple overlapping leave requests are prohibited.`
           });
-
-          if (overlap) {
-            const oStart = overlap.startDate || overlap.date;
-            const oEnd = overlap.endDate || overlap.date || oStart;
-            return res.json({
-              status: 'error',
-              message: `You already have a ${overlap.status} leave request covering this window (${oStart} to ${oEnd}). Multiple overlapping leave requests are prohibited.`
-            });
-          }
         }
       } catch (overlapErr) {
         console.warn('[submit_leave] Overlap check non-fatal error:', overlapErr.message);
@@ -4761,7 +4736,7 @@ Return ONLY valid JSON:
     // ── F. GENERAL ACADEMIC WRITES ──
     if (action === 'delete_academic') {
       const { subSheet, key: filterKey, val: filterVal } = req.body;
-      const { error } = await supabase.from(subSheet).delete().eq(filterKey, filterVal);
+      const { error } = await academicController.deleteAcademicRecord(supabase, subSheet, filterKey, filterVal);
       if (error) throw error;
       await logActivity('DELETE_ACADEMIC', `Deleted ${filterVal} from ${subSheet}`);
       return res.json({ status: 'success' });
@@ -4769,7 +4744,7 @@ Return ONLY valid JSON:
 
     if (action === 'update_academic') {
       const { subSheet, key: filterKey, val: filterVal, data: updateData } = req.body;
-      const { error } = await supabase.from(subSheet).update(updateData).eq(filterKey, filterVal);
+      const { error } = await academicController.updateAcademicRecord(supabase, subSheet, filterKey, filterVal, updateData);
       if (error) throw error;
       await logActivity('UPDATE_ACADEMIC', `Updated ${filterVal} in ${subSheet}`);
       return res.json({ status: 'success' });
@@ -5005,18 +4980,12 @@ Return ONLY valid JSON:
 
     // ── H. TIMETABLE ACTIONS ──
     if (action === 'upload_timetable') {
+      const validation = academicController.validateTimetableUpload(req.body);
+      if (!validation.valid) {
+        return res.json({ status: 'error', message: validation.message });
+      }
+
       const { department, semester, pdfBase64 } = req.body;
-
-      if (!pdfBase64) {
-        return res.json({ status: 'error', message: 'No file received for timetable upload.' });
-      }
-
-      // Validate size (5MB limit)
-      const sizeInBytes = (pdfBase64.length * 3) / 4;
-      const maxBytes = 5 * 1024 * 1024;
-      if (sizeInBytes > maxBytes) {
-        return res.json({ status: 'error', message: 'File size exceeds the 5MB limit.' });
-      }
 
       // Validate format (Must be PDF)
       const mimeType = pdfBase64.split(';')[0].split(':')[1] || '';
@@ -5594,4 +5563,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, cleanExpiredOtps, supabase, _savingSessionLocks, hydrateLockedAccountsFromDb, accountLockouts, initKeepAlive };
+module.exports = { app, cleanExpiredOtps, supabase, _savingSessionLocks, hydrateLockedAccountsFromDb, accountLockouts, initKeepAlive, leaveController, academicController };

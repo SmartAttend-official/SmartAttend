@@ -22,7 +22,8 @@ const TEST_SUITES = [
   { name: 'Phase 4 Biometric Security & Active PAD Engine', file: 'phase4Biometrics.test.js' },
   { name: 'Phase 5 Architectural Modularization', file: 'phase5Modularization.test.js' },
   { name: 'Phase 6 Accessibility (WCAG 2.1 AA) & UX Hardening', file: 'phase6Accessibility.test.js' },
-  { name: 'Phase 7 Performance, Offline Reliability & Telemetry', file: 'phase7Reliability.test.js' }
+  { name: 'Phase 7 Performance, Offline Reliability & Telemetry', file: 'phase7Reliability.test.js' },
+  { name: 'Phase 9 Modular Controllers & Architectural Quality', file: 'phase9Modularization.test.js' }
 ];
 
 console.log('================================================================');
