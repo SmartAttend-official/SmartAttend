@@ -37,6 +37,8 @@ const authController = require('./controllers/authController');
 const attendanceController = require('./controllers/attendanceController');
 const leaveController = require('./controllers/leaveController');
 const academicController = require('./controllers/academicController');
+const adminController = require('./controllers/adminController');
+const labController = require('./controllers/labController');
 const authService = require('./services/authService');
 const createAttendanceRoutes = require('./routes/attendanceRoutes');
 
@@ -788,40 +790,11 @@ function resetOtpFailure(email) {
   otpFailureTracker.delete(email.toLowerCase().trim());
 }
 
-// D. Student Lab Code Failure Tracker (Stops automated rotating code brute force)
-const labCodeFailureTracker = new Map();
-
-function getLabCodeFailure(studentId) {
-  if (!studentId) return 0;
-  const key = studentId.toLowerCase().trim();
-  const entry = labCodeFailureTracker.get(key);
-  if (!entry) return 0;
-  if (Date.now() - entry.timestamp > 2 * 60 * 1000) {
-    labCodeFailureTracker.delete(key);
-    return 0;
-  }
-  return entry.count;
-}
-
-function recordLabCodeFailure(studentId) {
-  if (!studentId) return 1;
-  const key = studentId.toLowerCase().trim();
-  const now = Date.now();
-  const entry = labCodeFailureTracker.get(key);
-  if (!entry || now - entry.timestamp > 2 * 60 * 1000) {
-    labCodeFailureTracker.set(key, { count: 1, timestamp: now });
-    return 1;
-  }
-  entry.count += 1;
-  entry.timestamp = now;
-  labCodeFailureTracker.set(key, entry);
-  return entry.count;
-}
-
-function resetLabCodeFailure(studentId) {
-  if (!studentId) return;
-  labCodeFailureTracker.delete(studentId.toLowerCase().trim());
-}
+// D. Student Lab Code Failure Tracker (Delegated to labController)
+const labCodeFailureTracker = labController.labCodeFailureTracker;
+const getLabCodeFailure = labController.getLabCodeFailure;
+const recordLabCodeFailure = labController.recordLabCodeFailure;
+const resetLabCodeFailure = labController.resetLabCodeFailure;
 
 // Background cleanup: Prune expired tracking entries every 30 minutes
 setInterval(() => {
@@ -836,11 +809,7 @@ setInterval(() => {
       emailOtpRequests.delete(key);
     }
   }
-  for (const [key, entry] of labCodeFailureTracker.entries()) {
-    if (now - entry.timestamp > 5 * 60 * 1000) {
-      labCodeFailureTracker.delete(key);
-    }
-  }
+  labController.pruneExpiredFailures();
 }, 30 * 60 * 1000).unref();
 
 // Helper: Format Student for frontend compatibility
@@ -3781,17 +3750,9 @@ Return ONLY valid JSON:
     }
     // ── A. UPDATE DATA (With IDOR & Password Protection) ──
     if (action === 'update') {
-      // IDOR & Privilege Escalation Protection: Students can only update their own student profile
-      if (userRole === 'student') {
-        if (sheet && sheet !== 'student') {
-          return res.status(403).json({ status: 'error', message: 'Access Denied: Students can only update student profiles.' });
-        }
-        const studentOwnId = ((req.user && req.user.id) || '').toString().trim().toLowerCase();
-        const studentOwnEmail = ((req.user && req.user.email) || '').toString().trim().toLowerCase();
-        const requestedTarget = (searchVal || id || '').toString().trim().toLowerCase();
-        if (requestedTarget && requestedTarget !== studentOwnId && requestedTarget !== studentOwnEmail) {
-          return res.status(403).json({ status: 'error', message: 'Access Denied: You cannot modify records belonging to other users.' });
-        }
+      const permCheck = adminController.validateUpdatePermissions(userRole, req.user, sheet, searchVal, id);
+      if (!permCheck.allowed) {
+        return res.status(permCheck.statusCode || 403).json({ status: 'error', message: permCheck.message });
       }
 
       let table = 'students';
@@ -4038,20 +3999,20 @@ Return ONLY valid JSON:
     }
 
     if (action === 'add_professor') {
-      const { Name, Email, Password, Department } = data;
-      // SEC-4: If admin provides a password, use it. Otherwise require password to be set.
-      // Professor accounts always require an explicitly set password — no predictable defaults.
-      const rawProfPass = (Password || '').toString().trim();
-      if (!rawProfPass || rawProfPass.length < 8) {
-        return res.status(400).json({ status: 'error', message: 'A valid password (minimum 8 characters) must be provided when adding a professor account.' });
+      const profValidation = adminController.validateProfessorRegistration(data);
+      if (!profValidation.valid) {
+        return res.status(400).json({ status: 'error', message: profValidation.message || 'A valid password (minimum 8 characters) must be provided when adding a professor account.' });
       }
+
+      const { Name, Email, Password, Department } = data;
+      const rawProfPass = (Password || '').toString().trim();
       const hashedProfPass = await bcrypt.hash(rawProfPass, 10);
 
       const nameParts = (Name || '').split(' ');
       const firstName = nameParts[0] || '';
       const lastName = nameParts.slice(1).join(' ') || '';
       
-      const deptTable = getProfessorTable(Department);
+      const deptTable = adminController.getProfessorDeptTable(Department);
 
       const { error } = await supabase
         .from(deptTable)
@@ -4751,42 +4712,34 @@ Return ONLY valid JSON:
     }
 
     if (action === 'add_dept') {
-      // HIGH-5: Whitelist fields — do not pass req.body.data directly to prevent mass assignment
-      const { Name, Code, Description } = req.body.data || {};
-      const deptRecord = { Name, Code, Description };
+      const deptRecord = academicController.sanitizeDepartmentPayload(req.body.data);
       const { error } = await supabase.from('Departments').insert([deptRecord]);
       if (error) throw error;
-      await logActivity('ADD_DEPT', `Department created: ${Name}`);
+      await logActivity('ADD_DEPT', `Department created: ${deptRecord.Name}`);
       return res.json({ status: 'success' });
     }
 
     if (action === 'add_class') {
-      // HIGH-5: Whitelist fields
-      const { Name, Code, Department, Semester, Section } = req.body.data || {};
-      const classRecord = { Name, Code, Department, Semester, Section };
+      const classRecord = academicController.sanitizeClassPayload(req.body.data);
       const { error } = await supabase.from('Classes').insert([classRecord]);
       if (error) throw error;
-      await logActivity('ADD_CLASS', `Class created: ${Name}`);
+      await logActivity('ADD_CLASS', `Class created: ${classRecord.Name}`);
       return res.json({ status: 'success' });
     }
 
     if (action === 'add_subject') {
-      // HIGH-5: Whitelist fields
-      const { Name, Code, Department, Semester, Credits, SubjectType } = req.body.data || {};
-      const subjectRecord = { Name, Code, Department, Semester, Credits, SubjectType };
+      const subjectRecord = academicController.sanitizeSubjectPayload(req.body.data);
       const { error } = await supabase.from('Subjects').insert([subjectRecord]);
       if (error) throw error;
-      await logActivity('ADD_SUBJECT', `Subject created: ${Name}`);
+      await logActivity('ADD_SUBJECT', `Subject created: ${subjectRecord.Name}`);
       return res.json({ status: 'success' });
     }
 
     if (action === 'add_proxy') {
-      // HIGH-5: Whitelist fields
-      const { Subject, Department, Semester, ProxyDate, OriginalDate, Reason } = req.body.data || {};
-      const proxyRecord = { Subject, Department, Semester, ProxyDate, OriginalDate, Reason };
+      const proxyRecord = academicController.sanitizeProxyPayload(req.body.data);
       const { error } = await supabase.from('Proxies').insert([proxyRecord]);
       if (error) throw error;
-      await logActivity('ADD_PROXY', `Proxy created for subject: ${Subject}`);
+      await logActivity('ADD_PROXY', `Proxy created for subject: ${proxyRecord.Subject}`);
       return res.json({ status: 'success' });
     }
 
@@ -5092,8 +5045,7 @@ Return ONLY valid JSON:
     // ── ACTIVE LAB CODE GENERATION ──
     if (action === 'generate_lab_code') {
       const { professorId, subject } = req.body;
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
-      const expiresAt = Date.now() + 90000; // 90 seconds from now
+      const { code, expiresAt, record } = labController.generateLabCodePayload(professorId, subject);
 
       // Clean up old expired codes
       try {
@@ -5102,13 +5054,7 @@ Return ONLY valid JSON:
 
       const { error } = await supabase
         .from('Active_Codes')
-        .insert([{
-          Code: code,
-          ProfessorID: professorId,
-          Subject: subject,
-          ExpiresAt: expiresAt,
-          ScannedStudents: ''
-        }]);
+        .insert([record]);
 
       if (error) throw error;
 
@@ -5121,25 +5067,19 @@ Return ONLY valid JSON:
       const { studentId, code, deviceId } = req.body;
 
       // CRIT-3: Bind lab code verification to the authenticated student's JWT identity.
-      // Ignore any studentId in the request body — use only the JWT-decoded ID.
-      // This prevents one student from submitting attendance on behalf of another.
-      const jwtStudentId = (req.user && (req.user.id || req.user.studentId || req.user.email || '')).toString().toLowerCase().trim();
-      const bodyStudentId = (studentId || '').toString().toLowerCase().trim();
-
-      // If the JWT student ID is available and doesn't match the request body's student ID, reject
-      if (jwtStudentId && bodyStudentId && jwtStudentId !== bodyStudentId) {
+      const identityCheck = labController.validateLabVerificationIdentity(req.user, studentId);
+      if (!identityCheck.valid) {
         return res.status(403).json({
           status: 'error',
-          message: 'Unauthorized: You can only mark your own attendance.'
+          message: identityCheck.message
         });
       }
 
-      // Use JWT identity if body is empty, otherwise use body (both must match if both present)
-      const cleanStudentId = jwtStudentId || bodyStudentId;
+      const cleanStudentId = identityCheck.cleanStudentId;
       const cleanCode = (code || '').toString().trim();
 
       // Check student-level lab code attempt failure tracker (Anti-Brute-Force)
-      const studentLabFailure = getLabCodeFailure(cleanStudentId);
+      const studentLabFailure = labController.getLabCodeFailure(cleanStudentId);
       if (studentLabFailure >= 5) {
         return res.status(429).json({
           status: 'error',
@@ -5154,7 +5094,7 @@ Return ONLY valid JSON:
         .single();
 
       if (fetchSessionErr || !session || Date.now() > Number(session.ExpiresAt)) {
-        const fails = recordLabCodeFailure(cleanStudentId);
+        const fails = labController.recordLabCodeFailure(cleanStudentId);
         const remaining = Math.max(0, 5 - fails);
         return res.json({ status: 'error', message: `Code is invalid or has expired. (${remaining} attempt(s) remaining)` });
       }
@@ -5167,17 +5107,12 @@ Return ONLY valid JSON:
 
       if (checkErr) throw checkErr;
 
-      const alreadyScanned = (existingScans || []).some(log => (log.StudentID || '').toLowerCase().trim() === cleanStudentId);
-      if (alreadyScanned) {
+      if (labController.checkDuplicateScan(existingScans, cleanStudentId)) {
         return res.json({ status: 'error', message: 'You have already marked attendance with this code.' });
       }
 
       // Anti-Proxy Check (Device UUID check)
-      const duplicateDevice = (existingScans || []).find(
-        log => log.DeviceID === deviceId && (log.StudentID || '').toLowerCase().trim() !== cleanStudentId
-      );
-
-      if (deviceId && duplicateDevice) {
+      if (deviceId && labController.checkProxyDevice(existingScans, cleanStudentId, deviceId)) {
         return res.json({ status: 'error', message: 'Proxy Detected: This device has already been used for this code.' });
       }
 
@@ -5189,12 +5124,12 @@ Return ONLY valid JSON:
         .single();
 
       if (!student) {
-        recordLabCodeFailure(cleanStudentId);
+        labController.recordLabCodeFailure(cleanStudentId);
         return res.json({ status: 'error', message: 'Student ID not found in database.' });
       }
 
       // Successful verification: reset failure tracker
-      resetLabCodeFailure(cleanStudentId);
+      labController.resetLabCodeFailure(cleanStudentId);
 
       const dbStudentId = student.ID;
 
@@ -5563,4 +5498,16 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, cleanExpiredOtps, supabase, _savingSessionLocks, hydrateLockedAccountsFromDb, accountLockouts, initKeepAlive, leaveController, academicController };
+module.exports = {
+  app,
+  cleanExpiredOtps,
+  supabase,
+  _savingSessionLocks,
+  hydrateLockedAccountsFromDb,
+  accountLockouts,
+  initKeepAlive,
+  leaveController,
+  academicController,
+  adminController,
+  labController
+};

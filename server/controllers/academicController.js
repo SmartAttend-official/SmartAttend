@@ -42,7 +42,7 @@ function validateTimetableUpload(payload, maxBytes = 5 * 1024 * 1024) {
  * @returns {Promise<{ error?: object }>}
  */
 async function deleteAcademicRecord(supabase, subSheet, filterKey, filterVal) {
-  const allowedTables = ['Departments', 'Timetables', 'StudentAssignments', 'Classes', 'Subjects'];
+  const allowedTables = ['Departments', 'Timetables', 'StudentAssignments', 'Classes', 'Subjects', 'Proxies', 'Camera_IPs'];
   if (!allowedTables.includes(subSheet)) {
     return { error: { message: `Deletion from table '${subSheet}' is not permitted.` } };
   }
@@ -59,15 +59,83 @@ async function deleteAcademicRecord(supabase, subSheet, filterKey, filterVal) {
  * @returns {Promise<{ error?: object }>}
  */
 async function updateAcademicRecord(supabase, subSheet, filterKey, filterVal, updateData) {
-  const allowedTables = ['Departments', 'Timetables', 'StudentAssignments', 'Classes', 'Subjects'];
+  const allowedTables = ['Departments', 'Timetables', 'StudentAssignments', 'Classes', 'Subjects', 'Proxies', 'Camera_IPs'];
   if (!allowedTables.includes(subSheet)) {
     return { error: { message: `Update on table '${subSheet}' is not permitted.` } };
   }
   return await supabase.from(subSheet).update(updateData).eq(filterKey, filterVal);
 }
 
+/**
+ * Creates sanitized department record protecting against mass assignment.
+ * @param {object} raw
+ * @returns {{ Name: string, Code: string, Description: string }}
+ */
+function sanitizeDepartmentPayload(raw) {
+  const { Name, Code, Description } = raw || {};
+  return {
+    Name: (Name || '').toString().trim(),
+    Code: (Code || '').toString().trim(),
+    Description: (Description || '').toString().trim()
+  };
+}
+
+/**
+ * Creates sanitized class record protecting against mass assignment.
+ * @param {object} raw
+ * @returns {{ Name: string, Code: string, Department: string, Semester: string, Section: string }}
+ */
+function sanitizeClassPayload(raw) {
+  const { Name, Code, Department, Semester, Section } = raw || {};
+  return {
+    Name: (Name || '').toString().trim(),
+    Code: (Code || '').toString().trim(),
+    Department: (Department || '').toString().trim(),
+    Semester: (Semester || '').toString().trim(),
+    Section: (Section || '').toString().trim()
+  };
+}
+
+/**
+ * Creates sanitized subject record protecting against mass assignment.
+ * @param {object} raw
+ * @returns {{ Name: string, Code: string, Department: string, Semester: string, Credits: number|string, SubjectType: string }}
+ */
+function sanitizeSubjectPayload(raw) {
+  const { Name, Code, Department, Semester, Credits, SubjectType } = raw || {};
+  return {
+    Name: (Name || '').toString().trim(),
+    Code: (Code || '').toString().trim(),
+    Department: (Department || '').toString().trim(),
+    Semester: (Semester || '').toString().trim(),
+    Credits: Credits || 0,
+    SubjectType: (SubjectType || 'Core').toString().trim()
+  };
+}
+
+/**
+ * Creates sanitized proxy record protecting against mass assignment.
+ * @param {object} raw
+ * @returns {{ Subject: string, Department: string, Semester: string, ProxyDate: string, OriginalDate: string, Reason: string }}
+ */
+function sanitizeProxyPayload(raw) {
+  const { Subject, Department, Semester, ProxyDate, OriginalDate, Reason } = raw || {};
+  return {
+    Subject: (Subject || '').toString().trim(),
+    Department: (Department || '').toString().trim(),
+    Semester: (Semester || '').toString().trim(),
+    ProxyDate: (ProxyDate || '').toString().trim(),
+    OriginalDate: (OriginalDate || '').toString().trim(),
+    Reason: (Reason || '').toString().trim()
+  };
+}
+
 module.exports = {
   validateTimetableUpload,
   deleteAcademicRecord,
-  updateAcademicRecord
+  updateAcademicRecord,
+  sanitizeDepartmentPayload,
+  sanitizeClassPayload,
+  sanitizeSubjectPayload,
+  sanitizeProxyPayload
 };

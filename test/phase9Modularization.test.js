@@ -16,7 +16,7 @@ require('../server/node_modules/dotenv').config();
 const request = require('../server/node_modules/supertest');
 const jwt = require('../server/node_modules/jsonwebtoken');
 
-const { app, leaveController, academicController } = require('../server/server.js');
+const { app, leaveController, academicController, adminController, labController } = require('../server/server.js');
 const JWT_SECRET = process.env.JWT_SECRET || 'test_jwt_secret_must_be_at_least_32_characters_long_super_secure';
 
 let passed = 0;
@@ -106,11 +106,111 @@ async function runPhase9Tests() {
     unauthUpdate.error && unauthUpdate.error.message.includes('not permitted')
   );
 
-  // ── 3. LIVE SUPERTEST HTTP INTEGRATION TESTS ───────────────────────────────
-  console.log('\n3. Live Supertest HTTP Integration Tests');
+  // 2c. Payload sanitization against mass assignment
+  const sanitizedDept = academicController.sanitizeDepartmentPayload({ Name: 'CS', Code: 'CS101', Description: 'CompSci', malicious: 'drop' });
+  report('sanitizeDepartmentPayload strips unauthorized attributes',
+    sanitizedDept.Name === 'CS' && sanitizedDept.Code === 'CS101' && sanitizedDept.malicious === undefined
+  );
+
+  // ── 3. ADMIN CONTROLLER UNIT TESTS ─────────────────────────────────────────
+  console.log('\n3. Admin Controller Unit Verification');
+
+  // 3a. Department mapping
+  report('getProfessorDeptTable maps MCA correctly', adminController.getProfessorDeptTable('Master of Computer Applications') === 'MCA');
+  report('getProfessorDeptTable maps BBA correctly', adminController.getProfessorDeptTable('Bachelor of Business') === 'BBA');
+  report('getProfessorDeptTable maps MBA correctly', adminController.getProfessorDeptTable('MBA Dept') === 'MBA');
+  report('getProfessorDeptTable defaults to BCA', adminController.getProfessorDeptTable('Unknown Dept') === 'BCA');
+
+  // 3b. Student registration validation
+  report('validateStudentRegistration rejects missing email',
+    adminController.validateStudentRegistration({ ID: 'STU10', Name: 'Alice' }).valid === false
+  );
+  report('validateStudentRegistration accepts valid student',
+    adminController.validateStudentRegistration({ ID: 'STU10', Name: 'Alice', Email: 'alice@smartattend.edu' }).valid === true
+  );
+
+  // 3c. Professor registration validation
+  report('validateProfessorRegistration rejects password < 8 characters',
+    adminController.validateProfessorRegistration({ Name: 'Dr. Smith', Email: 'smith@smartattend.edu', Password: 'short', Department: 'BCA' }).valid === false
+  );
+  report('validateProfessorRegistration accepts compliant credentials',
+    adminController.validateProfessorRegistration({ Name: 'Dr. Smith', Email: 'smith@smartattend.edu', Password: 'supersecretpass', Department: 'BCA' }).valid === true
+  );
+
+  // 3d. Bulk student deduplication
+  const existingDbIds = new Set(['stu001']);
+  const existingDbEmails = new Set(['stu001@smartattend.edu']);
+  const bulkInput = [
+    { ID: 'STU001', Name: 'Existing Stu', Email: 'stu001@smartattend.edu' },
+    { ID: 'STU002', Name: 'New Stu 1', Email: 'stu002@smartattend.edu' },
+    { ID: 'STU002', Name: 'Duplicate in batch', Email: 'stu002_dup@smartattend.edu' },
+    { ID: 'STU003', Name: 'New Stu 2', Email: 'stu003@smartattend.edu' }
+  ];
+  const { toInsert, skipped } = await adminController.processBulkStudents(bulkInput, existingDbIds, existingDbEmails);
+  report('processBulkStudents deduplicates against DB and batch duplicates',
+    toInsert.length === 2 && skipped.length === 2
+  );
+
+  // 3e. Update permissions & IDOR
+  const studentSelf = adminController.validateUpdatePermissions('student', { id: 'STU001' }, 'student', 'STU001', 'STU001');
+  report('validateUpdatePermissions allows student self-profile update', studentSelf.allowed === true);
+
+  const studentCross = adminController.validateUpdatePermissions('student', { id: 'STU001' }, 'student', 'STU999', 'STU999');
+  report('validateUpdatePermissions blocks student modifying other profile (IDOR)',
+    studentCross.allowed === false && studentCross.statusCode === 403
+  );
+
+  // ── 4. LAB CONTROLLER UNIT TESTS ───────────────────────────────────────────
+  console.log('\n4. Lab Controller Unit Verification');
+
+  // 4a. Lab code generation
+  const labPayload = labController.generateLabCodePayload('PROF001', 'Operating Systems');
+  report('generateLabCodePayload produces 6-digit numeric code',
+    /^\d{6}$/.test(labPayload.code) && labPayload.expiresAt > Date.now()
+  );
+
+  // 4b. Identity binding
+  const validLabIdentity = labController.validateLabVerificationIdentity({ id: 'STU001' }, 'STU001');
+  report('validateLabVerificationIdentity allows matching JWT identity', validLabIdentity.valid === true);
+
+  const invalidLabIdentity = labController.validateLabVerificationIdentity({ id: 'STU001' }, 'STU002');
+  report('validateLabVerificationIdentity rejects cross-student IDOR attempt', invalidLabIdentity.valid === false);
+
+  // 4c. Anti-duplicate scan & proxy check
+  const existingScans = [
+    { StudentID: 'stu001', DeviceID: 'DEVICE_ALPHA' },
+    { StudentID: 'stu002', DeviceID: 'DEVICE_BETA' }
+  ];
+  report('checkDuplicateScan detects prior scan for student',
+    labController.checkDuplicateScan(existingScans, 'stu001') === true
+  );
+  report('checkProxyDevice detects device reuse across different student IDs',
+    labController.checkProxyDevice(existingScans, 'stu003', 'DEVICE_ALPHA') === true
+  );
+  report('checkProxyDevice allows legitimate device for same student',
+    labController.checkProxyDevice(existingScans, 'stu001', 'DEVICE_ALPHA') === false
+  );
+
+  // 4d. Brute-force failure tracking
+  labController.resetLabCodeFailure('test_brute_student');
+  report('getLabCodeFailure returns 0 initially', labController.getLabCodeFailure('test_brute_student') === 0);
+  labController.recordLabCodeFailure('test_brute_student');
+  labController.recordLabCodeFailure('test_brute_student');
+  report('recordLabCodeFailure increments failure count', labController.getLabCodeFailure('test_brute_student') === 2);
+  labController.resetLabCodeFailure('test_brute_student');
+  report('resetLabCodeFailure clears failure count', labController.getLabCodeFailure('test_brute_student') === 0);
+
+  // ── 5. LIVE SUPERTEST HTTP INTEGRATION TESTS ───────────────────────────────
+  console.log('\n5. Live Supertest HTTP Integration Tests');
 
   const adminToken = jwt.sign(
     { id: 'ADMIN001', email: 'admin@smartattend.edu', role: 'admin' },
+    JWT_SECRET,
+    { expiresIn: '1h' }
+  );
+
+  const studentToken = jwt.sign(
+    { id: 'STU001', email: 'stu001@smartattend.edu', role: 'student' },
     JWT_SECRET,
     { expiresIn: '1h' }
   );
@@ -131,6 +231,24 @@ async function runPhase9Tests() {
     .send({ action: 'delete_academic', subSheet: 'ADMIN', key: 'Admin_id', val: '1' });
   report('HTTP delete_academic on forbidden table is intercepted',
     delRes.status === 200 || delRes.body.status === 'error'
+  );
+
+  // Test HTTP update IDOR enforcement (Student attempting to update another student's profile)
+  const idorRes = await request(app)
+    .post('/')
+    .set('Authorization', `Bearer ${studentToken}`)
+    .send({ action: 'update', sheet: 'student', searchVal: 'STU999_OTHER', data: { Name: 'Hacked' } });
+  report('HTTP student update on another profile receives 403 Forbidden',
+    idorRes.status === 403 && idorRes.body.message.includes('Access Denied')
+  );
+
+  // Test HTTP lab code IDOR enforcement (Student attempting to verify for another student)
+  const labIdorRes = await request(app)
+    .post('/')
+    .set('Authorization', `Bearer ${studentToken}`)
+    .send({ action: 'verify_lab_code', studentId: 'STU999_OTHER', code: '123456' });
+  report('HTTP student lab verification for another student receives 403 Forbidden',
+    labIdorRes.status === 403 && labIdorRes.body.message.includes('Unauthorized')
   );
 
   // ── SUMMARY ──────────────────────────────────────────────────────────────
