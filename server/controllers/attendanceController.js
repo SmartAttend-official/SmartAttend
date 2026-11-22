@@ -84,10 +84,11 @@ function signOfflinePayload(payload, timestamp, secretKey) {
 }
 
 /**
- * Verify an offline attendance sync payload against tampering and time boundaries
+ * Verify an offline attendance sync payload against tampering and time boundaries.
+ * Supports a single secretKey string or an array of candidate keys (e.g., JWT_SECRET, user session token).
  * @param {object} payload
  * @param {object} offlineMeta
- * @param {string} secretKey
+ * @param {string|string[]} secretKey
  * @param {number} [maxAgeMs=86400000] 24 hours max age
  * @returns {{ valid: boolean, reason?: string }}
  */
@@ -112,15 +113,20 @@ function verifyOfflinePayload(payload, offlineMeta, secretKey, maxAgeMs = 864000
     return { valid: false, reason: 'Offline record has expired (older than 24 hours)' };
   }
 
-  const expectedSig = signOfflinePayload(payload, offlineMeta.timestamp, secretKey);
+  const candidateKeys = Array.isArray(secretKey) ? secretKey : [secretKey];
   const sigBuffer = Buffer.from(offlineMeta.signature, 'hex');
-  const expBuffer = Buffer.from(expectedSig, 'hex');
 
-  if (sigBuffer.length !== expBuffer.length || !crypto.timingSafeEqual(sigBuffer, expBuffer)) {
-    return { valid: false, reason: 'Cryptographic signature mismatch: offline record was tampered with' };
+  for (const candidate of candidateKeys) {
+    if (!candidate || typeof candidate !== 'string') continue;
+    const expectedSig = signOfflinePayload(payload, offlineMeta.timestamp, candidate);
+    const expBuffer = Buffer.from(expectedSig, 'hex');
+
+    if (sigBuffer.length === expBuffer.length && crypto.timingSafeEqual(sigBuffer, expBuffer)) {
+      return { valid: true };
+    }
   }
 
-  return { valid: true };
+  return { valid: false, reason: 'Cryptographic signature mismatch: offline record was tampered with' };
 }
 
 module.exports = {

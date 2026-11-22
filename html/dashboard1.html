@@ -1792,7 +1792,8 @@
         payload._offlineMeta = {
           timestamp: timestamp,
           signature: signature,
-          signer: sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail')
+          signer: sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail'),
+          token: rawToken
         };
 
         queue.push({ payload: payload, timestamp: timestamp, signature: signature });
@@ -1833,9 +1834,13 @@
           if (item.payload && !item.payload._offlineMeta) {
             item.payload._offlineMeta = { timestamp: item.timestamp, signature: item.signature };
           }
+          const token = sessionStorage.getItem('smartattend_token') || localStorage.getItem('smartattend_token');
           const res = await fetch(SCRIPT_URL, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            },
             body: JSON.stringify(item.payload)
           });
           const data = await res.json();

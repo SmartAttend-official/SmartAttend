@@ -164,6 +164,41 @@ async function runPhase7Tests() {
     .send({ action: 'sync_offline_attendance', sessions: [] });
   report('Empty sessions array rejected with HTTP 400', emptyBatchRes.status === 400);
 
+  // Real E2E signed offline session sync via client token
+  const validOfflinePayload = {
+    classInfo: { subject: 'Database Systems', date: '2026-11-22', professorEmail: 'prof@smartattend.edu' },
+    students: [{ id: 'STU001', status: 'Present' }]
+  };
+  const offlineTimestamp = new Date().toISOString();
+  const validClientSig = attendanceController.signOfflinePayload(validOfflinePayload, offlineTimestamp, testProfToken);
+  validOfflinePayload._offlineMeta = {
+    timestamp: offlineTimestamp,
+    signature: validClientSig,
+    token: testProfToken,
+    signer: 'prof@smartattend.edu'
+  };
+
+  const syncSuccessRes = await request(app)
+    .post('/')
+    .set('Authorization', `Bearer ${testProfToken}`)
+    .send({ action: 'sync_offline_attendance', sessions: [validOfflinePayload] });
+  report('E2E client-signed offline session successfully verified and synced',
+    syncSuccessRes.status === 200 && syncSuccessRes.body.status === 'success' && syncSuccessRes.body.synced === 1
+  );
+
+  // Tampered payload in offline queue
+  const tamperedOfflinePayload = {
+    ...validOfflinePayload,
+    students: [{ id: 'STU999_INJECTED', status: 'Present' }]
+  };
+  const syncTamperedRes = await request(app)
+    .post('/')
+    .set('Authorization', `Bearer ${testProfToken}`)
+    .send({ action: 'sync_offline_attendance', sessions: [tamperedOfflinePayload] });
+  report('Tampered offline sync session detected and rejected by server',
+    syncTamperedRes.status === 200 && syncTamperedRes.body.results?.[0]?.code === 'TAMPERED_OFFLINE_RECORD'
+  );
+
   // ─────────────────────────────────────────────────────────────────────────
   // 4. In-Memory Account Lockout Hydration
   // ─────────────────────────────────────────────────────────────────────────

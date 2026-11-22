@@ -4425,7 +4425,12 @@ Return ONLY valid JSON:
           results.push({ status: 'error', code: 'MISSING_SIGNATURE', message: 'Session missing cryptographic signature' });
           continue;
         }
-        const offlineCheck = attendanceController.verifyOfflinePayload(sessionPayload, sessionPayload._offlineMeta, JWT_SECRET);
+        const candidateKeys = [
+          JWT_SECRET,
+          req.headers['authorization']?.replace(/^Bearer\s+/i, ''),
+          sessionPayload._offlineMeta?.token
+        ].filter(Boolean);
+        const offlineCheck = attendanceController.verifyOfflinePayload(sessionPayload, sessionPayload._offlineMeta, candidateKeys);
         if (!offlineCheck.valid) {
           await logActivity('SECURITY_ALERT', `Tampered offline sync session rejected: ${offlineCheck.reason}`);
           results.push({ status: 'error', code: 'TAMPERED_OFFLINE_RECORD', message: offlineCheck.reason });
@@ -4447,7 +4452,12 @@ Return ONLY valid JSON:
 
       // ── VERIFY OFFLINE CRYPTOGRAPHIC SIGNATURE & TIMESTAMPS (PHASE 7) ──
       if (req.body._offlineMeta) {
-        const offlineCheck = attendanceController.verifyOfflinePayload(req.body, req.body._offlineMeta, JWT_SECRET);
+        const candidateKeys = [
+          JWT_SECRET,
+          req.headers['authorization']?.replace(/^Bearer\s+/i, ''),
+          req.body._offlineMeta?.token
+        ].filter(Boolean);
+        const offlineCheck = attendanceController.verifyOfflinePayload(req.body, req.body._offlineMeta, candidateKeys);
         if (!offlineCheck.valid) {
           await logActivity('SECURITY_ALERT', `Tampered offline attendance rejected: ${offlineCheck.reason}`);
           return res.status(400).json({

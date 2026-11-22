@@ -182,12 +182,82 @@ test(
   serverSrc.includes("'save_encoding': ['professor', 'admin']")
 );
 
-// ── SUMMARY ──────────────────────────────────────────────────────────────
-console.log('\n' + '='.repeat(60));
-console.log(`Phase 2 Ownership Tests: ${passed} passed, ${failed} failed`);
-if (failed > 0) {
-  console.error(`\n⚠ ${failed} test(s) FAILED — fix before committing.\n`);
-  process.exit(1);
-} else {
-  console.log(`\nAll ${passed} Phase 2 Ownership Authorization tests passed!\n`);
+// ── 7. LIVE HTTP SUPERTEST VERIFICATION (BEHAVIORAL EXECUTION) ────────────
+console.log('\n7. Live HTTP Supertest Verification (Behavioral Execution)');
+
+const request = require('../server/node_modules/supertest');
+const jwt = require('../server/node_modules/jsonwebtoken');
+const { app } = require('../server/server.js');
+const JWT_SECRET = process.env.JWT_SECRET || 'test_jwt_secret_must_be_at_least_32_characters_long_super_secure';
+
+async function runLiveHttpOwnershipTests() {
+  const student1Token = jwt.sign(
+    { id: 'STU001', email: 'student1@smartattend.edu', role: 'student' },
+    JWT_SECRET,
+    { expiresIn: '1h' }
+  );
+
+  const prof1Token = jwt.sign(
+    { id: 'PROF001', email: 'prof1@smartattend.edu', role: 'professor' },
+    JWT_SECRET,
+    { expiresIn: '1h' }
+  );
+
+  // 1. Cross-student attendance history -> 403 Forbidden
+  const histRes = await request(app)
+    .get('/?sheet=attendance_history&studentId=STU002')
+    .set('Authorization', `Bearer ${student1Token}`);
+  test('Live HTTP: Student attempting cross-student attendance history receives 403 Forbidden',
+    histRes.status === 403
+  );
+
+  // 2. Cross-student leave submission -> 403 Forbidden
+  const leaveRes = await request(app)
+    .post('/')
+    .set('Authorization', `Bearer ${student1Token}`)
+    .send({
+      action: 'submit_leave',
+      data: { studentId: 'STU002', reason: 'Impersonated leave request' }
+    });
+  test('Live HTTP: Student attempting cross-student leave submission receives 403 Forbidden',
+    leaveRes.status === 403
+  );
+
+  // 3. Professor impersonating another professor in save_session -> 403 Forbidden
+  const sessionRes = await request(app)
+    .post('/')
+    .set('Authorization', `Bearer ${prof1Token}`)
+    .send({
+      action: 'save_session',
+      classInfo: { professorEmail: 'prof2_impersonated@smartattend.edu', subject: 'OS' },
+      students: []
+    });
+  test('Live HTTP: Professor attempting cross-faculty impersonation in save_session receives 403 Forbidden',
+    sessionRes.status === 403
+  );
+
+  // 4. Student attempting to access biometric get_encoding -> 403 Forbidden
+  const bioRes = await request(app)
+    .post('/')
+    .set('Authorization', `Bearer ${student1Token}`)
+    .send({
+      action: 'get_encoding',
+      studentId: 'STU001'
+    });
+  test('Live HTTP: Student attempting biometric get_encoding receives 403 Forbidden',
+    bioRes.status === 403
+  );
+
+  // ── SUMMARY ──────────────────────────────────────────────────────────────
+  console.log('\n' + '='.repeat(60));
+  console.log(`Phase 2 Ownership Tests: ${passed} passed, ${failed} failed`);
+  if (failed > 0) {
+    console.error(`\n⚠ ${failed} test(s) FAILED — fix before committing.\n`);
+    process.exit(1);
+  } else {
+    console.log(`\nAll ${passed} Phase 2 Ownership Authorization tests passed!\n`);
+    process.exit(0);
+  }
 }
+
+runLiveHttpOwnershipTests();

@@ -3,7 +3,8 @@
  * SmartAttend — Presentation Attack Detection (PAD) / Biometric Liveness Engine
  * ==============================================================================
  * Multi-layer client-side biometric anti-spoofing detector.
- * Compliant with ISO/IEC 30107-3 presentation attack detection standards.
+ * Engineered with presentation attack detection (PAD) heuristics aligned with
+ * ISO/IEC 30107-3 design principles for active/passive Presentation Attack mitigation.
  * 
  * Capabilities:
  *   1. Eye Aspect Ratio (EAR) computation (Left Eye: 36-41, Right Eye: 42-47).
@@ -12,8 +13,8 @@
  *   4. Temporal landmark micro-motion variance analysis (Passive PAD).
  *      - Static printed photos and frozen screens have near-zero landmark variance.
  *      - Genuine human faces exhibit natural micro-saccades and physiological tremor.
- *   5. Active challenge-response mode (Blink, Turn Left, Turn Right, Smile).
- *   6. Multi-frame sliding window consensus.
+ *   5. Active compound challenge-response mode (Blink+Turn, Blink+Nod).
+ *   6. Multi-frame sliding window consensus & velocity-normalized splice detection.
  * ==============================================================================
  */
 
@@ -196,13 +197,16 @@
 
       // 5b. Temporal jump cut / splice attack detection
       // Detects instantaneous unnatural landmark displacement between successive frames
+      // Uses both delta time and velocity normalization to function across varied camera frame rates
       if (frames.length >= 2) {
         const prevFrame = frames[frames.length - 2];
         const currFrame = frames[frames.length - 1];
         const dt = Math.max(1, currFrame.timestamp - prevFrame.timestamp);
         const dNose = euclideanDist(prevFrame.noseTip, currFrame.noseTip);
-        // Normalized displacement velocity: > 0.45 normalized units in under 60ms indicates video splice
-        if (dt < 60 && dNose > 0.45) {
+        // Normalized displacement velocity (units per second)
+        const velocity = dNose / (dt / 1000);
+        // Detects jump cuts: (high displacement within 60ms) OR (velocity > 7.5 units/s at lower frame rates)
+        if ((dt < 60 && dNose > 0.45) || (velocity > 7.5 && dNose > 0.35)) {
           return {
             isLive: false,
             score: 0.05,
@@ -210,7 +214,7 @@
             blinkDetected: false,
             microMotionScore: 0,
             reason: '⚠️ Presentation Attack Suspected: Unnatural landmark jump cut detected (video splice/photo swap).',
-            details: { dNose, dt, pose }
+            details: { dNose, dt, velocity: Number(velocity.toFixed(2)), pose }
           };
         }
       }
