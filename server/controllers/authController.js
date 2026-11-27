@@ -28,6 +28,10 @@ async function resetPassword(req, res, { supabase, logActivity }) {
       return res.status(400).json({ status: 'error', message: 'Email, OTP, and new password are required.' });
     }
 
+    if (cleanOtp.length < 6) {
+      return res.status(400).json({ status: 'error', message: 'Invalid verification code format (must be at least 6 characters).' });
+    }
+
     if (cleanPass.length < 8) {
       return res.status(400).json({ status: 'error', message: 'Password must be at least 8 characters long.' });
     }

@@ -1792,8 +1792,7 @@
         payload._offlineMeta = {
           timestamp: timestamp,
           signature: signature,
-          signer: sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail'),
-          token: rawToken
+          signer: sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail')
         };
 
         queue.push({ payload: payload, timestamp: timestamp, signature: signature });

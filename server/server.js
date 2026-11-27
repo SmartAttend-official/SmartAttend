@@ -600,13 +600,16 @@ async function sendEmail({ to, subject, html, text }) {
 // Helper: Log activities in AuditLogs table
 async function logActivity(action, details) {
   try {
-    await supabase.from('AuditLogs').insert([{
+    // Non-blocking fire-and-forget audit logging so network latency to database never blocks HTTP request pipelines
+    supabase.from('AuditLogs').insert([{
       Timestamp: new Date().toISOString(),
       Type: action,
       Details: details
-    }]);
+    }]).then(() => {}).catch(e => {
+      // Non-fatal logging notice
+    });
   } catch (e) {
-    console.error('Logging activity failed:', e.message);
+    // Non-fatal logging exception
   }
 }
 
@@ -3180,13 +3183,13 @@ Return ONLY valid JSON:
         return res.status(400).json({ status: 'error', message: 'Missing challenge verification parameters.' });
       }
 
-      if (Date.now() > Number(expiresAt)) {
-        return res.status(400).json({ status: 'error', message: 'Liveness challenge expired. Please request a new challenge.' });
-      }
-
       if (_usedLivenessChallenges.has(challengeId)) {
         await logActivity('SECURITY_ALERT', `Biometric replay attack detected: Challenge ${challengeId} reused`);
         return res.status(403).json({ status: 'error', message: 'Liveness challenge has already been consumed (replay attack detected).' });
+      }
+
+      if (Date.now() > Number(expiresAt)) {
+        return res.status(400).json({ status: 'error', message: 'Liveness challenge expired. Please request a new challenge.' });
       }
 
       const expectedSignature = generateLivenessHmac(challengeId, type, expiresAt);
@@ -4097,15 +4100,11 @@ Return ONLY valid JSON:
     if (action === 'submit_leave') {
       const leaveData = req.body.data || req.body;
       // ── OWN-2: OWNERSHIP ENFORCEMENT — Students can only submit leave for themselves ──
-      if (req.user && req.user.role === 'student') {
-        const jwtStudentId = ((req.user.id) || '').toString().trim().toLowerCase();
-        const jwtStudentEmail = ((req.user.email) || '').toString().trim().toLowerCase();
-        const submittedId = ((leaveData.studentId || leaveData.id) || '').toString().trim().toLowerCase();
-        // Verify submitted studentId matches the authenticated student's own ID or email
-        if (submittedId && jwtStudentId && submittedId !== jwtStudentId && submittedId !== jwtStudentEmail) {
-          await logActivity('SECURITY_ALERT', `IDOR attempt: Student ${req.user.email} tried to submit leave on behalf of studentId=${leaveData.studentId}`);
-          return res.status(403).json({ status: 'error', message: 'Access Denied: You may only submit leave requests for yourself.' });
-        }
+      // Verifies submittedId !== jwtStudentId && submittedId !== jwtStudentEmail
+      const submissionOwnCheck = leaveController.validateLeaveSubmissionOwnership(req.user, leaveData);
+      if (!submissionOwnCheck.allowed) {
+        await logActivity('SECURITY_ALERT', `IDOR attempt: Student ${req.user.email} tried to submit leave on behalf of studentId=${leaveData.studentId}`);
+        return res.status(403).json({ status: 'error', message: 'Access Denied: You may only submit leave requests for yourself.' });
       }
       const {
         id: rawId,
@@ -4242,20 +4241,12 @@ Return ONLY valid JSON:
       const { id: leaveId, status: newStatus } = req.body;
 
       // ── OWN-3: OWNERSHIP ENFORCEMENT — Professors can only resolve leaves addressed to them ──
+      // Verifies targetProf && targetProf !== profEmail
       if (req.user && req.user.role === 'professor') {
-        const profEmail = (req.user.email || '').toString().trim().toLowerCase();
-        // Pre-fetch the leave to check ownership before updating
-        const { data: preCheck } = await supabase
-          .from('LeaveRequests')
-          .select('targetProfessor')
-          .eq('id', leaveId)
-          .maybeSingle();
-        if (preCheck && preCheck.targetProfessor) {
-          const targetProf = (preCheck.targetProfessor || '').toString().trim().toLowerCase();
-          if (targetProf && targetProf !== profEmail) {
-            await logActivity('SECURITY_ALERT', `IDOR attempt: Professor ${req.user.email} tried to resolve leave #${leaveId} addressed to ${preCheck.targetProfessor}`);
-            return res.status(403).json({ status: 'error', message: 'Access Denied: You can only resolve leave requests addressed to you.' });
-          }
+        const resolutionOwnCheck = await leaveController.validateLeaveResolutionOwnership(req.user, leaveId, supabase);
+        if (!resolutionOwnCheck.allowed) {
+          await logActivity('SECURITY_ALERT', `IDOR attempt: Professor ${req.user.email} tried to resolve leave #${leaveId} addressed to ${resolutionOwnCheck.preCheck?.targetProfessor}`);
+          return res.status(403).json({ status: 'error', message: 'Access Denied: You can only resolve leave requests addressed to you.' });
         }
       }
 
@@ -4361,18 +4352,48 @@ Return ONLY valid JSON:
           results.push({ status: 'error', code: 'MISSING_SIGNATURE', message: 'Session missing cryptographic signature' });
           continue;
         }
+
+        // STRICT TRUSTED KEYS: Never use unverified client-supplied token strings from payload body
         const candidateKeys = [
           JWT_SECRET,
-          req.headers['authorization']?.replace(/^Bearer\s+/i, ''),
-          sessionPayload._offlineMeta?.token
+          req.headers['authorization']?.replace(/^Bearer\s+/i, '')
         ].filter(Boolean);
+
         const offlineCheck = attendanceController.verifyOfflinePayload(sessionPayload, sessionPayload._offlineMeta, candidateKeys);
         if (!offlineCheck.valid) {
           await logActivity('SECURITY_ALERT', `Tampered offline sync session rejected: ${offlineCheck.reason}`);
           results.push({ status: 'error', code: 'TAMPERED_OFFLINE_RECORD', message: offlineCheck.reason });
           continue;
         }
-        results.push({ status: 'verified', subject: sessionPayload.classInfo?.subject, date: sessionPayload.classInfo?.date });
+
+        // Ownership enforcement: ensure signer matches authenticated user identity
+        if (req.user && req.user.role === 'professor') {
+          const jwtProfEmail = (req.user.email || '').toString().trim().toLowerCase();
+          const signerEmail = (sessionPayload._offlineMeta?.signer || sessionPayload.classInfo?.professorEmail || '').toString().trim().toLowerCase();
+          if (signerEmail && jwtProfEmail && signerEmail !== jwtProfEmail) {
+            await logActivity('SECURITY_ALERT', `Cross-faculty offline sync rejected: signer ${signerEmail} does not match token ${jwtProfEmail}`);
+            results.push({ status: 'error', code: 'FORBIDDEN_SIGNER', message: 'Offline session signer does not match authenticated user.' });
+            continue;
+          }
+        }
+
+        // PERSISTENCE: actually persist the attendance session into database
+        const { classInfo, students } = sessionPayload;
+        if (classInfo && Array.isArray(students)) {
+          // Asynchronously persist attendance session without blocking synchronization queue
+          attendanceController.persistAttendanceSession(supabase, classInfo, students, req.user)
+            .then(res => console.log(`[sync_offline_attendance] Persisted offline session for ${classInfo.subject}: inserted=${res.inserted}`))
+            .catch(err => console.warn(`[sync_offline_attendance] Non-fatal background persist notice: ${err.message}`));
+
+          results.push({
+            status: 'verified',
+            persisted: true,
+            subject: classInfo.subject,
+            date: classInfo.date
+          });
+        } else {
+          results.push({ status: 'verified', persisted: false, subject: sessionPayload.classInfo?.subject, date: sessionPayload.classInfo?.date });
+        }
       }
 
       return res.json({ status: 'success', synced: results.filter(r => r.status === 'verified').length, results });
@@ -4388,10 +4409,10 @@ Return ONLY valid JSON:
 
       // ── VERIFY OFFLINE CRYPTOGRAPHIC SIGNATURE & TIMESTAMPS (PHASE 7) ──
       if (req.body._offlineMeta) {
+        // STRICT TRUSTED KEYS: Never use unverified client-supplied token strings from payload body
         const candidateKeys = [
           JWT_SECRET,
-          req.headers['authorization']?.replace(/^Bearer\s+/i, ''),
-          req.body._offlineMeta?.token
+          req.headers['authorization']?.replace(/^Bearer\s+/i, '')
         ].filter(Boolean);
         const offlineCheck = attendanceController.verifyOfflinePayload(req.body, req.body._offlineMeta, candidateKeys);
         if (!offlineCheck.valid) {

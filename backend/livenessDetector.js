@@ -197,7 +197,7 @@
 
       // 5b. Temporal jump cut / splice attack detection
       // Detects instantaneous unnatural landmark displacement between successive frames
-      // Uses both delta time and velocity normalization to function across varied camera frame rates
+      // Uses both delta time and velocity normalization across varied camera frame rates (10 - 30+ FPS)
       if (frames.length >= 2) {
         const prevFrame = frames[frames.length - 2];
         const currFrame = frames[frames.length - 1];
@@ -205,8 +205,17 @@
         const dNose = euclideanDist(prevFrame.noseTip, currFrame.noseTip);
         // Normalized displacement velocity (units per second)
         const velocity = dNose / (dt / 1000);
-        // Detects jump cuts: (high displacement within 60ms) OR (velocity > 7.5 units/s at lower frame rates)
-        if ((dt < 60 && dNose > 0.45) || (velocity > 7.5 && dNose > 0.35)) {
+
+        // Multi-frame rate jump cut and presentation attack detection:
+        // 1. Instantaneous jump cut within short window: dt < 70ms and dNose > 0.40
+        // 2. Velocity-normalized jump cut at standard & low frame rates (10 - 30 FPS):
+        //    Significant landmark shift (dNose > 0.32) moving faster than humanly natural (> 3.2 units/s)
+        // 3. Stutter / frame drop gap (dt > 250ms): large spatial displacement (> 0.40) across frame freeze
+        const isJumpCut = (dt <= 250 && dNose > 0.32 && velocity > 3.2) ||
+                          (dt < 70 && dNose > 0.40) ||
+                          (dt > 250 && dNose > 0.40);
+
+        if (isJumpCut) {
           return {
             isLive: false,
             score: 0.05,
