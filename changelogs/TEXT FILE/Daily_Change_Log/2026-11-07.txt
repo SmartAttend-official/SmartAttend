@@ -1,0 +1,85 @@
+================================================================================
+  SMARTATTEND — DAILY CHANGE LOG
+  Date   : 07 November 2026 (Saturday)
+  Topics : Fix Face Registration Portal Loading Failure ("Failed to load. Check internet connection.")
+================================================================================
+  LOCAL ONLY — Never push this folder to GitHub
+================================================================================
+
+WHAT WAS DONE TODAY
+-------------------
+1. Diagnostic of Register Student Face Loading Error:
+   - User reported error in Professor Dashboard when clicking "Register Student Face":
+     "Failed to load. Check internet connection." (screenshot uploaded).
+   - Root causes identified:
+     a) Cross-Tab Session Storage Isolation: `backend/login.js` previously only saved
+        authentication tokens (`smartattend_token`, `isAuthenticated`, `userEmail`,
+        `sessionToken`) in `sessionStorage`. On `html/dashboard1.html`, clicking
+        "Register Student Faces" opened `register.html` in a new tab via `target="_blank"`.
+        Under modern browser security (`rel="noopener"` default), the new tab had an empty
+        `sessionStorage` and empty `localStorage`.
+     b) Server 401 Rejection: `server/server.js` rejected `?sheet=student` requests missing
+        the Bearer token with HTTP 401 (`{"status":"error","message":"Session Expired: Please log in again."}`).
+     c) Unsafe Type Handling in `backend/register.js`: `fetch(API_URL).then(r => r.json())`
+        received the error object `{ status: 'error', ... }`. Calling `data.sort(...)` threw
+        `TypeError: data.sort is not a function`, which triggered the generic `catch (e)` block
+        displaying the hardcoded string: "Failed to load. Check internet connection."
+     d) Script Execution Race Condition: `html/register.html` loaded `face-api.js` with `defer`,
+        creating potential race conditions before `register.js` initialized.
+     e) Missing Content-Type Header on Face Capture: In `backend/register.js`, `captureAndSave()`
+        sent a POST request without `'Content-Type': 'application/json'`, which caused Express
+        `express.json()` to ignore the body.
+
+2. Comprehensive Implementation & Fixes:
+   - `backend/login.js`:
+     * Dual-persists session credentials (`smartattend_token`, `isAuthenticated`, `userEmail`,
+       `sessionToken`, `userName`, `userId`) to both `sessionStorage` and `localStorage` on both
+       direct login and 2FA OTP verification.
+   - `html/dashboard1.html`:
+     * Added token synchronization on page load and on click of "Register Student Faces".
+     * Added `rel="opener"` to `<a href="register.html">` to maintain session inheritance.
+     * Cleaned up `logoutUser()` to clear both storages on logout.
+   - `html/register.html`:
+     * Removed `defer` on `face-api.js` and added automatic CDN fallback (jsdelivr -> unpkg).
+     * Added pre-flight auth synchronization from `window.opener` and `localStorage`, redirecting
+       unauthenticated visitors safely to `login.html`.
+   - `backend/config.js`:
+     * Updated fetch interceptor to inspect both `sessionStorage` and `localStorage` across
+       all platform token keys (`smartattend_token`, `token`, `sessionToken`).
+   - `backend/register.js`:
+     * Verified `faceapi` readiness before initializing.
+     * Implemented Dual CDN failover for face models (jsdelivr -> raw.githubusercontent.com).
+     * Explicitly passed `Authorization` headers on API requests.
+     * Verified `studentData` is a valid Array before sorting, and surfaces precise messages
+       (e.g., Session expired with login link) instead of a generic connection error.
+     * Included explicit `Content-Type: application/json` and `Authorization` headers in `captureAndSave()`.
+     * Added retry button for resilience against transient network delays.
+
+COMMITS PUSHED TO GITHUB (origin/main)
+--------------------------------------
+  e1ea011  fix(face-registration): resolve token synchronization, dual CDN model fallback, and API auth headers in student face registration portal
+
+DOCUMENTATION FILES UPDATED (LOCAL ONLY)
+----------------------------------------
+  • TEXT FILE/Daily_Change_Log/2026-11-07.txt
+
+================================================================================
+  TODAY'S SUMMARY (10-15 lines)
+================================================================================
+
+  Diagnosed and resolved the student face registration loading error ("Failed to load.
+  Check internet connection.") occurring when navigating from the Professor Dashboard.
+  The issue was caused by token isolation across new tabs opened via target="_blank",
+  leaving the new window with no access to sessionStorage. When the unauthenticated API
+  request returned a 401 Session Expired error, the frontend attempted to sort the error
+  object as an array, triggering an unhandled exception masked as an internet error.
+  Fixed by dual-persisting authentication credentials across both sessionStorage and
+  localStorage, adding opener token synchronization, removing script race conditions,
+  implementing model weight CDN fallbacks, and adding explicit Content-Type and Bearer
+  headers on database face descriptor updates. Verified live against Render and Supabase.
+  Pushed code commit e1ea011 to origin/main.
+
+================================================================================
+  END OF LOG — 07 November 2026
+================================================================================
+

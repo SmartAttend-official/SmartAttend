@@ -1,0 +1,83 @@
+================================================================================
+  SMARTATTEND — DAILY CHANGE LOG
+  Date   : 08 November 2026 (Sunday)
+  Topics : Dedicated Student Mobile App Modernization, 5-Category Bottom Nav,
+           Modern Android (v2/v3) APK Signing Pipeline, and Dual-Mode (Gesture & 3-Button)
+           Navigation Bar Fixes
+================================================================================
+  LOCAL ONLY — Never push this folder to GitHub
+================================================================================
+
+WHAT WAS DONE TODAY
+-------------------
+1. Student Mobile App Architecture & Dedicated Experience:
+   - Preserved Web Student Panel intact (`html/student_*.html` and `backend/student_*.js`)
+     to avoid breaking the existing web application.
+   - Cleaned `Student panel app idea/APK_Student_Panel/index.html`:
+     * Stripped Professor and Admin tabs; dedicated purely to Student authentication.
+     * Integrated the official SmartAttend 3D "SA" emblem across `icon.png`, `images/logo.png`,
+       `images/bg1.1.png`, and Android mipmap launcher icons.
+   - Refactored `Student panel app idea/APK_Student_Panel/student_dashboard.html` from a
+     single long scrolling page into a modern 5-Category Tab Navigation architecture:
+     * Tab 1: Overall Attendance (interactive donut chart, threshold badge, Smart Recovery Insights).
+     * Tab 2: Live Lab Session (dynamic 6-digit access code check-in, anti-proxy device fingerprint lock).
+     * Tab 3: Medical & Leave Requests (sub-segmented: submit leave with file upload & real-time tracker).
+     * Tab 4: Class Timetable.
+     * Tab 5: Class Assignments (filterable by semester, subject, and date).
+
+2. In-App Direct Data Refresh:
+   - Added a 1-tap dedicated refresh button (`#refreshBtn`) in the student topbar with spinning animation.
+   - Implemented native mobile pull-to-refresh touch gesture on `.dashboard-container`.
+   - Connected both to `window.refreshStudentData(isManual)` with a floating toast notification.
+
+3. Android APK Modernization & Signing (Resolving "App Not Installed" on Android 11+):
+   - Diagnosed root cause of modern Android installation failures when sending APK via WhatsApp:
+     Target SDK 36 requires 4-byte boundary ZipAlign and APK Signature Scheme v2/v3, while basic
+     PowerShell re-zipping compressed `resources.arsc` and stripped modern v2/v3 signatures.
+   - Rebuilt APK with STORED `resources.arsc` and integrated `uber-apk-signer` with Java 25.
+   - Verified 4-byte ZipAlign and dual-signed with APK Signature Schemes [v2, v3] using `debug.keystore`.
+
+4. Real-Device UI Refinements (Realme Narzo 50A / Android System Navigation):
+   - "Mark Present" Button:
+     * Increased vertical height from 0 padding to `min-height: 48px; padding: 13px 26px; border-radius: 12px;`.
+     * Kept horizontal footprint compact (`width: auto;`) and maintained horizontal layout with checkmark icon.
+   - Dual-Mode Bottom Navigation (3-Button vs Gesture Navigation):
+     * Diagnosed why the bottom navigation icons were pushed upwards on real phones (like Realme Narzo 50A)
+       while appearing normal in laptop DevTools: fixed `height: 66px` with `padding-bottom: env(safe-area-inset-bottom)`
+       caused the 3-button system navigation bar to squish usable height down to ~32px.
+     * Replaced fixed height with dynamic `height: calc(64px + env(safe-area-inset-bottom, 0px))` and `min-height: 64px`.
+     * Locked `.nav-tab` to `height: 64px` with `align-items: flex-start` on the bar.
+     * Enabled `viewport-fit=cover` in viewport meta tag.
+     * Adjusted `.dashboard-container` bottom padding to `calc(90px + env(safe-area-inset-bottom, 0px))` to prevent
+       content overlap.
+     * Result: Navigation bar renders identically in both 3-button navigation and full-screen gesture navigation modes.
+
+COMMITS PUSHED TO GITHUB (origin/main)
+--------------------------------------
+  1df652b  feat(student-app): add in-app 1-tap refresh button in topbar and native pull-to-refresh gesture
+  654331c  fix(ui): vertically center bottom nav icons and increase vertical height of Mark Present button
+  eaaa9f5  fix(ui): dynamic bottom nav height with calc and locked tab height for 3-button and gesture navigation
+
+DOCUMENTATION FILES UPDATED (LOCAL ONLY)
+----------------------------------------
+  • TEXT FILE/Daily_Change_Log/2026-11-08.txt
+
+================================================================================
+  TODAY'S SUMMARY (10-15 lines)
+================================================================================
+
+  Completed the transformation of the student panel into a dedicated, high-performance
+  Android mobile application while strictly preserving existing web panel files.
+  Structured the mobile dashboard into 5 distinct categories accessed via a modern
+  bottom navigation bar, and integrated in-app data refresh via a topbar button and
+  pull-to-refresh touch gesture. Resolved Android 11+ WhatsApp installation failures
+  by implementing a 4-byte ZipAlign and APK Signature Scheme [v2, v3] signing pipeline.
+  Optimized the Live Lab "Mark Present" button dimensions and perfected the bottom
+  navigation bar layout across physical Android devices (tested on Realme Narzo 50A),
+  ensuring seamless rendering in both 3-button navigation and full-screen gesture modes
+  using dynamic CSS calc() safe-area handling. All changes verified and pushed to GitHub main.
+
+================================================================================
+  END OF LOG — 08 November 2026
+================================================================================
+

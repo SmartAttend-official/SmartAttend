@@ -1,0 +1,100 @@
+================================================================================
+  SMARTATTEND — DAILY CHANGE LOG
+  Date   : 14 November 2026 (Saturday)
+  Topics : Today Report Option in Analytic Reports, Database Loading Status Message
+           UI Update, Full Backend Timeframe Integration, Interactive System Architecture
+           & Flow Diagrams Suite (7 Standalone HTML Diagrams)
+================================================================================
+  LOCAL ONLY — Never push this folder to GitHub
+================================================================================
+
+WHAT WAS DONE TODAY
+-------------------
+1. Analytic Report "Today" Option Added (`html/Setting.html`):
+   - Added `<option value="Today">Today (Today's Attendance)</option>` to the Analytic Reports Timeframe dropdown.
+   - Now professors have 6 timeframe choices: Today, Weekly, Monthly, Half-Yearly, Yearly, and All-Time.
+
+2. Backend "Today" Report Support (`server/server.js`):
+   - Updated `compileAndSendAnalyticReport` to recognize `'Today'` / `'daily'` timeframes.
+   - Sets cutoff to start of today (`00:00:00.000`) and end of today (`23:59:59.999`) to strictly isolate today's attendance sessions.
+   - Updated AI chatbot intent parser (`parseReportIntent`) to detect natural language requests for "today's report".
+
+3. Student Records Loading Message UI Fix (`html/Record.html`, `backend/record.js`):
+   - Updated the initial table placeholder in `Record.html` from:
+     "Loading records from Google Sheets..." -> "Loading records from database...".
+   - Updated error message fallback in `backend/record.js` to reference the database instead of Google Sheets.
+
+4. Specific Date Calendar Picker & Report Dispatch (`html/Setting.html`, `backend/setting.js`, `server/server.js`):
+   - Added '<option value="CustomDate">Select Date (Pick from Calendar)</option>' directly below 'All-Time (Entire History)'.
+   - Implemented dynamic date picker container `#customDateContainer` in `Setting.html` with dark-mode native calendar input (`#reportSpecificDate`).
+   - Wired auto-reveal and date validation in `backend/setting.js` to ensure a date is selected before dispatching.
+   - Enhanced `compileAndSendAnalyticReport` in `server/server.js` with `specificDate` support and timezone-robust `parseRecordDate` (`YYYY-MM-DD` and `DD-MM-YYYY`).
+   - Generates and dispatches single-day attendance audit reports for any selected calendar date.
+   - Verified with automated unit tests (`scratch/test_custom_date_report.js`).
+
+5. Comprehensive Interactive System Diagrams Suite (`Diagram/`):
+   - Created 7 standalone, self-contained interactive HTML diagrams using Archify:
+     * `01_Architecture_Diagram.html`: Full system map (Netlify web, Cordova Android app, Render Express API, Supabase PostgreSQL, Google Apps Script, Nodemailer SMTP, and Gemini 1.5 Flash).
+     * `02_Workflow_Sequence_Diagram.html`: Professor login, attendance intake (face-api.js vs. 6-digit OTP), session deduplication, DB updates, and attendance warning alerts.
+     * `03_Data_Flow_Diagram.html`: End-to-end data pipelines from capture stages to processing, storage, and consumption.
+     * `04_Entity_Relationship_Diagram.html`: Complete Supabase relational schema across Identity, Attendance, Admin/Config, and Tracking domains.
+     * `05_Class_Diagram.html`: Service architecture (`SmartAttendServer`, `AttendanceController`, `WarningService`, `EmailService`, `SupabaseClient`).
+     * `06_Tree_Hierarchy_Diagram.html`: System decomposition spanning all portals, services, and cloud hosting infrastructure.
+     * `07_Attendance_Lifecycle_Diagram.html`: State machine of student attendance (Enrolled -> Attending -> 60% Warning -> 50% Critical -> Cooldown -> Recovered).
+   - Embedded interactive Glassmorphic Control Panel in all 7 HTML diagrams:
+     * **Flow Loop Toggle Button (`Flow Loop: ON / OFF`)**: Animates glowing particles and directional trails along paths to trace live data flow from source to destination.
+     * **Speed Controller (`0.25x`, `0.5x`, `1x`, `2x`, `4x`)**: Dynamically scales particle velocity in real time.
+     * Engineered with full CSS isolation (`all: unset`, fixed SVG bounds) to guarantee centered alignment across all browsers and themes.
+   - Kept purely in HTML format (all intermediate JSON/build files cleaned up). Kept local only per generated files policy.
+
+6. Face Recognition Pipeline Enhancement & Biometric Hardening:
+   - Git Feature Branch: `feature/smartattend-face-recognition-enhancement`.
+   - Rollback Backup: Stored at `backup_pre_face_enhancement/` with clean pre-modification snapshots.
+   - Multi-Sample Pose Registration (`html/register.html`, `backend/register.js`):
+     * Replaced single-sample enrollment with a 3-pose sequential capture workflow:
+       - Pose 1: Neutral Front-Facing view.
+       - Pose 2: Slight Left (~15°) head turn.
+       - Pose 3: Slight Right (~15°) head turn.
+     * Enforced 4-stage client-side biometric quality gates:
+       1. Single-face invariant (`detectAllFaces.length === 1`).
+       2. Minimum face resolution ($110\text{px} \times 110\text{px}$).
+       3. Photometric illumination gate ($40 \le \text{luma} \le 230$).
+       4. 68-landmark yaw symmetry validation for angle adherence.
+     * Version 2 polymorphic biometric schema stored in `students.Face_Encoding`:
+       `{ version: 2, count: 3, enrolled_at: '...', templates: [[...128], [...128], [...128]] }`.
+   - Classroom Live Recognition Hardening (`html/dashboard1.html`):
+     * Polymorphic descriptor loader: Seamlessly loads legacy 128-element Float32 arrays and v2 multi-template arrays.
+     * Threshold calibration: Lowered Euclidean distance threshold from `0.9` (excessively permissive) to calibrated `0.45`, eliminating false acceptances and wrong-student attendance marking.
+     * Live detector resolution: Increased TinyFaceDetector `inputSize` from `128` to `224` (with `scoreThreshold: 0.55`), expanding detectable range by 2.5x across lecture halls.
+     * Multi-frame temporal consensus: Requires 3 matching frames within a sliding 8-frame window before confirming presence (`student.detected = true`), avoiding momentary false positive triggers.
+     * Preserved gender annotation (`[M]` / `[F]`), on-leave badges, late minutes calculation, and manual professor override toggles.
+   - Biometric Security & RBAC Enforcement (`server/server.js`):
+     * Added `'save_encoding'` and `'get_encoding'` to `RBAC_RULES` restricted strictly to `professor` and `admin`.
+     * Protected generic `update` endpoint against non-faculty modifications to `Face_Encoding`.
+     * Enforced strict vector payload validation (128-float arrays, finite numbers only).
+
+COMMITS PUSHED TO GITHUB (origin/main & feature branches)
+---------------------------------------------------------
+  c2d2437  feat(reports): add Today report option and update loading message to database
+  2fa5a17  feat(reports): add custom date calendar picker to generate reports for any specific date
+  6989d01  feat(biometrics): enhance face registration with multi-pose enrollment, calibrated 0.45 threshold, and multi-frame consensus
+  683aad3  fix(camera): fix IP camera connection test, auto-append /video path, block https, add stream error overlay
+  a337b89  feat(dashboard): add real-time live face counter badge and multi-face box rendering
+
+================================================================
+  TODAY'S SUMMARY (10-15 lines)
+================================================================
+  Enhanced SmartAttend with a comprehensive reporting overhaul and a dedicated interactive
+  diagrams suite. Added a 'Today' option and a dynamic calendar date picker for single-day
+  attendance audits, with backend calculation in server.js ensuring precise time-window
+  filtering. Corrected student records loading placeholders to reference the database
+  instead of Google Sheets. Authored and deployed 7 production-grade, interactive HTML
+  system diagrams in the Diagram/ folder (Architecture, Workflow, Data Flow, ERD, Class,
+  Tree Hierarchy, and Attendance Lifecycle). Equipped every diagram with a custom-built
+  interactive control dock featuring real-time directional particle looping and a 5-tier
+  speed selector (0.25x to 4x) for intuitive system demonstration and technical reviews.
+  All diagrams are standalone HTML files kept strictly local per project policy.
+
+================================================================
+  END OF LOG — 14 November 2026
+================================================================
